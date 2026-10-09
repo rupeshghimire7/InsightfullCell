@@ -23,8 +23,8 @@ The single place that says what exists, what is half-built and what is next. Upd
 | # | Phase | Baseline sections | Status |
 |---|---|---|---|
 | 0 | Foundation and local environment | Environments and delivery, Technology choices | ✅ local stack runs; CI not yet run on GitHub |
-| 1 | Sign-in, tenancy, API, upload, ingestion engine | Web app, Identity, API service, Upload path, Ingest | 🟡 **current phase**: built scope is green locally; gaps listed below |
-| 2 | Runs, job queue, worker, live progress | Job queue and runs, Live progress | ⬜ |
+| 1 | Sign-in, tenancy, API, upload, ingestion engine | Web app, Identity, API service, Upload path, Ingest | ✅ built scope green locally; remaining gaps listed below |
+| 2 | Runs, job queue, worker, live progress | Job queue and runs, Live progress | ✅ **done** (iteration 6): all 11 tasks built and tested locally |
 | 3 | Analysis Phase A: ingest + profile in the worker, LLM gateway, understand, clean_plan, review gate | Ingest and profile, Understand, Cleaning, LLM gateway | ⬜ |
 | 4 | Analysis Phase B: clean_apply, geo, features, mine, facts, sensitivity, rank | Cleaning, Places and maps, Features and mining, Fact store | ⬜ |
 | 5 | Narration and verification | Narration and verification, Guardrail layers | ⬜ |
@@ -50,7 +50,7 @@ The single place that says what exists, what is half-built and what is next. Upd
 | Evaluation suites in CI (planted-effect, corrupted-narrator) | ⬜ | Arrive with Phases 4 and 5. |
 | Vercel preview per PR | ⬜ | Phase 8. |
 
-## Phase 1 · Sign-in, tenancy, API, upload, ingestion engine (current)
+## Phase 1 · Sign-in, tenancy, API, upload, ingestion engine
 
 ### Identity and tenancy
 
@@ -73,12 +73,12 @@ The single place that says what exists, what is half-built and what is next. Upd
 | Task | Status | Evidence / notes |
 |---|---|---|
 | RFC 9457 problems from `DomainError`, generic 500 with request id | ✅ | `api/problems.py` |
-| Idempotency-Key on mutations | ✅ | Uploads. New mutations must use it too. |
-| Keyset pagination | ✅ | Dataset list |
+| Idempotency-Key on mutations | ✅ | Uploads and `POST /v1/runs` (shared `services/idempotency.py`). `:cancel`/`:retry` are state transitions guarded by `If-Match` instead. |
+| Keyset pagination | ✅ | Dataset list, run list |
 | Health endpoints `/healthz`, `/readyz` | ✅ | |
 | OpenAPI → generated TypeScript client, drift check | ✅ | `scripts/generate-contract.sh` |
 | Per-organisation rate limits (429 + Retry-After) | ⬜ | |
-| If-Match / 412 on edits | ⬜ | Nothing editable yet; needed from Phase 3 (plan review). |
+| If-Match / 412 on edits | ✅ | Runs `:cancel` and `:retry` (`row_version` is the ETag). Phase 3's plan review reuses it. |
 | Trace id in problems | 🟡 | Request id today; OpenTelemetry trace id in Phase 8. |
 
 ### Upload path
@@ -88,11 +88,11 @@ The single place that says what exists, what is half-built and what is next. Upd
 | `POST /v1/uploads`, presigned multipart URLs (1 hour), server-chosen keys | ✅ | `services/uploads.py` |
 | Browser: SHA-256 in a Web Worker, parallel parts, retry, expired-link recovery | ✅ ↔ | 8 MiB parts. Concurrency is 3; baseline says 4 at a time. e2e uploads 9 MB (two signed parts) against RustFS with signature checks. |
 | `:complete`: part list, size, magic bytes vs extension | ✅ | |
-| Checksum verified | 🟡 ↔ | ADR-026: the browser digest is recorded at `complete` and verified by the ingestion engine. Nothing runs ingestion yet (Phase 2), so today the claim is unverified. |
+| Checksum verified | ✅ ↔ | ADR-026: the browser digest is recorded at `complete`; the worker's `ingest` stage re-hashes the stored bytes and fails the run with `integrity-mismatch` otherwise (`test_run_execution.py`). |
 | Content-addressed `bronze/{org}/{sha256}`, same bytes stored once | ✅ | |
 | Abort, expiry, replay-safe completion | ✅ | `tests/integration/test_uploads_api.py`, `test_failure_modes.py` |
 | Bucket CORS: PUT from our origin only | ✅ | A bucket rule from `scripts/s3_setup.py`. Verified against RustFS: other origins are refused and `ETag` is exposed. |
-| Clean up abandoned uploads and expired idempotency keys | ⬜ | Needs the maintenance queue (Phase 2). |
+| Clean up abandoned uploads and expired idempotency keys | ✅ | Maintenance queue (hourly / daily); multipart parts are aborted (`test_maintenance.py`). |
 
 ### Datasets and UI
 
@@ -100,8 +100,8 @@ The single place that says what exists, what is half-built and what is next. Upd
 |---|---|---|
 | Dataset list and detail API | ✅ | `api/routers/datasets.py` |
 | Workspace shell, dataset list, upload dropzone | ✅ | Axe tests in `frontend/tests/components` |
-| Dataset detail page | ⬜ | The API exists; no page yet. |
-| Ingestion status visible to the user | ⬜ | ADR-026 expects a pending state. No status column exists yet; add it with Phase 2. |
+| Dataset detail page | ✅ | `/o/{org}/datasets/{id}`: versions, analyses, "Analyse newest version" (iteration 6). |
+| Ingestion status visible to the user | ✅ | Each dataset shows its latest run's status; the run page shows verification and parse results. Derived from runs, not a dataset column. |
 | End-to-end journey (sign in → upload) | ✅ | `frontend/e2e/journey.spec.ts`: 2/2 pass locally (iteration 3). Covers upload, dedup, rejected files, sign-out and a cross-tenant check. |
 
 ### Ingestion engine (IC-102)
@@ -113,7 +113,7 @@ The single place that says what exists, what is half-built and what is next. Upd
 | Re-hash and compare with the recorded digest (`IntegrityMismatch`) | ✅ | Library only |
 | Error messages never echo cell values | ✅ | |
 | Library + CLI, no HTTP/DB/S3 dependency | ✅ | `python -m insightfulcell.ingestion` |
-| Called by the worker on real uploads | ⬜ | Phase 2 (IC-007) |
+| Called by the worker on real uploads | ✅ | `pipeline/ingest.py` (iteration 6) |
 | Personal-data detection (emails, phones, names, national ids) | ⬜ | Phase 3. Required before any LLM call. |
 | Column meanings (continuous, nominal, datetime, currency, percentage, identifier, text, geography) | ⬜ | Phase 3. The engine gives physical types only. |
 
@@ -122,23 +122,27 @@ The single place that says what exists, what is half-built and what is next. Upd
 1. ✅ Docker installed, `make up && make migrate` succeed on the dev machine (iteration 3).
 2. ✅ `make check` and `make e2e` green locally, with no skipped steps (iteration 3).
 3. ⬜ Code committed on a branch, pull request open, "CI passed" green on GitHub.
-4. ⬜ Decide whether the remaining Phase 1 gaps (GitHub sign-in, members/invitations, rate limits, dataset detail page) stay in Phase 1 or move later. Wiring ingestion to uploads is Phase 2 by design (ADR-026).
+4. ⬜ Decide whether the remaining Phase 1 gaps (GitHub sign-in, members/invitations, rate limits) stay in Phase 1 or move later. The dataset detail page and wiring ingestion to uploads were done with Phase 2 (iteration 6).
 
-## Phase 2 · Runs, job queue, worker, live progress (IC-007, IC-008)
+## Phase 2 · Runs, job queue, worker, live progress (IC-007, IC-008) · done
 
-| Task | Status |
-|---|---|
-| `runs` table and state machine: queued, running, awaiting_review, succeeded, failed, cancelled, expired; compare-and-set transitions | ⬜ |
-| `POST /v1/runs` → 202 with run id and events URL in under 0.5 s | ⬜ |
-| Procrastinate on PostgreSQL, `queueing_lock = run_id`; queues standard, large, maintenance | ⬜ |
-| Worker entry point (same image as the API) | ⬜ |
-| Two jobs: Phase A (ends at the review gate), Phase B (ends with the report) | ⬜ |
-| `run_stages` checkpoints keyed by hash of inputs, config and code version | ⬜ |
-| Reconciler and stalled-job reaper; two out-of-memory failures → large queue; three parser crashes → fail with reason | ⬜ |
-| Cancel at the next stage boundary; 7-day review expiry with a reminder after 24 hours | ⬜ |
-| `run_events` (monthly partitions) + NOTIFY; one LISTEN per API instance | ⬜ |
-| 5-minute run-scoped ticket JWT (audience `events`); `GET /v1/runs/{id}/events` SSE with Last-Event-ID replay | ⬜ |
-| Browser fetch-based SSE reader with polling fallback | ⬜ |
+Decision record: ADR-030. Verified locally in iteration 6 (see "Last check run").
+
+| Task | Status | Evidence / notes |
+|---|---|---|
+| `runs` table and state machine: queued, running, awaiting_review, succeeded, failed, cancelled, expired; compare-and-set transitions | ✅ | Migration 0004; `domain/runs.py` (transition table tested edge by edge, `test_run_state_machine.py`); `services/run_store.transition` (`UPDATE … WHERE status IN …`, bumps `row_version`). |
+| `POST /v1/runs` → 202 with run id and events URL in under 0.5 s | ✅ | `api/routers/runs.py`: 202 + `Location` + `ETag` + `events_url`; Idempotency-Key; commits the run first, then defers (a failed defer leaves it for the reconciler). About 0.3 s in the integration tests' access log. `test_runs_api.py` |
+| Procrastinate on PostgreSQL, `queueing_lock = run_id`; queues standard, large, maintenance | ✅ ↔ | Migration 0003: Procrastinate 3.10.0 schema vendored and digest-checked, in its own `procrastinate` schema, `search_path` pinned on its functions. `lock` = run id too. `queue/procrastinate_queue.py` |
+| Worker entry point (same image as the API) | ✅ | `python -m insightfulcell.worker` / `make worker`; `test_worker.py` runs a real worker through both phases. |
+| Two jobs: Phase A (ends at the review gate), Phase B (ends with the report) | ✅ ↔ | `services/run_executor.py`. Phase A ships the real `ingest` stage; Phase B has no stages until Phase 4 but runs as its own job. Review gate (`awaiting_review`, `approve_review`) tested with fake stages; the decision endpoint is Phase 3. |
+| `run_stages` checkpoints keyed by hash of inputs, config and code version | ✅ | `pipeline/stage.checkpoint_key`; reused stages emit `stage.reused`; a run planned by another pipeline fails `pipeline-changed`. |
+| Reconciler and stalled-job reaper; two out-of-memory failures → large queue; three parser crashes → fail with reason | ✅ | `services/maintenance.py` (every minute). `MemoryError` and reaped jobs count as crashes; `worker-crashed` after `run_max_attempts` (3). `test_maintenance.py`, `test_run_execution.py` |
+| Cancel at the next stage boundary; 7-day review expiry with a reminder after 24 hours | ✅ | `:cancel` (any of queued/running/awaiting_review); the worker stops at the next boundary and keeps finished checkpoints. `sweep_reviews` every 15 minutes. The reminder is an event shown on the run page (no email: needs a mail provider). |
+| `run_events` (monthly partitions) + NOTIFY; one LISTEN per API instance | ✅ | Append-only (trigger), partitioned by month with a default partition and `ensure_run_event_partitions` (moves stray rows); insert trigger `NOTIFY ic_run_events` (ids only); `db/notifications.EventBroker`. |
+| 5-minute run-scoped ticket JWT (audience `events`); `GET /v1/runs/{id}/events` SSE with Last-Event-ID replay | ✅ | Web: `POST /api/runs/{id}/events-ticket` (Better Auth `signJWT`, audience `insightfulcell-events`, must differ from the API's). API: ticket-only auth, CORS on this path only, keep-alives, ends when the run finishes or the ticket expires. `test_event_stream.py` includes a live stream on a real server woken by NOTIFY. |
+| Browser fetch-based SSE reader with polling fallback | ✅ ↔ | `lib/runs/sse.ts`: reconnect with Last-Event-ID, ticket refresh, stall detection, falls back to polling `GET /v1/runs/{id}` every 3 s (plain loop instead of TanStack Query, ADR-030). `tests/lib/sse.test.ts`, `run-progress.test.tsx`, e2e. |
+
+UI delivered with Phase 2: run page (live steps, ingest summary, cancel with confirmation, retry, failure reasons), runs list, dataset page, "Analyse this file" after upload, redesign per `INITIAL_DOCS/design-taste-frontend/SKILL.md` (iteration 6).
 
 ## Phase 3 · Analysis Phase A
 
@@ -221,12 +225,17 @@ The single place that says what exists, what is half-built and what is next. Upd
 | 4 parts in flight | 3 | Not decided; align when tuning uploads |
 | Google and GitHub sign-in | Google only | GitHub not started |
 | MinIO locally | RustFS 1.0.0 (S3-compatible) | ADR-027: the `minio/minio` image is gone from Docker Hub |
+| `procrastinate` schema (implied by the schema table) | Procrastinate's SQL vendored into migration 0003, functions' `search_path` pinned | ADR-030: Alembic owns migrations; Procrastinate names its tables without a schema |
+| TanStack Query polls when SSE is blocked | A fixed 3-second polling loop | ADR-030: one poll did not justify a provider and dependency |
+| The API is not reached by browsers (SETUP_MANUAL 6.5 before) | Browsers reach exactly one API path, the event stream, with CORS | ADR-030 and the baseline's own "Live progress" design; production routes only that path publicly |
+| Phase B: eleven stages | Phase B runs as a job with no stages yet | Stages arrive in Phases 3 and 4; the plumbing is complete and tested |
 | Sign-in by link or Google | Also email + password | ADR-028: lets people in without a mail provider |
 
 ## Open questions
 
 - Should `INITIAL_DOCS/` (the baseline) be committed so collaborators and CI see it? Today it is git-ignored.
-- Where do the ADRs 001–024 referenced by the baseline live? Only 025 and 026 are in `docs/adr/`.
+- Where do the ADRs 001–024 referenced by the baseline live? Only 025–030 are in `docs/adr/`.
+- Review reminders are events on the run page only; emailing them needs a verified mail domain (ADR-028/029).
 
 ## Iteration log
 
@@ -301,7 +310,33 @@ The single place that says what exists, what is half-built and what is next. Upd
 
 Not changed (noted for later): the dedup path ignores `dataset_id` when the same bytes already exist in another dataset; uploads still have 3 parts in flight vs. the baseline's 4.
 
+### Iteration 6 · 2026-10-10 · Phase 2: runs, queue, worker, live progress; UI redesign
+
+**Why:** Phase 1 done; build Phase 2 to the checklist above and improve the UI with the design skill.
+
+- **Backend:** migrations 0003 (job queue) and 0004 (runs, stages, events, maintenance functions); `domain/runs.py`, `pipeline/` (stage contract, checkpoint keys, `ingest`), `queue/` (port + Procrastinate adapter), `services/` (`runs`, `run_store`, `run_executor`, `maintenance`, shared `idempotency`), `db/notifications.py`, `api/routers/runs.py` (+ SSE, path-scoped CORS), `worker/`. Import-linter now has 5 contracts (pipeline pure; Procrastinate only in queue and worker; services see ports only; API and worker independent).
+- **Frontend:** `lib/runs/` (types, status, reducer, SSE client, API), ticket route, run / runs / dataset pages with loading states, BFF allows `v1/runs` but refuses the stream path, CSP `connect-src` includes `API_PUBLIC_URL`.
+- **Design (skill):** read as a redesign-preserve of a B2B, trust-first analysis workspace; dials VARIANCE 4, MOTION 3, DENSITY 5 (the skill marks dashboards and tables out of scope, so its landing rules were applied only to sign-in). Geist + Geist Mono via `next/font`; Phosphor icons replace every hand-drawn SVG; one accent and the existing radii kept; status badges always pair an icon with a word; motion only on state changes and off under reduced motion; split sign-in page; nav `aria-current` bug fixed. Checked in light, dark and at 390 px wide.
+- **Found and fixed while testing:** Procrastinate's triggers failed from any non-queue connection (pinned `search_path`); a stalled SSE body could hang a reader whose `fetch` ignores abort (reader now cancelled, stall counted as a failure); runs planned by a different pipeline would have written nowhere (now `pipeline-changed`); copy that promised a version picker the UI lacks was removed.
+- **For your local setup:** pull, then `make migrate` (database goes 0002 → 0004), restart `make api`, and start `make worker`.
+
 ## Last check run
+
+**Iteration 6 (2026-10-10), PostgreSQL 18 + RustFS running.**
+
+| Step | Result |
+|---|---|
+| Backend ruff, mypy strict (97 files), import-linter (5 contracts) | pass |
+| Backend pytest unit + integration | pass: 390 tests, 95.48% coverage (minimum 85%) |
+| Migrations up / down / up | pass |
+| OpenAPI contract (backend and generated TS) | pass, up to date |
+| Frontend prettier, eslint (jsx-a11y), tsc strict | pass |
+| Frontend vitest + axe | pass: 311 tests, 94.9% lines |
+| `scripts/e2e.sh` (ports 8100/3100, real worker and RustFS) | pass: 3/3, including upload → analyse → Succeeded, the ticket stream cross-origin, CORS refusal elsewhere, axe on new pages. Run before the last two cosmetic UI tweaks (finished runs hide the connection line; durations in sans); those are covered by component tests. |
+| Secret scan | pass |
+| `next build`, pip-audit, pnpm audit (new deps: procrastinate, geist, @phosphor-icons/react) | **not run** this iteration (the full non-`--fast` gate was stopped at your request); run `make check` before pushing. |
+| GitHub CI | not run: nothing committed or pushed |
+
 
 **Iteration 5 (2026-10-09), PostgreSQL 18 + RustFS running. Nothing skipped.**
 
