@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - run: uv sync --project backend --quiet && uv run --project backend pip-audit --skip-editable
       - uses: pnpm/action-setup@v4
         with:
