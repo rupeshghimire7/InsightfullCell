@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1.7
 # Build context: frontend/.   docker build -t insightfulcell-web frontend
-FROM node:22-alpine AS deps
+FROM node:25-alpine AS deps
 RUN corepack enable
 WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 COPY patches ./patches
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
 
-FROM node:22-alpine AS build
+FROM node:25-alpine AS build
 RUN corepack enable
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
@@ -16,7 +16,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # No secrets are needed to build; configuration is read when the server starts.
 RUN pnpm build
 
-FROM node:22-alpine
+FROM node:25-alpine
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
 RUN addgroup -S app && adduser -S app -G app
