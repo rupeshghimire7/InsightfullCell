@@ -1,0 +1,128 @@
+@import "tailwindcss";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+
+/* Design tokens: 08-ui-ux-spec.md section 2. One accent; colour is reserved for meaning. */
+:root {
+  color-scheme: light;
+  --bg: #f4f3f1;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --border: #dedcd6;
+  --text: #1f2421;
+  --text-muted: #5e625e;
+  --accent: #2f6f62;
+  --accent-contrast: #ffffff;
+  --warning: #86621f;
+  --danger: #a3402c;
+  --success: #2f6f62;
+  --focus: #2f6f62;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #131614;
+  --surface: #1c1f1d;
+  --surface-raised: #242825;
+  --border: #343835;
+  --text: #e8e6e1;
+  --text-muted: #a9ada8;
+  --accent: #4fa391;
+  --accent-contrast: #0f1211;
+  --warning: #d2a24a;
+  --danger: #d0664f;
+  --success: #4fa391;
+  --focus: #4fa391;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #131614;
+    --surface: #1c1f1d;
+    --surface-raised: #242825;
+    --border: #343835;
+    --text: #e8e6e1;
+    --text-muted: #a9ada8;
+    --accent: #4fa391;
+    --accent-contrast: #0f1211;
+    --warning: #d2a24a;
+    --danger: #d0664f;
+    --success: #4fa391;
+    --focus: #4fa391;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--surface-raised);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+  --radius-control: 6px;
+  --radius-panel: 10px;
+}
+
+@layer base {
+  html {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  body {
+    min-height: 100dvh;
+    margin: 0;
+  }
+  /* Visible focus for keyboard users only; 2 px ring, 2 px offset (spec section 2.1). */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  /* Anchored headings are not hidden under sticky chrome. */
+  :target {
+    scroll-margin-top: 4rem;
+  }
+  button,
+  [role="button"],
+  a,
+  input,
+  select,
+  summary {
+    touch-action: manipulation;
+  }
+  /* 16 px minimum on touch devices stops iOS from zooming into inputs. */
+  @media (pointer: coarse) {
+    input,
+    select,
+    textarea {
+      font-size: 16px;
+    }
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

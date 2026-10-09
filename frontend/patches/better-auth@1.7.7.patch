@@ -1,0 +1,14 @@
+diff --git a/dist/db/get-migration.mjs b/dist/db/get-migration.mjs
+index c9c0218c0c18019abc8c3734c0c8bc2a3f69cd50..22a61b2c5bb40dd0c093e7f903ca8152c1359e6e 100644
+--- a/dist/db/get-migration.mjs
++++ b/dist/db/get-migration.mjs
+@@ -18,7 +18,9 @@ const map = {
+ 		number: [
+ 			"int4",
+ 			"integer",
++			"int8",
+ 			"bigint",
++			"int2",
+ 			"smallint",
+ 			"numeric",
+ 			"real",
