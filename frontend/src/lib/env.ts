@@ -18,11 +18,18 @@ const schema = z
     AUTH_DATABASE_URL: z.string().min(1),
     AUTH_MIGRATION_DATABASE_URL: z.string().min(1).optional(),
     AUTH_JWT_AUDIENCE: z.string().min(1).default("insightfulcell-api"),
+    /** Audience of run-scoped event-stream tickets; must match the API's AUTH_EVENTS_AUDIENCE. */
+    AUTH_EVENTS_AUDIENCE: z.string().min(1).default("insightfulcell-events"),
     /** Sign-in link requests and verifications allowed per IP per minute. Raise only for tests. */
     AUTH_MAGIC_LINK_RATE_MAX: z.coerce.number().int().min(1).max(1000).default(5),
 
     /** Base URL of the FastAPI service, reachable from the Next.js server only. */
     API_BASE_URL: z.url(),
+    /**
+     * Browser-facing URL of the same API. Browsers open live-progress streams on it directly (with
+     * a run-scoped ticket), so web functions are never held open. Defaults to API_BASE_URL.
+     */
+    API_PUBLIC_URL: z.url().optional(),
     /** Browser-facing origin of object storage; allowed by the CSP `connect-src`. */
     S3_PUBLIC_ORIGIN: z.url(),
 
@@ -48,7 +55,21 @@ const schema = z
         message: "Required when EMAIL_TRANSPORT=resend",
       });
     }
+    if (env.AUTH_EVENTS_AUDIENCE === env.AUTH_JWT_AUDIENCE) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["AUTH_EVENTS_AUDIENCE"],
+        message: "Must differ from AUTH_JWT_AUDIENCE, so a ticket can never act as an API token",
+      });
+    }
     if (env.APP_ENV === "production") {
+      if (!(env.API_PUBLIC_URL ?? env.API_BASE_URL).startsWith("https://")) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["API_PUBLIC_URL"],
+          message: "Must be https in production (browsers connect to it directly)",
+        });
+      }
       if (!env.BETTER_AUTH_URL.startsWith("https://")) {
         ctx.addIssue({
           code: "custom",
@@ -84,4 +105,9 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
 export function getEnv(): Env {
   cached ??= parseEnv(process.env);
   return cached;
+}
+
+/** Where browsers reach the API (live progress only; everything else goes through the BFF). */
+export function apiPublicUrl(env: Env = getEnv()): string {
+  return (env.API_PUBLIC_URL ?? env.API_BASE_URL).replace(/\/+$/, "");
 }

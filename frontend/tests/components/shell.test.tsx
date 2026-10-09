@@ -9,7 +9,11 @@ import { ProblemAlert } from "@/components/ui/problem-alert";
 const replace = vi.fn();
 const refresh = vi.fn();
 const signOut = vi.fn(async () => ({ data: { success: true }, error: null }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace, refresh }) }));
+let pathname = "/o/org-1";
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace, refresh }),
+  usePathname: () => pathname,
+}));
 vi.mock("@/lib/auth-client", () => ({ authClient: { signOut: () => signOut() } }));
 
 describe("AppShell", () => {
@@ -27,7 +31,28 @@ describe("AppShell", () => {
     expect(screen.getByRole("navigation", { name: "Main" })).toBeInTheDocument();
     expect(screen.getByRole("main")).toHaveAttribute("id", "main");
     expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/o/org-1");
+    expect(screen.getByRole("link", { name: "Runs" })).toHaveAttribute("href", "/o/org-1/runs");
     expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it.each([
+    ["/o/org-1", "Home"],
+    ["/o/org-1/datasets/d1", "Home"],
+    ["/o/org-1/runs", "Runs"],
+    ["/o/org-1/runs/r1", "Runs"],
+  ])("marks only the current section on %s", (path, current) => {
+    pathname = path;
+    render(
+      <AppShell orgId="org-1" email="ada@example.com">
+        <p>content</p>
+      </AppShell>,
+    );
+    for (const name of ["Home", "Runs"]) {
+      const link = screen.getByRole("link", { name });
+      if (name === current) expect(link).toHaveAttribute("aria-current", "page");
+      else expect(link).not.toHaveAttribute("aria-current");
+    }
+    pathname = "/o/org-1";
   });
 
   it("signs out and returns to the sign-in page", async () => {

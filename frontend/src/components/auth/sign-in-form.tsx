@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { Info } from "@/components/ui/icons";
 import { ProblemAlert } from "@/components/ui/problem-alert";
 import { authClient } from "@/lib/auth-client";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/lib/auth-constants";
@@ -421,7 +422,7 @@ function Field({
         "aria-invalid": error ? true : undefined,
         "aria-describedby": describedBy || undefined,
         className:
-          "mt-1 block min-h-9 w-full rounded-control border border-border bg-surface px-3 text-sm placeholder:text-muted aria-invalid:border-danger pointer-coarse:min-h-11",
+          "mt-1.5 block min-h-10 w-full rounded-control border border-border bg-surface px-3 text-sm transition-colors placeholder:text-muted hover:border-muted/60 focus-visible:border-accent aria-invalid:border-danger pointer-coarse:min-h-11",
       })}
       {hint ? (
         <p id={hintId} className="mt-1 text-xs text-muted">
@@ -520,9 +521,7 @@ function MagicLinkButton({
           }}
           className="inline-flex size-9 shrink-0 items-center justify-center rounded-control border border-border bg-surface text-muted hover:bg-bg hover:text-text pointer-coarse:size-11"
         >
-          <svg aria-hidden="true" viewBox="0 0 20 20" className="size-4" fill="currentColor">
-            <path d="M10 1.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17Zm0 3.75a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2ZM8.75 9h2.5v6h-2.5V9Z" />
-          </svg>
+          <Info aria-hidden="true" weight="fill" className="size-4" />
         </button>
       </div>
       {/* Padding, not margin, so the pointer can move onto the note without it closing. */}

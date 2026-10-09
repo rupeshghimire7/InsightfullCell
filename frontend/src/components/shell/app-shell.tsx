@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { NavLink } from "@/components/shell/nav-link";
 import { UserMenu } from "@/components/shell/user-menu";
 
 /** Global chrome: skip link, header landmark, navigation, main landmark. */
@@ -12,6 +13,7 @@ export function AppShell({
   email: string;
   children: ReactNode;
 }) {
+  const home = `/o/${orgId}`;
   return (
     <>
       <a
@@ -20,22 +22,25 @@ export function AppShell({
       >
         Skip to main content
       </a>
-      <header className="sticky top-0 z-10 border-b border-border bg-surface">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-4">
-          <div className="flex items-center gap-6">
-            <Link href={`/o/${orgId}`} className="font-semibold text-accent">
-              InsightfulCell
+      <header className="sticky top-0 z-10 border-b border-border bg-surface/95 backdrop-blur-sm supports-[backdrop-filter]:bg-surface/85">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
+          <div className="flex min-w-0 items-center gap-4 sm:gap-6">
+            <Link href={home} className="flex shrink-0 items-center gap-2 font-semibold">
+              <span aria-hidden="true" className="size-3.5 rounded-[3px] bg-accent" />
+              <span className="hidden sm:inline">InsightfulCell</span>
+              <span className="sr-only sm:hidden">InsightfulCell</span>
             </Link>
             <nav aria-label="Main">
-              <ul className="flex items-center gap-4">
+              <ul className="flex items-center gap-1">
                 <li>
-                  <Link
-                    href={`/o/${orgId}`}
-                    aria-current="page"
-                    className="inline-flex min-h-6 items-center font-medium"
-                  >
+                  <NavLink href={home} sections={[`${home}/datasets`]}>
                     Home
-                  </Link>
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink href={`${home}/runs`} sections={[`${home}/runs/`]}>
+                    Runs
+                  </NavLink>
                 </li>
               </ul>
             </nav>
@@ -43,7 +48,7 @@ export function AppShell({
           <UserMenu email={email} />
         </div>
       </header>
-      <main id="main" className="mx-auto max-w-5xl px-4 py-8">
+      <main id="main" className="mx-auto max-w-6xl px-4 pt-8 pb-16">
         {children}
       </main>
     </>

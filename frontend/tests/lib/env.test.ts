@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseEnv } from "@/lib/env";
+import { apiPublicUrl, parseEnv } from "@/lib/env";
 
 const valid = {
   NODE_ENV: "development",
@@ -37,6 +37,7 @@ describe("parseEnv", () => {
       ...valid,
       APP_ENV: "production",
       BETTER_AUTH_URL: "https://app.example.com",
+      API_PUBLIC_URL: "https://api.example.com",
     };
 
     it("rejects the console email transport (it prints sign-in links)", () => {
@@ -52,10 +53,36 @@ describe("parseEnv", () => {
         }),
       ).toThrow(/https/);
     });
+    it("rejects a non-https API address for browsers", () => {
+      expect(() =>
+        parseEnv({
+          ...production,
+          API_PUBLIC_URL: undefined,
+          EMAIL_TRANSPORT: "resend",
+          RESEND_API_KEY: "k",
+        }),
+      ).toThrow(/API_PUBLIC_URL: Must be https/);
+    });
     it("accepts a correct production configuration", () => {
       expect(
         parseEnv({ ...production, EMAIL_TRANSPORT: "resend", RESEND_API_KEY: "k" }).APP_ENV,
       ).toBe("production");
     });
+  });
+});
+
+describe("live-progress settings", () => {
+  it("defaults the browser-facing API address to the server one", () => {
+    const env = parseEnv(valid);
+    expect(apiPublicUrl(env)).toBe(env.API_BASE_URL.replace(/\/+$/, ""));
+    expect(apiPublicUrl(parseEnv({ ...valid, API_PUBLIC_URL: "https://api.test/" }))).toBe(
+      "https://api.test",
+    );
+  });
+
+  it("refuses an events audience equal to the API audience", () => {
+    expect(() => parseEnv({ ...valid, AUTH_EVENTS_AUDIENCE: "insightfulcell-api" })).toThrow(
+      /AUTH_EVENTS_AUDIENCE/,
+    );
   });
 });

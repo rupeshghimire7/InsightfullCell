@@ -30,27 +30,62 @@ export default async function SignInPage({
   const mode = modeParam === "register" ? "register" : "sign-in";
 
   return (
-    <main
-      id="main"
-      className="mx-auto flex min-h-dvh max-w-[400px] flex-col justify-center px-4 py-12"
-    >
-      <p className="text-sm font-semibold text-accent">InsightfulCell</p>
-      <h1 className="mt-2 text-2xl font-semibold text-balance">
-        {mode === "register" ? "Create an account" : "Sign in"}
-      </h1>
-      <p className="mt-1 mb-8 text-muted">Reports where every number shows its work.</p>
-      <SignInForm
-        key={mode}
-        mode={mode}
-        google={googleSignIn(env)}
-        linkDelivery={linkDelivery(env)}
-        initialError={
-          error
-            ? (LINK_ERRORS[error] ?? "We couldn’t sign you in. Request a new link below.")
-            : undefined
-        }
-        expiresInMinutes={MAGIC_LINK_TTL_SECONDS / 60}
-      />
+    <main id="main" className="grid min-h-dvh lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
+      <div className="flex items-center justify-center px-4 py-12 sm:px-8">
+        <div className="w-full max-w-[400px]">
+          <p className="flex items-center gap-2 text-sm font-semibold lg:hidden">
+            <span aria-hidden="true" className="size-3 rounded-[3px] bg-accent" />
+            InsightfulCell
+          </p>
+          <h1 className="mt-6 text-2xl font-semibold lg:mt-0">
+            {mode === "register" ? "Create an account" : "Sign in"}
+          </h1>
+          <p className="mt-1 mb-8 text-muted">
+            {mode === "register"
+              ? "Your workspace is created with your account."
+              : "Welcome back. Sign in to your workspace."}
+          </p>
+          <SignInForm
+            key={mode}
+            mode={mode}
+            google={googleSignIn(env)}
+            linkDelivery={linkDelivery(env)}
+            initialError={
+              error
+                ? (LINK_ERRORS[error] ?? "We couldn’t sign you in. Request a new link below.")
+                : undefined
+            }
+            expiresInMinutes={MAGIC_LINK_TTL_SECONDS / 60}
+          />
+        </div>
+      </div>
+
+      {/* After the form in reading order; shown first (left) on wide screens. */}
+      <section
+        aria-labelledby="promise-title"
+        className="relative hidden flex-col justify-between overflow-hidden bg-accent p-12 text-accent-contrast lg:order-first lg:flex xl:p-16"
+      >
+        <p className="flex items-center gap-2 font-semibold">
+          <span aria-hidden="true" className="size-3.5 rounded-[3px] bg-accent-contrast" />
+          InsightfulCell
+        </p>
+        <div className="max-w-lg space-y-5">
+          <h2
+            id="promise-title"
+            className="text-4xl leading-[1.1] font-semibold tracking-tight xl:text-5xl"
+          >
+            Every number shows its work.
+          </h2>
+          <p className="max-w-[44ch] text-lg leading-relaxed opacity-90">
+            Upload a table. Each finding is computed by tested code, checked, and linked to the
+            evidence behind it.
+          </p>
+        </div>
+        <p className="max-w-[48ch] text-sm opacity-85">
+          Raw rows stay in your workspace: language models only ever see column summaries and
+          finished results.
+        </p>
+      </section>
     </main>
   );
 }

@@ -14,6 +14,10 @@ export default defineConfig({
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3000",
     trace: "retain-on-failure",
+    // Unlike the server's: dates rendered on the server and again in the browser must not cause
+    // hydration mismatches (the journey fails on any console error).
+    timezoneId: "Pacific/Chatham",
+    locale: "en-NZ",
     screenshot: "only-on-failure",
     ...devices["Desktop Chrome"],
   },

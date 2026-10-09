@@ -52,6 +52,17 @@ test("sign in, upload, deduplicate, sign out", async ({ page, browser }) => {
       policyViolations.push(message.text());
   });
   page.on("pageerror", (error) => policyViolations.push(error.message));
+  // Any other console error (hydration mismatches, React warnings, failed scripts) is a bug.
+  // Allowed: "Failed to load resource" for requests the journey makes fail on purpose, and the
+  // CORS refusal of the deliberate cross-origin probe below (any API path but /events).
+  const consoleErrors: string[] = [];
+  page.on("console", (message) => {
+    const text = message.text();
+    const probe = /blocked by CORS policy/.test(text) && !/\/events/.test(text);
+    if (message.type() === "error" && !/Failed to load resource/.test(text) && !probe) {
+      consoleErrors.push(text);
+    }
+  });
 
   // --- signed out: redirected, accessible, honest about errors
   await page.goto("/");
@@ -126,6 +137,65 @@ test("sign in, upload, deduplicate, sign out", async ({ page, browser }) => {
   // --- the page and storage agree after a reload
   await page.reload();
   await expect(page.getByRole("row")).toHaveCount(2);
+  await expect(page.getByRole("row", { name: /Home sales 2026.*Not analysed/ })).toBeVisible();
+
+  // --- analyse it: the worker re-hashes the bytes, parses them, and the page follows live
+  await page.getByRole("link", { name: "Home sales 2026" }).click();
+  await expect(page.getByRole("heading", { name: "Home sales 2026", level: 1 })).toBeVisible();
+  await expect(page.getByText("Not analysed yet")).toBeVisible();
+  await expectNoAxeViolations(page);
+  await page.getByRole("button", { name: "Analyse newest version" }).click();
+  await expect(page).toHaveURL(/\/o\/[0-9a-f-]{36}\/runs\/[0-9a-f-]{36}$/);
+  await expect(page.getByRole("heading", { name: "Analysis of Home sales 2026" })).toBeVisible();
+  await expect(page.getByText("Your file is verified and ready")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("connection")).toHaveCount(0); // finished: nothing to follow
+  await expect(page.getByText("300,000")).toBeVisible(); // rows read
+  await page.getByText(/Show the 4 columns/).click();
+  await expect(page.getByText("suburb")).toBeVisible();
+  await expectNoAxeViolations(page);
+
+  // --- the live stream itself, from the page: ticket from the web app, then the API directly
+  // (cross-origin: proves the CSP connect-src, the API's CORS rule and the ticket audience)
+  const runId = page.url().split("/").pop() ?? "";
+  const stream = await page.evaluate(async (id) => {
+    const ticket = await (await fetch(`/api/runs/${id}/events-ticket`, { method: "POST" })).json();
+    const response = await fetch(ticket.url, {
+      headers: { Authorization: `Bearer ${ticket.ticket}`, "Last-Event-ID": "1" },
+    });
+    return {
+      status: response.status,
+      type: response.headers.get("content-type"),
+      body: await response.text(),
+    };
+  }, runId);
+  expect(stream.status).toBe(200);
+  expect(stream.type).toContain("text/event-stream");
+  expect(stream.body).not.toContain("event: run.queued"); // replay starts after Last-Event-ID
+  expect(stream.body).toContain("event: stage.completed");
+  expect(stream.body).toContain("event: run.succeeded");
+  // Only the stream answers cross-origin: any other API path is refused by the browser (CORS),
+  // so a page can never use a ticket (or anything else) against the rest of the API.
+  const crossOrigin = await page.evaluate(async (id) => {
+    const ticket = await (await fetch(`/api/runs/${id}/events-ticket`, { method: "POST" })).json();
+    const api = new URL(ticket.url).origin;
+    try {
+      await fetch(`${api}/v1/runs/${id}`, {
+        headers: { Authorization: `Bearer ${ticket.ticket}` },
+      });
+      return "readable";
+    } catch {
+      return "refused";
+    }
+  }, runId);
+  expect(crossOrigin).toBe("refused");
+
+  // --- the run is listed, and the dataset shows its latest analysis
+  await page.getByRole("link", { name: "Runs", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Runs", level: 1 })).toBeVisible();
+  await expect(page.getByRole("row", { name: /Home sales 2026.*Succeeded/ })).toBeVisible();
+  await expectNoAxeViolations(page);
+  await page.getByRole("link", { name: "Home", exact: true }).click();
+  await expect(page.getByRole("row", { name: /Home sales 2026.*Succeeded/ })).toBeVisible();
 
   // --- sign out returns to sign-in and protects the app again
   await page.getByRole("button", { name: "Sign out" }).click();
@@ -134,6 +204,7 @@ test("sign in, upload, deduplicate, sign out", async ({ page, browser }) => {
   await expect(page).toHaveURL(/\/sign-in$/);
 
   expect(policyViolations).toEqual([]);
+  expect(consoleErrors).toEqual([]);
 });
 
 test("another user cannot see the first user's datasets", async ({ page }) => {

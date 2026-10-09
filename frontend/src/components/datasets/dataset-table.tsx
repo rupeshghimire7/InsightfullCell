@@ -1,9 +1,11 @@
+import Link from "next/link";
+import { RunStatusBadge } from "@/components/runs/run-status-badge";
 import { formatBytes, formatCount, formatDate } from "@/lib/format";
 import type { components } from "@/lib/api/schema";
 
 type Dataset = components["schemas"]["DatasetOut"];
 
-const FORMAT_LABEL: Record<string, string> = {
+export const FORMAT_LABEL: Record<string, string> = {
   csv: "CSV",
   tsv: "TSV",
   xlsx: "Excel",
@@ -11,7 +13,8 @@ const FORMAT_LABEL: Record<string, string> = {
   json: "JSON",
 };
 
-export function DatasetTable({ datasets }: { datasets: Dataset[] }) {
+/** Datasets, newest first. The name opens the dataset; the last column shows its latest run. */
+export function DatasetTable({ datasets, orgId }: { datasets: Dataset[]; orgId: string }) {
   return (
     <div className="overflow-x-auto rounded-panel border border-border bg-surface">
       <table className="w-full border-collapse text-left text-[13px] leading-[1.35]">
@@ -31,17 +34,24 @@ export function DatasetTable({ datasets }: { datasets: Dataset[] }) {
               Versions
             </th>
             <th scope="col" className="px-4 py-2 font-medium">
+              Latest analysis
+            </th>
+            <th scope="col" className="px-4 py-2 font-medium">
               Added
             </th>
           </tr>
         </thead>
         <tbody>
           {datasets.map((dataset) => (
-            <tr key={dataset.id} className="border-b border-border last:border-b-0">
-              <th scope="row" className="max-w-[24rem] px-4 py-3 font-medium">
-                <span className="block truncate" title={dataset.name}>
+            <tr key={dataset.id} className="border-b border-border last:border-b-0 hover:bg-bg/60">
+              <th scope="row" className="max-w-[22rem] px-4 py-3 font-medium">
+                <Link
+                  href={`/o/${orgId}/datasets/${dataset.id}`}
+                  className="block truncate text-accent underline-offset-2 hover:underline"
+                  title={dataset.name}
+                >
                   {dataset.name}
-                </span>
+                </Link>
               </th>
               <td className="px-4 py-3">
                 {dataset.latest_version
@@ -52,6 +62,19 @@ export function DatasetTable({ datasets }: { datasets: Dataset[] }) {
                 {dataset.latest_version ? formatBytes(dataset.latest_version.bytes) : "–"}
               </td>
               <td className="tabular px-4 py-3 text-right">{formatCount(dataset.version_count)}</td>
+              <td className="px-4 py-3">
+                {dataset.latest_run ? (
+                  <Link
+                    href={`/o/${orgId}/runs/${dataset.latest_run.id}`}
+                    className="inline-flex rounded-full"
+                    title={`Open the latest analysis of ${dataset.name}`}
+                  >
+                    <RunStatusBadge status={dataset.latest_run.status} />
+                  </Link>
+                ) : (
+                  <span className="text-muted">Not analysed</span>
+                )}
+              </td>
               <td className="px-4 py-3 whitespace-nowrap text-muted">
                 <time dateTime={dataset.created_at}>{formatDate(dataset.created_at)}</time>
               </td>
@@ -80,6 +103,7 @@ export function DatasetTableSkeleton({ rows = 4 }: { rows?: number }) {
         >
           <div className="h-3 w-1/3 animate-pulse rounded bg-border motion-reduce:animate-none" />
           <div className="h-3 w-12 animate-pulse rounded bg-border motion-reduce:animate-none" />
+          <div className="h-5 w-20 animate-pulse rounded-full bg-border motion-reduce:animate-none" />
           <div className="ml-auto h-3 w-16 animate-pulse rounded bg-border motion-reduce:animate-none" />
         </div>
       ))}

@@ -1,7 +1,7 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse, type NextRequest } from "next/server";
 import { buildCsp, generateNonce } from "@/lib/csp";
-import { getEnv } from "@/lib/env";
+import { apiPublicUrl, getEnv } from "@/lib/env";
 
 /**
  * Runs before every page request (Next.js 16 `proxy`, formerly middleware):
@@ -22,6 +22,7 @@ export function proxy(request: NextRequest) {
   const csp = buildCsp({
     nonce,
     storageOrigin: env.S3_PUBLIC_ORIGIN,
+    apiOrigin: apiPublicUrl(env),
     development: env.NODE_ENV !== "production",
     upgradeInsecureRequests: env.BETTER_AUTH_URL.startsWith("https://"),
   });

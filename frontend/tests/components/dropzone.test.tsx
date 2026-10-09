@@ -8,7 +8,7 @@ import { ProblemError } from "@/lib/problem";
 import type { UploadResult } from "@/lib/upload/api";
 import type { UploaderDeps } from "@/lib/upload/uploader";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 
 function result(overrides: Partial<UploadResult> = {}): UploadResult {
   return {
@@ -86,6 +86,26 @@ describe("UploadDropzone", () => {
     expect(screen.getByText(/Saved/)).toBeInTheDocument();
     expect(onUploaded).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("upload-announcer")).toHaveTextContent("sales.csv uploaded.");
+  });
+
+  it("offers to analyse the file it just saved", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <UploadDropzone orgId="org-1" deps={depsFor(async () => result())} onUploaded={vi.fn()} />,
+    );
+    await user.upload(container.querySelector("input[type=file]") as HTMLInputElement, csv());
+    expect(await screen.findByRole("button", { name: "Analyse this file" })).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("does not offer analysis without an organisation", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <UploadDropzone deps={depsFor(async () => result())} onUploaded={vi.fn()} />,
+    );
+    await user.upload(container.querySelector("input[type=file]") as HTMLInputElement, csv());
+    await screen.findByText(/Saved/);
+    expect(screen.queryByRole("button", { name: "Analyse this file" })).not.toBeInTheDocument();
   });
 
   it("tells the user when the exact file already exists", async () => {

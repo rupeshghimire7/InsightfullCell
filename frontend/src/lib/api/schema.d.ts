@@ -92,6 +92,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List runs, newest first */
+        get: operations["list_runs_v1_runs_get"];
+        put?: never;
+        /**
+         * Start an analysis of a dataset
+         * @description Queues a run of the dataset's newest version (or ``dataset_version_id``) and returns at
+         *     once; follow ``events_url`` for progress. Replaying with the same ``Idempotency-Key`` returns
+         *     the same run instead of starting another.
+         */
+        post: operations["create_run_v1_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A run, its stages and their results */
+        get: operations["get_run_v1_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs/{run_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Live progress (Server-Sent Events) with replay from Last-Event-ID */
+        get: operations["stream_events_v1_runs__run_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs/{run_id}:cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a queued, running or review-waiting run
+         * @description A running run stops at the next stage boundary. Safe to repeat.
+         */
+        post: operations["cancel_run_v1_runs__run_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs/{run_id}:retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue a failed run again; finished stages are not redone */
+        post: operations["retry_run_v1_runs__run_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/uploads": {
         parameters: {
             query?: never;
@@ -220,6 +314,19 @@ export interface components {
             /** Part Number */
             part_number: number;
         };
+        /** CreateRunRequest */
+        CreateRunRequest: {
+            /**
+             * Dataset Id
+             * Format: uuid
+             */
+            dataset_id: string;
+            /**
+             * Dataset Version Id
+             * @description The version to analyse. Defaults to the newest version.
+             */
+            dataset_version_id?: string | null;
+        };
         /** CreateUploadRequest */
         CreateUploadRequest: {
             /**
@@ -256,6 +363,7 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            latest_run?: components["schemas"]["LatestRunOut"] | null;
             latest_version: components["schemas"]["VersionOut"] | null;
             /** Name */
             name: string;
@@ -269,12 +377,39 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /**
+         * EventType
+         * @description What the browser is told. Payloads never carry cell values.
+         * @enum {string}
+         */
+        EventType: "run.queued" | "run.started" | "run.waiting" | "stage.started" | "stage.completed" | "stage.reused" | "stage.failed" | "stage.retrying" | "run.moved_to_large_queue" | "phase.completed" | "review.required" | "review.reminder" | "review.approved" | "run.succeeded" | "run.failed" | "run.cancelled" | "run.expired" | "run.retried";
         /** FieldError */
         FieldError: {
             /** Field */
             field: string;
             /** Message */
             message: string;
+        };
+        /**
+         * LatestRunOut
+         * @description The most recent analysis of a dataset, for lists.
+         */
+        LatestRunOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Stage */
+            stage: string | null;
+            status: components["schemas"]["RunStatus"];
         };
         /** MeOut */
         MeOut: {
@@ -307,6 +442,12 @@ export interface components {
              */
             url: string;
         };
+        /**
+         * Phase
+         * @description A run executes as two jobs, split at the one point where a person may need to decide.
+         * @enum {string}
+         */
+        Phase: "A" | "B";
         /** PresignPartsRequest */
         PresignPartsRequest: {
             /** Part Numbers */
@@ -346,10 +487,215 @@ export interface components {
             type: string;
         };
         /**
+         * Queue
+         * @enum {string}
+         */
+        Queue: "standard" | "large" | "maintenance";
+        /**
          * Role
          * @enum {string}
          */
         Role: "owner" | "admin" | "analyst" | "viewer";
+        /**
+         * RunEventOut
+         * @description One event as sent on the stream (``data:`` line, JSON).
+         */
+        RunEventOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Data */
+            data: {
+                [key: string]: unknown;
+            };
+            /** Seq */
+            seq: number;
+            /** Stage */
+            stage: string | null;
+            type: components["schemas"]["EventType"];
+        };
+        /**
+         * RunFailureOut
+         * @description Why a run failed, in words safe to show (never cell values).
+         */
+        RunFailureOut: {
+            /**
+             * Code
+             * @description Stable machine-readable code.
+             */
+            code: string;
+            /** Detail */
+            detail?: string | null;
+            /** Hint */
+            hint?: string | null;
+        };
+        /** RunOut */
+        RunOut: {
+            /** Attempts */
+            attempts: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Dataset Id
+             * Format: uuid
+             */
+            dataset_id: string;
+            /** Dataset Name */
+            dataset_name: string;
+            /**
+             * Dataset Version Id
+             * Format: uuid
+             */
+            dataset_version_id: string;
+            /**
+             * Events Url
+             * @description Server-Sent Events stream of this run's progress.
+             */
+            events_url: string;
+            failure: components["schemas"]["RunFailureOut"] | null;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Last Event Seq
+             * @description Sequence number of the newest event.
+             */
+            last_event_seq: number;
+            phase: components["schemas"]["Phase"];
+            queue: components["schemas"]["Queue"];
+            /** Review Requested At */
+            review_requested_at: string | null;
+            /**
+             * Row Version
+             * @description Send as If-Match to change the run (ETag).
+             */
+            row_version: number;
+            /**
+             * Stage
+             * @description What the run is doing now (or where it stopped).
+             */
+            stage: string | null;
+            /** Stages */
+            stages: components["schemas"]["StageOut"][];
+            /** Started At */
+            started_at: string | null;
+            status: components["schemas"]["RunStatus"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** RunPageOut */
+        RunPageOut: {
+            /** Items */
+            items: components["schemas"]["RunSummaryOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /**
+         * RunStatus
+         * @enum {string}
+         */
+        RunStatus: "queued" | "running" | "awaiting_review" | "succeeded" | "failed" | "cancelled" | "expired";
+        /** RunSummaryOut */
+        RunSummaryOut: {
+            /** Attempts */
+            attempts: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Dataset Id
+             * Format: uuid
+             */
+            dataset_id: string;
+            /** Dataset Name */
+            dataset_name: string;
+            /**
+             * Dataset Version Id
+             * Format: uuid
+             */
+            dataset_version_id: string;
+            failure: components["schemas"]["RunFailureOut"] | null;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Last Event Seq
+             * @description Sequence number of the newest event.
+             */
+            last_event_seq: number;
+            phase: components["schemas"]["Phase"];
+            queue: components["schemas"]["Queue"];
+            /** Review Requested At */
+            review_requested_at: string | null;
+            /**
+             * Row Version
+             * @description Send as If-Match to change the run (ETag).
+             */
+            row_version: number;
+            /**
+             * Stage
+             * @description What the run is doing now (or where it stopped).
+             */
+            stage: string | null;
+            /** Started At */
+            started_at: string | null;
+            status: components["schemas"]["RunStatus"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** StageOut */
+        StageOut: {
+            /** Attempts */
+            attempts: number;
+            /** Finished At */
+            finished_at: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Output
+             * @description The stage's summary: counts, column names and types; never cell values.
+             */
+            output: {
+                [key: string]: unknown;
+            };
+            phase: components["schemas"]["Phase"];
+            /** Position */
+            position: number;
+            /**
+             * Reused
+             * @description True when a checkpoint matched and the stage did not rerun.
+             */
+            reused: boolean;
+            /** Started At */
+            started_at: string | null;
+            status: components["schemas"]["StageStatus"];
+        };
+        /**
+         * StageStatus
+         * @enum {string}
+         */
+        StageStatus: "pending" | "running" | "succeeded" | "failed";
         /** UploadOut */
         UploadOut: {
             /**
@@ -682,6 +1028,510 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_runs_v1_runs_get: {
+        parameters: {
+            query?: {
+                /** @description Only runs of this dataset. */
+                dataset_id?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunPageOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_run_v1_runs_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Client-generated unique key; makes retries of this request safe. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_run_v1_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    stream_events_v1_runs__run_id__events_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Last-Event-ID"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One `RunEventOut` per message: `id` is its sequence number, `event` its type and `data` its JSON. Comment lines keep the connection alive. The stream ends when the run finishes or the ticket expires; reconnect with `Last-Event-ID` to continue where it stopped. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["RunEventOut"];
+                };
+            };
+            /** @description Problem details */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Problem details */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Problem details */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Problem details */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cancel_run_v1_runs__run_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The run's row_version (ETag) you last saw; 412 if it changed since. */
+                "If-Match"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    retry_run_v1_runs__run_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The run's row_version (ETag) you last saw; 412 if it changed since. */
+                "If-Match"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
                 headers: {
                     [name: string]: unknown;
                 };

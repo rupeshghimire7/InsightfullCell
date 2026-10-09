@@ -3,7 +3,12 @@
  * rules are unit-tested; the route handler only wires them to `fetch`.
  */
 
-const ALLOWED_PREFIXES = ["v1/me", "v1/uploads", "v1/datasets"] as const;
+const ALLOWED_PREFIXES = ["v1/me", "v1/uploads", "v1/datasets", "v1/runs"] as const;
+/**
+ * Event streams are opened by the browser on the API directly with a run-scoped ticket; through
+ * this proxy they would hold a web function open for the length of a run.
+ */
+const DENIED = /^v1\/runs\/[^/]+\/events$/;
 const SEGMENT = /^[A-Za-z0-9._~:-]+$/;
 const MAX_SEGMENTS = 4;
 
@@ -18,11 +23,22 @@ export function resolveBackendPath(segments: readonly string[]): string | null {
   const allowed = ALLOWED_PREFIXES.some(
     (prefix) => path === prefix || path.startsWith(`${prefix}/`),
   );
-  return allowed ? path : null;
+  return allowed && !DENIED.test(path) ? path : null;
 }
 
-export const FORWARDED_REQUEST_HEADERS = ["accept", "content-type", "idempotency-key"] as const;
-export const FORWARDED_RESPONSE_HEADERS = ["content-type", "x-request-id", "retry-after"] as const;
+export const FORWARDED_REQUEST_HEADERS = [
+  "accept",
+  "content-type",
+  "idempotency-key",
+  "if-match",
+] as const;
+export const FORWARDED_RESPONSE_HEADERS = [
+  "content-type",
+  "x-request-id",
+  "retry-after",
+  "etag",
+  "location",
+] as const;
 
 /** Mutations must come from this app's own pages (defence in depth next to SameSite=Lax). */
 export function isTrustedOrigin(

@@ -2,6 +2,8 @@ export interface CspOptions {
   nonce: string;
   /** Browser-facing origin of object storage (presigned PUTs go there). */
   storageOrigin: string;
+  /** Browser-facing origin of the API (live-progress streams connect there). */
+  apiOrigin?: string;
   development?: boolean;
   /** Only behind HTTPS: upgrading plain-HTTP requests would break local http:// storage. */
   upgradeInsecureRequests?: boolean;
@@ -15,10 +17,12 @@ export interface CspOptions {
 export function buildCsp({
   nonce,
   storageOrigin,
+  apiOrigin,
   development = false,
   upgradeInsecureRequests = false,
 }: CspOptions): string {
   const origin = new URL(storageOrigin).origin;
+  const api = apiOrigin ? [new URL(apiOrigin).origin] : [];
   const directives: Record<string, string[]> = {
     "default-src": ["'self'"],
     "script-src": [
@@ -33,7 +37,12 @@ export function buildCsp({
     "style-src-attr": ["'unsafe-inline'"],
     "img-src": ["'self'", "data:", "blob:"],
     "font-src": ["'self'", "data:"],
-    "connect-src": ["'self'", origin, ...(development ? ["ws:", "http://localhost:*"] : [])],
+    "connect-src": [
+      "'self'",
+      origin,
+      ...api,
+      ...(development ? ["ws:", "http://localhost:*"] : []),
+    ],
     "worker-src": ["'self'", "blob:"],
     "object-src": ["'none'"],
     "base-uri": ["'self'"],

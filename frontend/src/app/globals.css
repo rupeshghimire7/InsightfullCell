@@ -1,10 +1,10 @@
 @import "tailwindcss";
-@import "@fontsource/ibm-plex-sans/400.css";
-@import "@fontsource/ibm-plex-sans/500.css";
-@import "@fontsource/ibm-plex-sans/600.css";
-@import "@fontsource/ibm-plex-mono/400.css";
 
-/* Design tokens: 08-ui-ux-spec.md section 2. One accent; colour is reserved for meaning. */
+/*
+ * Design tokens: 08-ui-ux-spec.md section 2. One accent (deep green); colour is reserved for
+ * meaning (status), never decoration. Shape rule: controls 6 px, panels 10 px, badges full pill.
+ * Type: Geist for text, Geist Mono for numbers, ids and code (loaded by next/font in layout.tsx).
+ */
 :root {
   color-scheme: light;
   --bg: #f4f3f1;
@@ -67,8 +67,9 @@
   --color-warning: var(--warning);
   --color-danger: var(--danger);
   --color-success: var(--success);
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
   --radius-control: 6px;
   --radius-panel: 10px;
 }
@@ -115,6 +116,12 @@
   .tabular {
     font-variant-numeric: tabular-nums;
   }
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.011em;
+    text-wrap: balance;
+  }
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -124,5 +131,37 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+  }
+}
+
+/*
+ * Motion (MOTION_INTENSITY 3): state changes only, never decoration. A new item fades up once;
+ * a list staggers by its --i index. All of it is off under prefers-reduced-motion (above).
+ */
+@layer utilities {
+  .enter {
+    animation: enter 320ms var(--ease-out-soft) both;
+    animation-delay: calc(var(--i, 0) * 40ms);
+  }
+  .press {
+    transition:
+      transform 120ms var(--ease-out-soft),
+      background-color 150ms ease,
+      border-color 150ms ease,
+      color 150ms ease;
+  }
+  .press:active:not([aria-disabled="true"]) {
+    transform: translateY(1px) scale(0.985);
+  }
+}
+
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }

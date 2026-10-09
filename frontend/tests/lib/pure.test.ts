@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   FORWARDED_REQUEST_HEADERS,
+  FORWARDED_RESPONSE_HEADERS,
   isTrustedOrigin,
   resolveBackendPath,
 } from "@/lib/backend-policy";
@@ -37,6 +38,10 @@ describe("resolveBackendPath", () => {
       ["v1", "datasets", "0198d8f0-0000-7000-8000-000000000000"],
       "v1/datasets/0198d8f0-0000-7000-8000-000000000000",
     ],
+    [["v1", "runs"], "v1/runs"],
+    [["v1", "runs", "r1"], "v1/runs/r1"],
+    [["v1", "runs", "r1:cancel"], "v1/runs/r1:cancel"],
+    [["v1", "runs", "r1:retry"], "v1/runs/r1:retry"],
   ])("allows %j", (segments, expected) => {
     expect(resolveBackendPath(segments)).toBe(expected);
   });
@@ -55,6 +60,9 @@ describe("resolveBackendPath", () => {
     [["v1", "uploads", "a", "b", "c"]],
     [["v1uploads"]],
     [["v1", "meta"]],
+    // Event streams go to the API directly with a ticket; never held open by this proxy.
+    [["v1", "runs", "r1", "events"]],
+    [["v1", "runsx"]],
   ])("rejects %j", (segments) => {
     expect(resolveBackendPath(segments)).toBeNull();
   });
@@ -62,6 +70,11 @@ describe("resolveBackendPath", () => {
   it("does not forward cookies or authorization from the browser", () => {
     expect(FORWARDED_REQUEST_HEADERS).not.toContain("cookie");
     expect(FORWARDED_REQUEST_HEADERS).not.toContain("authorization");
+  });
+
+  it("forwards the conditional-request headers runs use", () => {
+    expect(FORWARDED_REQUEST_HEADERS).toContain("if-match");
+    expect(FORWARDED_RESPONSE_HEADERS).toEqual(expect.arrayContaining(["etag", "location"]));
   });
 });
 
@@ -92,6 +105,12 @@ describe("buildCsp", () => {
 
   it("allows only the storage origin (not its path) to receive uploads", () => {
     expect(buildCsp(options)).toContain("connect-src 'self' https://bucket.s3.amazonaws.com;");
+  });
+
+  it("lets the browser reach the API's origin for live progress", () => {
+    expect(buildCsp({ ...options, apiOrigin: "https://api.example.com/v1" })).toContain(
+      "connect-src 'self' https://bucket.s3.amazonaws.com https://api.example.com;",
+    );
   });
 
   it("relaxes only what hot reload needs in development", () => {
@@ -181,7 +200,12 @@ describe("sign-in options", () => {
     expect(googleSignIn(env())).toBe("setup-needed");
     expect(
       googleSignIn(
-        env({ ...resend, APP_ENV: "production", BETTER_AUTH_URL: "https://cell.example" }),
+        env({
+          ...resend,
+          APP_ENV: "production",
+          BETTER_AUTH_URL: "https://cell.example",
+          API_PUBLIC_URL: "https://api.cell.example",
+        }),
       ),
     ).toBe("off");
   });

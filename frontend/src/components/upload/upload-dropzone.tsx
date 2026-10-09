@@ -2,7 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState, type DragEvent } from "react";
+import { StartRunButton } from "@/components/runs/start-run-button";
 import { Button } from "@/components/ui/button";
+import { CheckCircle, FileArrowUp } from "@/components/ui/icons";
 import { ProblemAlert } from "@/components/ui/problem-alert";
 import { describeError, type Problem } from "@/lib/problem";
 import { formatBytes, formatPercent } from "@/lib/format";
@@ -31,6 +33,8 @@ type State =
 const DEFAULT_DEPS: UploaderDeps = { api: browserUploadApi, putPart, hashFile };
 
 export interface UploadDropzoneProps {
+  /** The organisation, so a finished upload can be analysed right away. */
+  orgId?: string;
   /** Replaceable in tests. */
   deps?: UploaderDeps;
   /** Called after a successful upload (defaults to refreshing the server-rendered list). */
@@ -81,7 +85,7 @@ export function describeUploadError(error: unknown): Problem {
   return describeError(error);
 }
 
-export function UploadDropzone({ deps = DEFAULT_DEPS, onUploaded }: UploadDropzoneProps) {
+export function UploadDropzone({ orgId, deps = DEFAULT_DEPS, onUploaded }: UploadDropzoneProps) {
   const router = useRouter();
   const inputId = useId();
   const hintId = useId();
@@ -173,17 +177,29 @@ export function UploadDropzone({ deps = DEFAULT_DEPS, onUploaded }: UploadDropzo
         }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
-        className={`rounded-panel border border-dashed bg-surface p-6 transition-colors ${
-          dragging ? "border-accent bg-bg" : "border-border"
+        className={`rounded-panel border border-dashed bg-surface p-5 transition-colors duration-200 sm:p-6 ${
+          dragging ? "border-accent bg-accent/5" : "border-border"
         }`}
       >
-        <h2 id={`${inputId}-title`} className="text-base font-semibold">
-          Upload a file
-        </h2>
-        <p id={hintId} className="mt-1 text-muted">
-          Drop a file here or choose one. CSV, TSV, Excel (.xlsx), Parquet or JSON, up to{" "}
-          <span className="tabular">{limitMb}&nbsp;MB</span>.
-        </p>
+        <div className="flex items-start gap-4">
+          <span
+            aria-hidden="true"
+            className={`hidden size-11 shrink-0 place-items-center rounded-full transition-colors sm:grid ${
+              dragging ? "bg-accent text-accent-contrast" : "bg-accent/10 text-accent"
+            }`}
+          >
+            <FileArrowUp className="size-5" />
+          </span>
+          <div className="min-w-0">
+            <h2 id={`${inputId}-title`} className="text-base font-semibold">
+              Upload a file
+            </h2>
+            <p id={hintId} className="mt-1 max-w-[60ch] text-muted">
+              Drop a file here or choose one. CSV, TSV, Excel (.xlsx), Parquet or JSON, up to{" "}
+              <span className="tabular">{limitMb}&nbsp;MB</span>.
+            </p>
+          </div>
+        </div>
 
         <input
           ref={inputRef}
@@ -217,7 +233,7 @@ export function UploadDropzone({ deps = DEFAULT_DEPS, onUploaded }: UploadDropzo
         {state.kind === "uploading" ? <ProgressBar state={state} /> : null}
       </div>
 
-      {state.kind === "success" ? <SuccessNote state={state} /> : null}
+      {state.kind === "success" ? <SuccessNote state={state} orgId={orgId} /> : null}
       {state.kind === "error" ? (
         <ProblemAlert
           title={state.problem.title}
@@ -279,32 +295,48 @@ function ProgressBar({ state }: { state: Extract<State, { kind: "uploading" }> }
   );
 }
 
-function SuccessNote({ state }: { state: Extract<State, { kind: "success" }> }) {
+function SuccessNote({
+  state,
+  orgId,
+}: {
+  state: Extract<State, { kind: "success" }>;
+  orgId?: string;
+}) {
   const { result } = state;
   return (
-    <div className="flex items-start gap-2 rounded-panel border border-border bg-surface p-4 text-sm">
-      <svg
+    <div className="enter flex items-start gap-3 rounded-panel border border-border bg-surface p-4 text-sm">
+      <CheckCircle
         aria-hidden="true"
-        viewBox="0 0 20 20"
-        className="mt-0.5 size-4 shrink-0 text-success"
-        fill="currentColor"
-      >
-        <path d="M10 1a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm4.1 6.9-4.8 5a.8.8 0 0 1-1.1 0L5.9 10.6l1.1-1.1 1.8 1.8 4.2-4.4 1.1 1Z" />
-      </svg>
-      <p>
-        {result.duplicate ? (
-          <>
-            You already uploaded this exact file. It&rsquo;s saved as{" "}
-            <strong className="font-semibold">{result.dataset.name}</strong>; nothing new was
-            stored.
-          </>
-        ) : (
-          <>
-            Saved <strong className="font-semibold">{result.dataset.name}</strong>
-            {result.dataset.version_count > 1 ? ` as version ${result.dataset.version_count}` : ""}.
-          </>
-        )}
-      </p>
+        weight="fill"
+        className="mt-0.5 size-5 shrink-0 text-success"
+      />
+      <div className="min-w-0 flex-1 space-y-3">
+        <p>
+          {result.duplicate ? (
+            <>
+              You already uploaded this exact file. It&rsquo;s saved as{" "}
+              <strong className="font-semibold">{result.dataset.name}</strong>; nothing new was
+              stored.
+            </>
+          ) : (
+            <>
+              Saved <strong className="font-semibold">{result.dataset.name}</strong>
+              {result.dataset.version_count > 1
+                ? ` as version ${result.dataset.version_count}`
+                : ""}
+              .
+            </>
+          )}
+        </p>
+        {orgId ? (
+          <StartRunButton
+            orgId={orgId}
+            datasetId={result.dataset.id}
+            versionId={result.version.id}
+            label="Analyse this file"
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

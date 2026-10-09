@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { CircleNotch } from "@/components/ui/icons";
 
 type Variant = "primary" | "secondary" | "ghost";
 
@@ -29,7 +30,7 @@ export function Button({
       type={type}
       aria-disabled={loading || rest.disabled ? true : undefined}
       onClick={loading ? (event) => event.preventDefault() : onClick}
-      className={`inline-flex min-h-9 items-center justify-center gap-2 rounded-control border px-4 text-sm font-medium transition-colors aria-disabled:cursor-not-allowed aria-disabled:opacity-70 pointer-coarse:min-h-11 ${VARIANTS[variant]} ${className}`}
+      className={`press inline-flex min-h-9 items-center justify-center gap-2 rounded-control border px-4 text-sm font-medium whitespace-nowrap aria-disabled:cursor-not-allowed aria-disabled:opacity-70 pointer-coarse:min-h-11 ${VARIANTS[variant]} ${className}`}
       {...rest}
     >
       {loading ? <Spinner /> : null}
@@ -40,14 +41,10 @@ export function Button({
 
 function Spinner() {
   return (
-    <svg
+    <CircleNotch
       aria-hidden="true"
-      viewBox="0 0 24 24"
+      weight="bold"
       className="size-4 animate-spin motion-reduce:animate-none"
-      fill="none"
-    >
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" opacity="0.25" />
-      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-    </svg>
+    />
   );
 }
