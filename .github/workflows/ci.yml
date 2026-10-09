@@ -1,0 +1,217 @@
+# CI runs the same scripts you run locally (`make check`), so a green local run means a green PR.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A new push to the same branch supersedes the previous run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  UV_VERSION: "0.8.x"
+  NODE_VERSION: "22"
+  # PostgreSQL service used by integration and e2e jobs (matches docker-compose.yml).
+  TEST_DATABASE_ADMIN_URL: postgresql+psycopg://ic_owner:ic_owner@localhost:5432/postgres
+
+jobs:
+  backend:
+    name: Backend (lint, types, tests, migrations)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: ic_owner
+          POSTGRES_PASSWORD: ic_owner
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ic_owner" --health-interval 5s
+          --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Backend checks
+        # Integration tests are mandatory in CI: they fail instead of skipping without a database.
+        run: scripts/check-backend.sh --fast
+        env:
+          CI: "true"
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/.coverage
+          include-hidden-files: true
+          if-no-files-found: ignore
+
+  frontend:
+    name: Frontend (lint, a11y, types, tests, contract)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      # The generated API types are compared with what the backend produces today.
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: uv sync --project backend --quiet
+      - name: Frontend checks
+        run: scripts/check-frontend.sh --fast
+
+  e2e:
+    name: End-to-end (browser, real PostgreSQL and S3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: [backend, frontend]
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: ic_owner
+          POSTGRES_PASSWORD: ic_owner
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ic_owner" --health-interval 5s
+          --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Start RustFS (verifies request signatures, unlike the in-process emulator)
+        run: |
+          docker run -d --name s3 -p 9000:9000 \
+            -e RUSTFS_ACCESS_KEY=dev -e RUSTFS_SECRET_KEY=devdevdev rustfs/rustfs:1.0.0
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:9000/health && exit 0
+            sleep 1
+          done
+          docker logs s3
+          exit 1
+      - run: pnpm --dir frontend install --frozen-lockfile
+      - run: pnpm --dir frontend exec playwright install --with-deps chromium
+      - name: Run the browser journey
+        run: scripts/e2e.sh
+        env:
+          CI: "true"
+          E2E_S3_ENDPOINT: http://127.0.0.1:9000
+      - name: Upload traces and logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-diagnostics
+          path: |
+            .e2e/*.log
+            frontend/playwright-report
+            frontend/test-results
+          if-no-files-found: ignore
+
+  docker:
+    name: Container images build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: false
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+      - uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          push: false
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+  security:
+    name: Secrets and dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+      - name: Python dependency vulnerabilities
+        run: uv sync --project backend --quiet && uv run --project backend pip-audit --skip-editable
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: JavaScript dependency vulnerabilities
+        run: pnpm --dir frontend audit --audit-level high --prod
+
+  commits:
+    name: Conventional Commits
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Pull request title
+        run: scripts/check-commit-msg.sh --text "$PR_TITLE"
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+      - name: Commit messages
+        run: scripts/check-commit-msg.sh --range "origin/${{ github.base_ref }}..HEAD"
+
+  # One required check for branch protection, so the list of jobs can change freely.
+  ci-passed:
+    name: CI passed
+    if: always()
+    needs: [backend, frontend, e2e, docker, security, commits]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every job to have succeeded (or been skipped on purpose)
+        run: |
+          if echo '${{ toJSON(needs.*.result) }}' | grep -Eq 'failure|cancelled'; then
+            echo "At least one job failed." >&2; exit 1
+          fi

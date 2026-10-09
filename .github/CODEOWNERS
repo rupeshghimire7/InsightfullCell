@@ -1,0 +1,8 @@
+# Replace @your-github-username (SETUP_MANUAL.md, part 5), then enable "Require review from
+# Code Owners" in branch protection. Later rules override earlier ones.
+*                          @your-github-username
+/backend/migrations/       @your-github-username
+/backend/src/insightfulcell/auth/  @your-github-username
+/frontend/src/lib/auth*    @your-github-username
+/.github/                  @your-github-username
+/scripts/                  @your-github-username

@@ -1,0 +1,26 @@
+# Advisories appear without any code change, so audit on a schedule as well as on pull requests.
+name: Weekly dependency audit
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --project backend --quiet && uv run --project backend pip-audit --skip-editable
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: pnpm --dir frontend audit --audit-level high --prod
