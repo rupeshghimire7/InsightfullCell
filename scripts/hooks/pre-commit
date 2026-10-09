@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Fast checks on what is staged (seconds, not minutes). The full gate runs on pre-push.
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+"$ROOT/scripts/check-secrets.sh" --staged
+
+staged() { git diff --cached --name-only --diff-filter=ACM -- "$@"; }
+
+py="$(staged 'backend/*.py')"
+if [ -n "$py" ]; then
+  rel=()
+  while IFS= read -r f; do rel+=("${f#backend/}"); done <<< "$py"
+  (cd backend && uv run --quiet ruff format --check "${rel[@]}" && uv run --quiet ruff check "${rel[@]}")
+fi
+
+web="$(staged 'frontend/*.ts' 'frontend/*.tsx' 'frontend/*.mjs' 'frontend/*.css' 'frontend/*.json' ':!frontend/src/lib/api/schema.d.ts')"
+if [ -n "$web" ]; then
+  rel=()
+  while IFS= read -r f; do rel+=("${f#frontend/}"); done <<< "$web"
+  (cd frontend && pnpm exec prettier --check "${rel[@]}")
+fi
