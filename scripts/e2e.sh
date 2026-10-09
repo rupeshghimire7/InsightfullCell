@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Browser end-to-end test of the whole stack: sign in -> upload a CSV -> see it listed.
-# Starts a fresh database, the API, an S3 endpoint and the production build of the web app,
-# runs Playwright, then tears everything down.
+# Browser end-to-end test of the whole stack: sign in -> upload a CSV -> analyse it live.
+# Starts a fresh database, the API, the worker, an S3 endpoint and the production build of the
+# web app, runs Playwright, then tears everything down.
 #   scripts/e2e.sh [--skip-build]
 #
 # Environment (all optional):
@@ -83,18 +83,33 @@ fi
 # --add: when reusing the RustFS from `make up`, keep the origin `make web` uploads from.
 (cd "$BACKEND" && .venv/bin/python "$ROOT/scripts/s3_setup.py" --endpoint "$S3_URL" --origin "$WEB_URL" --add)
 
-echo "• api"
-(
-  cd "$BACKEND"
+backend_env() {
   export ENVIRONMENT=local
   export DATABASE_URL="postgresql+psycopg://ic_app_dev:ic_app_dev@$HOSTPORT/$DB"
   export AUTH_JWKS_URL="$WEB_URL/api/auth/jwks" AUTH_ISSUER="$WEB_URL"
   export S3_ENDPOINT_URL="$S3_URL" S3_ACCESS_KEY_ID=dev S3_SECRET_ACCESS_KEY=devdevdev
   export S3_FORCE_PATH_STYLE=true S3_BUCKET=insightfulcell-dev
-  exec .venv/bin/python -m uvicorn insightfulcell.api.main:app --host 127.0.0.1 --port "$API_PORT"
+  # The browser opens live-progress streams on the API directly (with a run-scoped ticket).
+  export EVENTS_ALLOWED_ORIGINS="$WEB_URL"
+}
+
+echo "• api"
+(
+  cd "$BACKEND"
+  backend_env
+  exec .venv/bin/python -m uvicorn insightfulcell.api.main:app --host 127.0.0.1 --port "$API_PORT" \
+    --timeout-graceful-shutdown 2
 ) >"$STATE/api.log" 2>&1 &
 PIDS+=($!)
 wait_for "http://127.0.0.1:$API_PORT/healthz" "API" 30
+
+echo "• worker"
+(
+  cd "$BACKEND"
+  backend_env
+  exec .venv/bin/python -m insightfulcell.worker --name e2e-worker
+) >"$STATE/worker.log" 2>&1 &
+PIDS+=($!)
 
 echo "• web"
 export APP_ENV=local BETTER_AUTH_URL="$WEB_URL" AUTH_DATABASE_URL="$AUTH_DB_URL"
@@ -110,6 +125,6 @@ echo "• browser"
 cd "$FRONTEND"
 export E2E_BASE_URL="$WEB_URL" E2E_WEB_LOG="$STATE/web.log"
 if ! pnpm exec playwright test; then
-  echo "Logs: $STATE/{api,web,s3}.log. Missing browser? Run: pnpm --dir frontend exec playwright install chromium" >&2
+  echo "Logs: $STATE/{api,worker,web,s3}.log. Missing browser? Run: pnpm --dir frontend exec playwright install chromium" >&2
   exit 1
 fi
