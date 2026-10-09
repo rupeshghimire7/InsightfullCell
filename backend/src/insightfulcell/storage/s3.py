@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
 
 import boto3
@@ -18,6 +19,7 @@ from insightfulcell.storage.port import (
     InvalidPartsError,
     MultipartNotFoundError,
     ObjectInfo,
+    ObjectNotFoundError,
     PartSpec,
 )
 
@@ -157,6 +159,17 @@ class S3ObjectStore:
 
     async def delete(self, key: str) -> None:
         await self._call(lambda: self._client.delete_object(Bucket=self._bucket, Key=key))
+
+    async def download_file(self, key: str, dest: Path) -> None:
+        try:
+            await self._call(lambda: self._client.download_file(self._bucket, key, str(dest)))
+        except ClientError as exc:
+            if _code(exc) in _NOT_FOUND:
+                raise ObjectNotFoundError(key) from exc
+            raise
+
+    async def upload_file(self, source: Path, key: str) -> None:
+        await self._call(lambda: self._client.upload_file(str(source), self._bucket, key))
 
 
 def _code(exc: ClientError) -> str:

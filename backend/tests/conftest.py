@@ -16,6 +16,8 @@ from insightfulcell.auth.tokens import TokenVerifier
 
 ISSUER = "http://localhost:3000"
 AUDIENCE = "insightfulcell-api"
+EVENTS_AUDIENCE = "insightfulcell-events"
+TICKET_SECONDS = 300
 
 
 @dataclass(frozen=True)
@@ -47,6 +49,16 @@ def verifier(signing_key: Ed25519PrivateKey) -> TokenVerifier:
         StaticKeyResolver(signing_key.public_key()),
         issuer=ISSUER,
         audience=AUDIENCE,
+        leeway_seconds=0,
+    )
+
+
+@pytest.fixture(scope="session")
+def ticket_verifier(signing_key: Ed25519PrivateKey) -> TokenVerifier:
+    return TokenVerifier(
+        StaticKeyResolver(signing_key.public_key()),
+        issuer=ISSUER,
+        audience=EVENTS_AUDIENCE,
         leeway_seconds=0,
     )
 
@@ -88,5 +100,26 @@ def make_token(signing_key: Ed25519PrivateKey) -> MakeToken:
             algorithm=algorithm,
             headers={"kid": "k1"},
         )
+
+    return _make
+
+
+MakeTicket = Callable[..., str]
+
+
+@pytest.fixture(scope="session")
+def make_ticket(make_token: MakeToken) -> MakeTicket:
+    """Mint a run-scoped event ticket, as the web app does (``/api/runs/{id}/events-ticket``)."""
+
+    def _make(identity: Identity, run_id: object, /, **overrides: Any) -> str:
+        now = int(time.time())
+        claims: dict[str, Any] = {
+            "aud": EVENTS_AUDIENCE,
+            "run_id": str(run_id),
+            "iat": now,
+            "exp": now + TICKET_SECONDS,
+            **overrides,
+        }
+        return make_token(identity, **claims)
 
     return _make

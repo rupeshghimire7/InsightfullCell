@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from insightfulcell.config import Settings
 from insightfulcell.db.engine import create_engine
+from insightfulcell.db.revision import EXPECTED_SCHEMA_REVISION
 from tests.conftest import Identity
 from tests.integration.conftest import AuthHeaders
 from tests.integration.helpers import (
@@ -328,7 +329,7 @@ class TestLeastPrivilege:
             revision = (
                 await conn.execute(text("SELECT version_num FROM alembic_version"))
             ).scalar_one()
-        assert revision == "0002"
+        assert revision == EXPECTED_SCHEMA_REVISION
 
 
 class TestCompositeForeignKeys:

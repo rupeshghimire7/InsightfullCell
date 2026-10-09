@@ -7,6 +7,7 @@ misconfigured deployment fails at start-up instead of running open.
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, SecretStr, field_validator, model_validator
@@ -30,7 +31,16 @@ class Settings(BaseSettings):
     auth_jwks_url: str
     auth_issuer: str
     auth_audience: str = "insightfulcell-api"
+    # Run-scoped event-stream tickets (5 minutes, one run) carry their own audience, so a ticket
+    # can never be used as an API token and an API token can never open an event stream.
+    auth_events_audience: str = "insightfulcell-events"
     auth_clock_skew_seconds: int = Field(default=30, ge=0, le=300)
+
+    # --- live progress (IC-008). Browsers open event streams on the API directly, so the web
+    # app's origin must be allowed here (comma-separated). Applies to the event stream only.
+    events_allowed_origins: str = "http://localhost:3000"
+    events_keepalive_seconds: float = Field(default=15.0, gt=0, le=120)
+    events_listen: bool = True  # one LISTEN connection per API instance; off in some tests
 
     # --- object storage (RustFS locally, S3 in the cloud: configuration only, ADR-009, ADR-027)
     s3_bucket: str = "insightfulcell-dev"
@@ -49,12 +59,40 @@ class Settings(BaseSettings):
     upload_url_ttl_seconds: int = Field(default=3_600, ge=60, le=43_200)
     upload_expiry_hours: int = Field(default=24, ge=1)
 
+    # --- runs and the worker (IC-007)
+    run_max_attempts: int = Field(default=3, ge=1, le=10)
+    run_crashes_before_large_queue: int = Field(default=2, ge=1, le=10)
+    run_reconcile_after_seconds: int = Field(default=60, ge=10)
+    run_stalled_after_seconds: int = Field(default=60, ge=15)
+    run_retry_delay_seconds: int = Field(default=15, ge=0, le=3_600)
+    run_capacity_wait_seconds: int = Field(default=10, ge=1, le=600)
+    run_review_reminder_hours: int = Field(default=24, ge=1)
+    run_review_expiry_days: int = Field(default=7, ge=1)
+    worker_concurrency: int = Field(default=2, ge=1, le=32)
+    worker_scratch_dir: Path | None = None  # default: the system temp directory
+    idempotency_key_ttl_hours: int = Field(default=24, ge=1)
+
     @field_validator("database_url")
     @classmethod
     def _async_driver(cls, value: str) -> str:
         if not value.startswith("postgresql+psycopg://"):
             raise ValueError("DATABASE_URL must use the 'postgresql+psycopg://' scheme")
         return value
+
+    @property
+    def events_origins(self) -> list[str]:
+        return [o.strip().rstrip("/") for o in self.events_allowed_origins.split(",") if o.strip()]
+
+    @property
+    def psycopg_conninfo(self) -> str:
+        """``DATABASE_URL`` for direct psycopg connections (queue, LISTEN)."""
+        return self.database_url.replace("postgresql+psycopg://", "postgresql://", 1)
+
+    @model_validator(mode="after")
+    def _distinct_audiences(self) -> Settings:
+        if self.auth_events_audience == self.auth_audience:
+            raise ValueError("AUTH_EVENTS_AUDIENCE must differ from AUTH_AUDIENCE")
+        return self
 
     @model_validator(mode="after")
     def _production_guards(self) -> Settings:
@@ -63,6 +101,8 @@ class Settings(BaseSettings):
                 raise ValueError("AUTH_JWKS_URL must be https in production")
             if self.s3_endpoint_url is not None:
                 raise ValueError("S3_ENDPOINT_URL must be unset in production (use AWS S3)")
+            if any(not o.startswith("https://") for o in self.events_origins):
+                raise ValueError("EVENTS_ALLOWED_ORIGINS must list https origins in production")
         return self
 
 

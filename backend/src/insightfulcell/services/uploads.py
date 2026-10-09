@@ -12,8 +12,6 @@ therefore return an ``_Outcome`` from inside the transaction and raise after it 
 
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 import math
 import re
@@ -24,19 +22,16 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import func, select, text, update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from insightfulcell.config import Settings
-from insightfulcell.db.models import Dataset, DatasetVersion, IdempotencyKey, Upload
+from insightfulcell.db.models import Dataset, DatasetVersion, Upload
 from insightfulcell.db.tenant import TenantDatabase
 from insightfulcell.domain.errors import (
     ContentMismatch,
     DatasetNotFound,
     DomainError,
     FileTooLarge,
-    IdempotencyInProgress,
-    IdempotencyKeyReused,
     InvalidParts,
     UploadExpired,
     UploadNotFound,
@@ -53,6 +48,7 @@ from insightfulcell.ingestion.formats import (
     sanitize_filename,
     sniff,
 )
+from insightfulcell.services import idempotency
 from insightfulcell.services.dto import (
     CompletedUpload,
     DatasetInfo,
@@ -123,14 +119,20 @@ class UploadService:
             )
         part_size = self._settings.upload_part_bytes
         part_count = max(1, math.ceil(size_bytes / part_size))
-        request_hash = _request_hash(name, size_bytes, dataset_id)
+        digest = idempotency.request_hash(
+            {
+                "filename": name,
+                "size_bytes": size_bytes,
+                "dataset_id": str(dataset_id) if dataset_id else None,
+            }
+        )
 
         async with self._db.transaction(principal) as session:
-            replay = await self._claim_idempotency(
-                session, principal, idempotency_key, request_hash
+            replay = await idempotency.claim(
+                session, principal, key=idempotency_key, path=_IDEMPOTENCY_PATH, digest=digest
             )
             if replay is not None:
-                upload = await self._load_upload(session, principal, replay)
+                upload = await self._load_upload(session, principal, UUID(str(replay["upload_id"])))
                 return self._ticket(upload)
 
             if dataset_id is not None:
@@ -155,19 +157,14 @@ class UploadService:
                 )
                 session.add(upload)
                 await session.flush()
-                await session.execute(
-                    update(IdempotencyKey)
-                    .where(
-                        IdempotencyKey.org_id == principal.org_id,
-                        IdempotencyKey.key == idempotency_key,
-                    )
-                    .values(
-                        status="completed",
-                        response_code=201,
-                        # Only the id: presigned URLs are bearer credentials and are regenerated
-                        # on replay instead of being stored.
-                        response_body={"upload_id": str(upload_id)},
-                    )
+                # Only the id: presigned URLs are bearer credentials and are regenerated on
+                # replay instead of being stored.
+                await idempotency.complete(
+                    session,
+                    principal,
+                    key=idempotency_key,
+                    status_code=201,
+                    body={"upload_id": str(upload_id)},
                 )
                 await session.refresh(upload)
             except BaseException:
@@ -455,48 +452,6 @@ class UploadService:
     ) -> DatasetInfo:
         return await load_dataset_info(session, principal, dataset_id)
 
-    @staticmethod
-    async def _claim_idempotency(
-        session: AsyncSession, principal: Principal, key: str, request_hash: bytes
-    ) -> UUID | None:
-        """Claim ``key`` for this request. Returns the original upload id on a replay, ``None``
-        when this request owns the key and must do the work."""
-        inserted = (
-            await session.execute(
-                pg_insert(IdempotencyKey)
-                .values(
-                    org_id=principal.org_id,
-                    key=key,
-                    method="POST",
-                    path=_IDEMPOTENCY_PATH,
-                    request_hash=request_hash,
-                    status="in_progress",
-                )
-                .on_conflict_do_nothing(index_elements=["org_id", "key"])
-                .returning(IdempotencyKey.key)
-            )
-        ).scalar_one_or_none()
-        if inserted is not None:
-            return None
-        row = (
-            await session.execute(
-                select(IdempotencyKey).where(
-                    IdempotencyKey.org_id == principal.org_id, IdempotencyKey.key == key
-                )
-            )
-        ).scalar_one()
-        if row.request_hash != request_hash or row.path != _IDEMPOTENCY_PATH:
-            raise IdempotencyKeyReused(
-                "This Idempotency-Key was already used for a different request.",
-                hint="Use a new key for a new upload.",
-            )
-        if row.status != "completed" or not row.response_body:
-            raise IdempotencyInProgress(
-                "A request with this Idempotency-Key is still being processed.",
-                hint="Retry in a few seconds.",
-            )
-        return UUID(str(row.response_body["upload_id"]))
-
     async def _best_effort_abort(self, key: str, s3_upload_id: str) -> None:
         try:
             await self._store.abort_multipart(key, s3_upload_id)
@@ -529,16 +484,3 @@ def _validate_parts(parts: Sequence[CompletedPart], part_count: int) -> None:
         )
     if any(not p.etag.strip('"') for p in parts):
         raise InvalidParts("Every part needs the ETag returned when it was uploaded.")
-
-
-def _request_hash(filename: str, size_bytes: int, dataset_id: UUID | None) -> bytes:
-    canonical = json.dumps(
-        {
-            "filename": filename,
-            "size_bytes": size_bytes,
-            "dataset_id": str(dataset_id) if dataset_id else None,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return hashlib.sha256(canonical.encode()).digest()

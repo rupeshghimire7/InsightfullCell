@@ -20,6 +20,7 @@ class ErrorKind(StrEnum):
     FORBIDDEN = "forbidden"
     NOT_FOUND = "not_found"
     CONFLICT = "conflict"
+    PRECONDITION_FAILED = "precondition_failed"
     UNPROCESSABLE = "unprocessable"
     UPSTREAM = "upstream"
 
@@ -149,6 +150,43 @@ class StorageUnavailable(DomainError):
     kind = ErrorKind.UPSTREAM
     code = "storage-unavailable"
     title = "Object storage is unavailable"
+
+
+# --------------------------------------------------------------------------- runs
+
+
+class RunNotFound(DomainError):
+    kind = ErrorKind.NOT_FOUND
+    code = "run-not-found"
+    title = "Run not found"
+
+
+class DatasetVersionNotFound(DomainError):
+    kind = ErrorKind.NOT_FOUND
+    code = "dataset-version-not-found"
+    title = "Dataset version not found"
+
+
+class DatasetVersionPurged(DomainError):
+    kind = ErrorKind.CONFLICT
+    code = "dataset-version-purged"
+    title = "The original file is no longer stored"
+
+
+class RunNotInState(DomainError):
+    """A transition was asked of a run whose status does not allow it."""
+
+    kind = ErrorKind.CONFLICT
+    code = "run-state-conflict"
+    title = "The run is not in a state that allows this"
+
+
+class RunChanged(DomainError):
+    """``If-Match`` named a version of the run that is no longer current."""
+
+    kind = ErrorKind.PRECONDITION_FAILED
+    code = "run-changed"
+    title = "The run changed since you last loaded it"
 
 
 # --------------------------------------------------------------------------- ingestion

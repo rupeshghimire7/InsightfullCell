@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from insightfulcell.domain.runs import EventType, Phase, Queue, RunStatus, StageStatus
 from insightfulcell.domain.security import Role
 
 Sha256Hex = Annotated[str, Field(pattern=r"^[0-9a-fA-F]{64}$", examples=["9f2c" + "0" * 60])]
@@ -88,12 +89,23 @@ class VersionOut(_Out):
     created_at: datetime
 
 
+class LatestRunOut(_Out):
+    """The most recent analysis of a dataset, for lists."""
+
+    id: UUID
+    status: RunStatus
+    stage: str | None
+    created_at: datetime
+    finished_at: datetime | None
+
+
 class DatasetOut(_Out):
     id: UUID
     name: str
     created_at: datetime
     version_count: int
     latest_version: VersionOut | None
+    latest_run: LatestRunOut | None = None
 
 
 class CompleteUploadResponse(_Out):
@@ -112,3 +124,75 @@ class DatasetPageOut(_Out):
 class DatasetDetailOut(_Out):
     dataset: DatasetOut
     versions: list[VersionOut]
+
+
+# --------------------------------------------------------------------------- runs
+
+
+class CreateRunRequest(_In):
+    dataset_id: UUID
+    dataset_version_id: UUID | None = Field(
+        default=None, description="The version to analyse. Defaults to the newest version."
+    )
+
+
+class RunFailureOut(_Out):
+    """Why a run failed, in words safe to show (never cell values)."""
+
+    code: str = Field(description="Stable machine-readable code.")
+    detail: str | None = None
+    hint: str | None = None
+
+
+class StageOut(_Out):
+    name: str
+    phase: Phase
+    position: int
+    status: StageStatus
+    reused: bool = Field(description="True when a checkpoint matched and the stage did not rerun.")
+    attempts: int
+    started_at: datetime | None
+    finished_at: datetime | None
+    output: dict[str, Any] = Field(
+        description="The stage's summary: counts, column names and types; never cell values."
+    )
+
+
+class RunSummaryOut(_Out):
+    id: UUID
+    dataset_id: UUID
+    dataset_version_id: UUID
+    dataset_name: str
+    status: RunStatus
+    phase: Phase
+    stage: str | None = Field(description="What the run is doing now (or where it stopped).")
+    queue: Queue
+    attempts: int
+    row_version: int = Field(description="Send as If-Match to change the run (ETag).")
+    last_event_seq: int = Field(description="Sequence number of the newest event.")
+    failure: RunFailureOut | None
+    created_at: datetime
+    updated_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    review_requested_at: datetime | None
+
+
+class RunOut(RunSummaryOut):
+    stages: list[StageOut]
+    events_url: str = Field(description="Server-Sent Events stream of this run's progress.")
+
+
+class RunPageOut(_Out):
+    items: list[RunSummaryOut]
+    next_cursor: str | None = None
+
+
+class RunEventOut(_Out):
+    """One event as sent on the stream (``data:`` line, JSON)."""
+
+    seq: int
+    type: EventType
+    stage: str | None
+    data: dict[str, Any]
+    at: datetime

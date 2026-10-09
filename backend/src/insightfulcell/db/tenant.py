@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from uuid import UUID
 
 import psycopg
 from sqlalchemy.exc import DBAPIError
@@ -32,11 +33,44 @@ class TenantDatabase:
                 await self._provisioner.ensure(session, principal)
                 yield session
         except DBAPIError as exc:
-            if not is_connection_failure(exc):
-                raise
-            raise DatabaseUnavailable(
-                "The database could not be reached.", hint="Try again in a moment."
-            ) from exc
+            _raise_if_unavailable(exc)
+            raise
+
+    @asynccontextmanager
+    async def system_transaction(self, org_id: UUID) -> AsyncIterator[AsyncSession]:
+        """A transaction scoped to one organisation for work no person is doing right now (the
+        worker running a run, maintenance tasks). The organisation always comes from a row that
+        was itself written under row-level security (a run, an upload), never from job input
+        alone: callers re-read that row inside this transaction, so a forged job argument finds
+        nothing. No identity mirrors are provisioned: the user who started the work has them."""
+        try:
+            async with tenant_transaction(self.engine, org_id) as session:
+                yield session
+        except DBAPIError as exc:
+            _raise_if_unavailable(exc)
+            raise
+
+    @asynccontextmanager
+    async def unscoped_transaction(self) -> AsyncIterator[AsyncSession]:
+        """A transaction with *no* tenant set. Row-level security then hides every tenant row,
+        so this is useful only for the narrow ``SECURITY DEFINER`` maintenance functions (which
+        return ids) and for the queue's own tables, which hold no tenant data."""
+        try:
+            async with (
+                AsyncSession(self.engine, expire_on_commit=False) as session,
+                session.begin(),
+            ):
+                yield session
+        except DBAPIError as exc:
+            _raise_if_unavailable(exc)
+            raise
+
+
+def _raise_if_unavailable(exc: DBAPIError) -> None:
+    if is_connection_failure(exc):
+        raise DatabaseUnavailable(
+            "The database could not be reached.", hint="Try again in a moment."
+        ) from exc
 
 
 def is_connection_failure(exc: DBAPIError) -> bool:

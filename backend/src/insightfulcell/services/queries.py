@@ -8,10 +8,10 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from insightfulcell.db.models import Dataset, DatasetVersion
+from insightfulcell.db.models import Dataset, DatasetVersion, Run
 from insightfulcell.domain.errors import DatasetNotFound
 from insightfulcell.domain.security import Principal
-from insightfulcell.services.dto import DatasetInfo, VersionInfo
+from insightfulcell.services.dto import DatasetInfo, LatestRun, VersionInfo
 
 
 def to_version_info(row: DatasetVersion) -> VersionInfo:
@@ -43,7 +43,8 @@ async def load_dataset_info(
 async def load_dataset_infos(
     session: AsyncSession, principal: Principal, datasets: list[Dataset]
 ) -> list[DatasetInfo]:
-    """Attach version count and latest version to a page of datasets in two queries."""
+    """Attach version count, latest version and latest run to a page of datasets in three
+    queries (never one per dataset)."""
     if not datasets:
         return []
     ids = [d.id for d in datasets]
@@ -70,6 +71,17 @@ async def load_dataset_infos(
             )
         ).scalars()
     }
+    runs = {
+        row.dataset_id: row
+        for row in (
+            await session.execute(
+                select(Run)
+                .where(Run.org_id == principal.org_id, Run.dataset_id.in_(ids))
+                .ext(distinct_on(Run.dataset_id))
+                .order_by(Run.dataset_id, Run.created_at.desc(), Run.id.desc())
+            )
+        ).scalars()
+    }
     return [
         DatasetInfo(
             id=d.id,
@@ -77,6 +89,17 @@ async def load_dataset_infos(
             created_at=d.created_at,
             version_count=counts.get(d.id, 0),
             latest_version=to_version_info(latest[d.id]) if d.id in latest else None,
+            latest_run=_latest_run(runs[d.id]) if d.id in runs else None,
         )
         for d in datasets
     ]
+
+
+def _latest_run(run: Run) -> LatestRun:
+    return LatestRun(
+        id=run.id,
+        status=run.status,
+        stage=run.stage,
+        created_at=run.created_at,
+        finished_at=run.finished_at,
+    )

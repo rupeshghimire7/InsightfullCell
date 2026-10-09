@@ -12,6 +12,9 @@ EXPECTED: dict[Action, set[Role]] = {
     Action.UPLOAD_CREATE: {Role.OWNER, Role.ADMIN, Role.ANALYST},
     Action.UPLOAD_READ: {Role.OWNER, Role.ADMIN, Role.ANALYST},
     Action.DATASET_READ: {Role.OWNER, Role.ADMIN, Role.ANALYST, Role.VIEWER},
+    Action.RUN_CREATE: {Role.OWNER, Role.ADMIN, Role.ANALYST},
+    Action.RUN_READ: {Role.OWNER, Role.ADMIN, Role.ANALYST, Role.VIEWER},
+    Action.RUN_CANCEL: {Role.OWNER, Role.ADMIN, Role.ANALYST},
 }
 
 

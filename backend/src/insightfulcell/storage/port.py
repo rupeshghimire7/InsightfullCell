@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 
@@ -30,6 +31,10 @@ class ObjectInfo:
 
 class MultipartNotFoundError(Exception):
     """The multipart upload no longer exists (already completed, aborted or expired)."""
+
+
+class ObjectNotFoundError(Exception):
+    """The object does not exist (for example, it was purged by the retention policy)."""
 
 
 class InvalidPartsError(Exception):
@@ -61,3 +66,10 @@ class ObjectStore(Protocol):
 
     async def delete(self, key: str) -> None:
         """Delete an object; deleting a missing object is not an error."""
+
+    async def download_file(self, key: str, dest: Path) -> None:
+        """Stream an object to a local file (the worker reads uploads this way). Raises
+        ``ObjectNotFoundError`` when there is no such object."""
+
+    async def upload_file(self, source: Path, key: str) -> None:
+        """Store a local file under ``key`` (multipart for large files)."""

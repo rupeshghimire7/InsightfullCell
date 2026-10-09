@@ -25,6 +25,9 @@ class Action(StrEnum):
     UPLOAD_CREATE = "upload:create"
     UPLOAD_READ = "upload:read"
     DATASET_READ = "dataset:read"
+    RUN_CREATE = "run:create"
+    RUN_READ = "run:read"
+    RUN_CANCEL = "run:cancel"
 
 
 _ALL: Final = frozenset(Role)
@@ -34,6 +37,10 @@ POLICY: Final[dict[Action, frozenset[Role]]] = {
     Action.UPLOAD_CREATE: _WRITERS,
     Action.UPLOAD_READ: _WRITERS,
     Action.DATASET_READ: _ALL,
+    # Starting, retrying and cancelling analyses is analyst work; viewers read results only.
+    Action.RUN_CREATE: _WRITERS,
+    Action.RUN_READ: _ALL,
+    Action.RUN_CANCEL: _WRITERS,
 }
 
 

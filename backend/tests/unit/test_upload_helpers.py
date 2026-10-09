@@ -6,7 +6,8 @@ import pytest
 
 from insightfulcell.db.models import Upload
 from insightfulcell.domain.errors import InvalidParts
-from insightfulcell.services.uploads import _part_length, _request_hash, _validate_parts
+from insightfulcell.services.idempotency import request_hash
+from insightfulcell.services.uploads import _part_length, _validate_parts
 from insightfulcell.storage.port import CompletedPart
 
 MIB = 1024 * 1024
@@ -54,8 +55,13 @@ class TestValidateParts:
 
 
 def test_request_hash_is_stable_and_sensitive_to_every_field() -> None:
-    base = _request_hash("a.csv", 10, None)
-    assert base == _request_hash("a.csv", 10, None)
-    assert base != _request_hash("b.csv", 10, None)
-    assert base != _request_hash("a.csv", 11, None)
-    assert base != _request_hash("a.csv", 10, uuid4())
+    def digest(name: str, size: int, dataset: object) -> bytes:
+        return request_hash({"filename": name, "size_bytes": size, "dataset_id": dataset})
+
+    base = digest("a.csv", 10, None)
+    assert base == digest("a.csv", 10, None)
+    assert base != digest("b.csv", 10, None)
+    assert base != digest("a.csv", 11, None)
+    assert base != digest("a.csv", 10, uuid4())
+    # key order never changes the digest
+    assert request_hash({"a": 1, "b": 2}) == request_hash({"b": 2, "a": 1})

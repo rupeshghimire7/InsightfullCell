@@ -16,6 +16,7 @@ dependencies = [
   "PyJWT[crypto]>=2.9",
   "duckdb>=1.1",
   "openpyxl>=3.1",
+  "procrastinate==3.10.0",
 ]
 
 [dependency-groups]
@@ -78,7 +79,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S105", "S106", "ANN", "PLR0913", "S608"]
+"tests/**" = ["S101", "S105", "S106", "ANN", "PLR0913", "PLR0917", "S608"]
 "migrations/**" = ["S608", "E501"]
 "src/insightfulcell/ingestion/__main__.py" = ["T201"]
 
@@ -135,24 +136,53 @@ include_external_packages = true
 [[tool.importlinter.contracts]]
 name = "Pure layers do not depend on frameworks or infrastructure"
 type = "forbidden"
-source_modules = ["insightfulcell.domain", "insightfulcell.ingestion"]
+source_modules = ["insightfulcell.domain", "insightfulcell.ingestion", "insightfulcell.pipeline"]
 forbidden_modules = [
   "insightfulcell.api",
+  "insightfulcell.worker",
   "insightfulcell.db",
   "insightfulcell.storage",
+  "insightfulcell.queue",
   "insightfulcell.services",
   "insightfulcell.auth",
   "fastapi",
   "sqlalchemy",
   "boto3",
+  "psycopg",
+  "procrastinate",
 ]
 
 [[tool.importlinter.contracts]]
-name = "Layering: api -> services -> (db, storage, auth) -> domain"
-type = "layers"
-layers = [
+name = "Only the queue adapter and the worker import Procrastinate (ADR-030)"
+type = "forbidden"
+source_modules = [
   "insightfulcell.api",
   "insightfulcell.services",
-  "insightfulcell.db | insightfulcell.storage | insightfulcell.auth",
+  "insightfulcell.db",
+  "insightfulcell.storage",
+  "insightfulcell.auth",
+]
+forbidden_modules = ["procrastinate"]
+# The API's composition root may build the adapter; it must not use Procrastinate itself.
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Services depend on ports, never on adapters"
+type = "forbidden"
+source_modules = ["insightfulcell.services"]
+forbidden_modules = ["insightfulcell.queue.procrastinate_queue", "insightfulcell.storage.s3"]
+
+[[tool.importlinter.contracts]]
+name = "The API and the worker are separate entry points"
+type = "independence"
+modules = ["insightfulcell.api", "insightfulcell.worker"]
+
+[[tool.importlinter.contracts]]
+name = "Layering: (api | worker) -> services -> (db, storage, auth, queue) -> domain"
+type = "layers"
+layers = [
+  "insightfulcell.api | insightfulcell.worker",
+  "insightfulcell.services",
+  "insightfulcell.db | insightfulcell.storage | insightfulcell.auth | insightfulcell.queue",
   "insightfulcell.domain",
 ]

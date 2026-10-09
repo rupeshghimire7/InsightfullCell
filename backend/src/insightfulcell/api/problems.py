@@ -25,6 +25,7 @@ _STATUS: Final[dict[ErrorKind, int]] = {
     ErrorKind.FORBIDDEN: 403,
     ErrorKind.NOT_FOUND: 404,
     ErrorKind.CONFLICT: 409,
+    ErrorKind.PRECONDITION_FAILED: 412,
     ErrorKind.UPSTREAM: 503,
 }
 
@@ -58,6 +59,14 @@ def problem_response() -> dict[str, Any]:
 
 PROBLEM_RESPONSES: Final[dict[int | str, dict[str, Any]]] = {
     code: problem_response() for code in (401, 403, 404, 409, 422, 503)
+}
+
+#: For routes whose success response is not JSON (the event stream): a ``model`` would also be
+#: advertised under the route's media type, but errors are always ``application/problem+json``.
+#: The ``Problem`` schema itself is registered by the routes using ``PROBLEM_RESPONSES``.
+PROBLEM_ONLY_RESPONSES: Final[dict[int | str, dict[str, Any]]] = {
+    code: {"description": "Problem details", "content": {PROBLEM_CONTENT_TYPE: _PROBLEM_SCHEMA}}
+    for code in (401, 404, 422, 503)
 }
 
 

@@ -46,12 +46,20 @@ BUCKET = "ic-test"
 PART_BYTES = 5 * MIB
 
 TENANT_TABLES = (
+    "app.run_events",
+    "app.run_stages",
+    "app.runs",
     "app.idempotency_keys",
     "app.dataset_versions",
     "app.uploads",
     "app.datasets",
     "app.users",
     "app.organizations",
+    # The job queue holds no tenant data, but jobs left by one test must not run in the next.
+    "procrastinate.procrastinate_events",
+    "procrastinate.procrastinate_periodic_defers",
+    "procrastinate.procrastinate_jobs",
+    "procrastinate.procrastinate_workers",
 )
 
 
@@ -196,8 +204,19 @@ async def engine(settings: Settings) -> AsyncIterator[AsyncEngine]:
 
 
 @pytest.fixture
-def services(settings: Settings, engine: AsyncEngine, verifier: TokenVerifier) -> Services:
-    return build_services(settings, engine=engine, store=S3ObjectStore(settings), verifier=verifier)
+def services(
+    settings: Settings,
+    engine: AsyncEngine,
+    verifier: TokenVerifier,
+    ticket_verifier: TokenVerifier,
+) -> Services:
+    return build_services(
+        settings,
+        engine=engine,
+        store=S3ObjectStore(settings),
+        verifier=verifier,
+        ticket_verifier=ticket_verifier,
+    )
 
 
 @pytest.fixture
@@ -213,6 +232,27 @@ async def client(settings: Settings, services: Services) -> AsyncIterator[httpx.
 
 
 # --------------------------------------------------------------------------- helpers
+
+
+OwnerSql = Callable[..., list[tuple[object, ...]]]
+
+
+@pytest.fixture
+def owner_sql(database_urls: tuple[URL, URL]) -> Iterator[OwnerSql]:
+    """Run SQL as the table owner (bypasses RLS): for arranging state tests cannot reach
+    through the API, such as backdating a row. Returns fetched rows (empty when none)."""
+    owner_url, _ = database_urls
+    engine = create_sync_engine(owner_url, isolation_level="AUTOCOMMIT")
+
+    def _run(sql: str, **params: object) -> list[tuple[object, ...]]:
+        with engine.connect() as conn:
+            result = conn.execute(text(sql), params)
+            return [tuple(row) for row in result] if result.returns_rows else []
+
+    try:
+        yield _run
+    finally:
+        engine.dispose()
 
 
 AuthHeaders = Callable[..., dict[str, str]]

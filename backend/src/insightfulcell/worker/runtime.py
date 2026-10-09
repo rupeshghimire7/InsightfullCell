@@ -1,0 +1,105 @@
+"""Builds the worker's object graph and runs it."""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Sequence
+from dataclasses import dataclass
+from types import TracebackType
+
+import procrastinate
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from insightfulcell.config import Settings
+from insightfulcell.db.engine import create_engine
+from insightfulcell.db.tenant import TenantDatabase
+from insightfulcell.domain.runs import Queue
+from insightfulcell.pipeline.definition import Pipeline, default_pipeline
+from insightfulcell.queue.procrastinate_queue import ProcrastinateQueue, create_procrastinate_app
+from insightfulcell.services.maintenance import Maintenance
+from insightfulcell.services.run_executor import RunExecutor
+from insightfulcell.storage.port import ObjectStore
+from insightfulcell.storage.s3 import S3ObjectStore
+from insightfulcell.worker.tasks import register_tasks
+
+logger = logging.getLogger(__name__)
+
+ALL_QUEUES: tuple[str, ...] = tuple(queue.value for queue in Queue)
+HEARTBEAT_SECONDS = 10.0
+
+
+@dataclass(slots=True)
+class WorkerRuntime:
+    settings: Settings
+    engine: AsyncEngine
+    app: procrastinate.App
+    queue: ProcrastinateQueue
+    executor: RunExecutor
+    maintenance: Maintenance
+    owns_engine: bool = True
+
+    async def __aenter__(self) -> WorkerRuntime:
+        await self.queue.open()
+        # Make sure this month's (and the next months') event partitions exist before any run
+        # writes events, even if the daily task has not run yet.
+        created = await self.maintenance.ensure_event_partitions()
+        if created:
+            logger.info("created run event partitions", extra={"count": created})
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        await self.queue.close()
+        if self.owns_engine:
+            await self.engine.dispose()
+
+    async def run(
+        self,
+        *,
+        queues: Sequence[str] = ALL_QUEUES,
+        concurrency: int | None = None,
+        name: str | None = None,
+        wait: bool = True,
+        install_signal_handlers: bool = True,
+    ) -> None:
+        await self.app.run_worker_async(
+            queues=list(queues),
+            concurrency=concurrency or self.settings.worker_concurrency,
+            name=name or "insightfulcell-worker",
+            wait=wait,
+            install_signal_handlers=install_signal_handlers,
+            update_heartbeat_interval=HEARTBEAT_SECONDS,
+            stalled_worker_timeout=float(self.settings.run_stalled_after_seconds),
+            delete_jobs="successful",
+        )
+
+
+def build_worker(
+    settings: Settings,
+    *,
+    engine: AsyncEngine | None = None,
+    store: ObjectStore | None = None,
+    pipeline: Pipeline | None = None,
+) -> WorkerRuntime:
+    owns_engine = engine is None
+    engine = engine or create_engine(settings)
+    db = TenantDatabase(engine)
+    store = store or S3ObjectStore(settings)
+    app = create_procrastinate_app(settings, max_pool_size=settings.worker_concurrency + 4)
+    queue = ProcrastinateQueue(app)
+    executor = RunExecutor(db, store, queue, pipeline or default_pipeline(), settings)
+    maintenance = Maintenance(db, store, queue, executor, settings)
+    register_tasks(app, executor, maintenance)
+    return WorkerRuntime(
+        settings=settings,
+        engine=engine,
+        app=app,
+        queue=queue,
+        executor=executor,
+        maintenance=maintenance,
+        owns_engine=owns_engine,
+    )

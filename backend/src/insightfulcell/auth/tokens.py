@@ -9,6 +9,8 @@ token. Token contents are never logged.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, Protocol
 from uuid import UUID
 
@@ -21,6 +23,17 @@ from insightfulcell.domain.security import Principal, Role
 ALGORITHMS = ["EdDSA"]  # pinned: never accept "none" or an HMAC key confusion
 REQUIRED_CLAIMS = ["exp", "iat", "sub", "iss", "aud"]
 _ORG_NAME_MAX = 200
+#: An event ticket names exactly one run and lives at most this long, whatever it claims.
+MAX_TICKET_SECONDS = 300 + 30
+
+
+@dataclass(frozen=True, slots=True)
+class EventTicket:
+    """A run-scoped ticket for one event stream (audience ``events``)."""
+
+    principal: Principal
+    run_id: UUID
+    expires_at: datetime
 
 
 class SigningKeyResolver(Protocol):
@@ -71,23 +84,45 @@ class TokenVerifier:
         return await asyncio.to_thread(self.verify_sync, token)
 
     def verify_sync(self, token: str) -> Principal:
+        return _principal_from_claims(self._decode(token, REQUIRED_CLAIMS))
+
+    async def verify_ticket(self, token: str) -> EventTicket:
+        return await asyncio.to_thread(self.verify_ticket_sync, token)
+
+    def verify_ticket_sync(self, token: str) -> EventTicket:
+        """Verify a run-scoped event ticket. Use a verifier built with the *events* audience:
+        an API token then fails the audience check, and a ticket fails it on the API."""
+        claims = self._decode(token, [*REQUIRED_CLAIMS, "run_id"])
+        if int(claims["exp"]) - int(claims["iat"]) > MAX_TICKET_SECONDS:
+            raise Unauthenticated("The event ticket is invalid.")
+        try:
+            run_id = UUID(str(claims["run_id"]))
+        except ValueError as exc:
+            raise Unauthenticated("The event ticket is invalid.") from exc
+        return EventTicket(
+            principal=_principal_from_claims(claims),
+            run_id=run_id,
+            expires_at=datetime.fromtimestamp(int(claims["exp"]), UTC),
+        )
+
+    def _decode(self, token: str, required: list[str]) -> dict[str, Any]:
         try:
             key = self._resolver.get_signing_key(token)
-            claims = jwt.decode(
+            claims: dict[str, Any] = jwt.decode(
                 token,
                 key,
                 algorithms=ALGORITHMS,
                 audience=self._audience,
                 issuer=self._issuer,
                 leeway=self._leeway,
-                options={"require": REQUIRED_CLAIMS},
+                options={"require": required},
             )
         except jwt.ExpiredSignatureError as exc:
             raise Unauthenticated("Your session has expired.", hint="Sign in again.") from exc
         except jwt.PyJWTError as exc:
             # Deliberately generic: do not tell a caller *which* check failed.
             raise Unauthenticated("The access token is invalid.") from exc
-        return _principal_from_claims(claims)
+        return claims
 
 
 def _principal_from_claims(claims: dict[str, Any]) -> Principal:
