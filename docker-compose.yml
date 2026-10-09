@@ -1,0 +1,42 @@
+# Local development services. `make up` starts them; `make down` stops them (data is kept).
+# Development only: the credentials below are public knowledge. See SETUP_MANUAL.md for real ones.
+name: insightfulcell
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: ic_owner
+      POSTGRES_PASSWORD: ic_owner
+      POSTGRES_DB: insightfulcell
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # PostgreSQL 18 images keep data under /var/lib/postgresql/18/docker.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ic_owner -d insightfulcell"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  s3:
+    # S3-compatible object storage (ADR-027); the minio/minio image is no longer published.
+    # Browser CORS is a bucket rule, set by scripts/s3_setup.py during `make up`.
+    image: ${S3_IMAGE:-rustfs/rustfs:1.0.0}
+    environment:
+      RUSTFS_ACCESS_KEY: dev
+      RUSTFS_SECRET_KEY: devdevdev
+    ports:
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - s3data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:
+  s3data:
