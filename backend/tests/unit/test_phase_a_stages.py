@@ -1,14 +1,21 @@
-"""The four Phase A stages run in process: memory storage, a recording repository, a fake model."""
+"""The stages run in process: memory storage, a recording repository, a fake model.
+
+Phase A plans (the engine first, then the model) and stops for review; Phase B applies the
+cleaning, answers the questions and writes the report.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import hashlib
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
+from insightfulcell.domain.runs import Phase
+from insightfulcell.engine.analysis.narrate import NarrationProposal
 from insightfulcell.engine.planning.language import ProposedPlan
 from insightfulcell.engine.ports import (
     CachedPlan,
@@ -18,6 +25,9 @@ from insightfulcell.engine.ports import (
     ModelRequest,
     ModelUnavailable,
     PlanRecord,
+    Purpose,
+    ReportRecord,
+    TestRecord,
 )
 from insightfulcell.engine.schema_card import card_json
 from insightfulcell.ingestion.formats import FileFormat
@@ -71,6 +81,36 @@ class Recorder:
 
     async def save_cleaning_plan(self, record: CleaningRecord) -> None:
         self.cleaning.append(record)
+
+    # Phase B: the review is simulated by approving whatever is pending.
+    facts: list[Mapping[str, Any]] = field(default_factory=list)
+    tests: list[TestRecord] = field(default_factory=list)
+    rechecks: list[TestRecord] = field(default_factory=list)
+    reports: list[ReportRecord] = field(default_factory=list)
+
+    async def latest_resolved_plan(self) -> Mapping[str, Any] | None:
+        resolved = [p for p in self.plans if p.kind == "resolved"]
+        return resolved[-1].plan if resolved else None
+
+    async def approved_cleaning(self) -> list[Mapping[str, Any]] | None:
+        if not self.cleaning:
+            return None
+        return [
+            {**op, "decision": "accepted" if op["decision"] == "pending" else op["decision"]}
+            for op in self.cleaning[-1].operations
+        ]
+
+    async def save_findings(
+        self, facts: Sequence[Mapping[str, Any]], tests: Sequence[TestRecord]
+    ) -> None:
+        self.facts.extend(facts)
+        self.tests.extend(tests)
+
+    async def save_rechecks(self, tests: Sequence[TestRecord]) -> None:
+        self.rechecks.extend(tests)
+
+    async def save_report(self, record: ReportRecord) -> None:
+        self.reports.append(record)
 
 
 MODEL_PLAN = {
@@ -148,6 +188,9 @@ MODEL_PLAN = {
 class FakeModel:
     fail: bool = False
     requests: list[ModelRequest] = field(default_factory=list)
+    plan: Mapping[str, Any] = field(default_factory=lambda: MODEL_PLAN)
+    #: What the narrator answers; ``None``: narration is unavailable (the engine writes).
+    narration: Mapping[str, Any] | None = None
 
     @property
     def identity(self) -> tuple[str, str] | None:
@@ -157,14 +200,26 @@ class FakeModel:
         self.requests.append(request)
         if self.fail:
             raise ModelUnavailable("timeout")
+        if request.purpose is Purpose.NARRATE:
+            if self.narration is None:
+                raise ModelUnavailable("provider_error")
+            data: Any = NarrationProposal.model_validate(self.narration)
+        else:
+            data = ProposedPlan.model_validate(self.plan)
         return ModelReply(
-            data=ProposedPlan.model_validate(MODEL_PLAN), provider="gemini", model="gemini-3.8-flash",  # noqa: E501
+            data=data, provider="gemini", model="gemini-3.8-flash",
             input_tokens=5000, output_tokens=900, attempts=1,
         )  # fmt: skip
 
 
 async def run_phase_a(
-    tmp_path: Path, model: FakeModel, recorder: Recorder
+    tmp_path: Path,
+    model: FakeModel,
+    recorder: Recorder,
+    *,
+    annotations: Mapping[str, Any] | None = None,
+    cleaning_decisions: Mapping[str, bool] | None = None,
+    phases: tuple[Phase, ...] = (Phase.A,),
 ) -> dict[str, StageResult]:
     source = SourceFile(
         version_id=uuid4(),
@@ -174,11 +229,18 @@ async def run_phase_a(
         bytes=len(CSV),
     )
     store = MemoryStore({source.bronze_key: CSV})
-    inputs = RunInputs(dataset_name="subscribers", today="2026-10-10")
+    inputs = RunInputs(
+        dataset_name="subscribers",
+        today="2026-10-10",
+        annotations=dict(annotations or {}),
+        cleaning_decisions=dict(cleaning_decisions or {}),
+    )
     org, run = uuid4(), uuid4()
     results: dict[str, StageResult] = {}
     keys: list[str] = []
     for planned in default_pipeline(model_identity=model.identity).planned():
+        if planned.phase not in phases:
+            continue
         stage = planned.stage
         key = checkpoint_key(stage, source, keys, inputs)
         workdir = tmp_path / stage.name
@@ -197,6 +259,7 @@ async def test_the_model_plans_and_its_bad_items_are_dropped(tmp_path: Path) -> 
     results = await run_phase_a(tmp_path, model, recorder)
 
     (request,) = model.requests
+    assert "<engine_draft>" in request.user  # the engine planned first; the model refines
     assert "p1@example.com" in request.sensitive_values  # the guard knows the values ...
     assert "@" not in request.user  # ... and the card holds none of them
     assert "Person Number" not in request.user
@@ -235,7 +298,7 @@ async def test_the_model_plans_and_its_bad_items_are_dropped(tmp_path: Path) -> 
     assert names["monthly_fee"].display_name == "Monthly fee"
 
     clean = results["clean_plan"]
-    assert clean.needs_review  # the model's merge of N.S.W. -> NSW is lossy
+    assert clean.needs_review  # every plan is reviewed
     (cleaning,) = recorder.cleaning
     ops = {o["id"]: o for o in cleaning.operations}
     merge = ops["merge_categories:state"]
@@ -272,3 +335,123 @@ async def test_a_failing_model_falls_back_to_rules(tmp_path: Path) -> None:
     (resolved,) = recorder.plans
     assert resolved.source == "rules"
     assert results["clean_plan"].output["operations"] > 0
+
+
+async def test_without_a_model_the_engine_reads_the_persons_requests(tmp_path: Path) -> None:
+    model, recorder = FakeModel(fail=True), Recorder()
+    requests = [
+        "Are there unusual monthly fees?",
+        "Compare monthly fee across plans",
+        "skip the state questions",
+        "make it pretty",
+    ]
+    results = await run_phase_a(tmp_path, model, recorder, annotations={"requests": requests})
+    (resolved,) = recorder.plans
+    outcomes = {o["request"]: o for o in resolved.plan["requests"]}
+    added = outcomes["Are there unusual monthly fees?"]
+    assert (added["status"], added["source"]) == ("added", "rules")
+    assert outcomes["Compare monthly fee across plans"]["status"] == "already_planned"
+    assert outcomes["skip the state questions"]["status"] == "removed"
+    assert outcomes["make it pretty"]["status"] == "not_understood"
+    analyses = resolved.plan["analyses"]
+    assert analyses[0]["question"] == "Are there unusual values in Monthly fee?"
+    assert analyses[0]["source"] == "person"
+    assert not any("state" in a["columns"] for a in analyses)
+    assert results["understand"].output["requests_applied"] == 2
+    assert model.requests  # the model was asked (and failed): the engine took over
+
+
+async def test_the_model_reads_requests_and_the_engine_covers_what_it_skipped(
+    tmp_path: Path,
+) -> None:
+    plan = {
+        **MODEL_PLAN,
+        "analyses": [
+            *MODEL_PLAN["analyses"],
+            {
+                "kind": "distribution",
+                "columns": ["monthly_fee"],
+                "question": "How much do customers pay each month?",
+                "priority": 1,
+            },
+        ],
+        "request_outcomes": [
+            {"index": 1, "status": "added", "note": "Added a look at monthly fees."}
+        ],
+    }
+    model, recorder = FakeModel(plan=plan), Recorder()
+    removed = "segment:plan,churned"
+    await run_phase_a(
+        tmp_path,
+        model,
+        recorder,
+        annotations={
+            "requests": ["Show how monthly fees are spread", "skip the state questions"],
+            "removed_analyses": [removed],
+        },
+    )
+    (request,) = model.requests
+    assert "<requests>" in request.user
+    assert "1. Show how monthly fees are spread" in request.user
+    assert removed in request.user  # the model is told what the person removed
+    resolved = recorder.plans[-1]  # no proposal is cached for a person's requests
+    assert [p.kind for p in recorder.plans] == ["resolved"]
+    sources = [(o["status"], o["source"]) for o in resolved.plan["requests"]]
+    assert sources == [("added", "model"), ("not_understood", "rules")]  # no state question
+    ids = [a["id"] for a in resolved.plan["analyses"]]
+    assert removed not in ids
+    assert [a["id"] for a in resolved.plan["removed_analyses"]] == [removed]
+
+
+async def test_a_revision_keeps_the_cleaning_decisions_already_made(tmp_path: Path) -> None:
+    model, recorder = FakeModel(), Recorder()
+    await run_phase_a(
+        tmp_path, model, recorder, cleaning_decisions={"merge_categories:state": False}
+    )
+    ops = {o["id"]: o for o in recorder.cleaning[-1].operations}
+    merge = ops["merge_categories:state"]
+    assert (merge["decision"], merge["notice"]) == ("rejected", "Decided by a person.")
+
+
+async def test_phase_b_answers_every_question_with_cited_facts(tmp_path: Path) -> None:
+    model, recorder = FakeModel(fail=True), Recorder()
+    results = await run_phase_a(tmp_path, model, recorder, phases=(Phase.A, Phase.B))
+    assert results["clean_apply"].output["rows_after"] == 30
+    mined = results["mine"].output
+    assert mined["facts"] == len(recorder.facts) > 0
+    # Every test is logged once, in the run's false-discovery control, linked to its fact.
+    assert mined["tests"] == len(recorder.tests) > 0
+    assert len({t.hypothesis for t in recorder.tests}) == len(recorder.tests)
+    assert all(t.purpose == "primary" and t.q_value is not None for t in recorder.tests)
+    # A hypothesis asked twice (a comparison and a benchmark of the same columns) is one row,
+    # linked to the first fact that rests on it.
+    logged = {t.hypothesis for t in recorder.tests}
+    assert {f["test"]["hypothesis"] for f in recorder.facts if f["test"]} <= logged
+    assert {t.fact_id for t in recorder.tests if t.fact_id} <= {f["id"] for f in recorder.facts}
+    for fact in recorder.facts:
+        assert (fact["tier"] == "descriptive") == (fact["test"] is None)
+    # This fixture has no real effects: every test is inconclusive, honestly worded, and
+    # nothing qualifies for the sensitivity re-test (``test_engine_evidence`` covers that).
+    reliable = [f for f in recorder.facts if f["tier"] in {"strong", "supported"}]
+    assert mined["reliable"] == len(reliable) == 0
+    assert all("reliabl" in f["statement"] for f in recorder.facts if f["tier"] == "inconclusive")
+    assert results["clean_apply"].output["lossy_applied"] > 0
+    assert len(recorder.rechecks) == min(10, len(reliable))
+    # The State column (NSW, N.S.W., VIC) resolved to Australian states.
+    (place,) = results["geo"].output["places"]
+    assert (place["scope"], place["resolved"]) == ("state:AU", True)
+    assert results["rank"].output["facts"] == len(recorder.facts)
+    (report,) = recorder.reports
+    assert report.narration_source == "engine"  # the model is off: the engine writes
+    document = report.document
+    fact_ids = {f["id"] for f in recorder.facts}
+    answered = [s for s in document["sections"] if not s["skipped"]]
+    assert answered
+    for section in answered:
+        assert section["answer"], section["question"]
+        for sentence in section["answer"]:
+            assert sentence["citations"]
+            assert set(sentence["citations"]) <= set(section["facts"]) <= fact_ids
+    assert all(set(s["citations"]) <= fact_ids for s in document["summary"])
+    assert all(f["content_hash"] for f in recorder.facts)
+    assert "p1@example.com" not in str(document)  # personal data never reaches the report

@@ -8,8 +8,9 @@ rules those updates follow; it knows nothing about SQL.
     queued ──worker claims──▶ running ──Phase B done──▶ succeeded
       │                        │  │
       │                        │  └──retries exhausted──▶ failed ──you retry──▶ queued
-      │                        └──lossy change──▶ awaiting_review ──you approve──▶ queued
-      │                                              │      └──7 days──▶ expired
+      │                        └──plan ready──▶ awaiting_review ──you approve──▶ queued (B)
+      │                                              │  │   └──you ask for changes──▶ queued (A)
+      │                                              │  └──7 days──▶ expired
       └──────────────── you cancel (queued, running, awaiting_review) ──▶ cancelled
 """
 
@@ -83,6 +84,8 @@ class EventType(StrEnum):
     REVIEW_REQUIRED = "review.required"
     REVIEW_REMINDER = "review.reminder"
     REVIEW_APPROVED = "review.approved"
+    #: The person asked for changes: Phase A plans again and comes back for review.
+    REVIEW_REVISION_REQUESTED = "review.revision_requested"
     RUN_SUCCEEDED = "run.succeeded"
     RUN_FAILED = "run.failed"
     RUN_CANCELLED = "run.cancelled"

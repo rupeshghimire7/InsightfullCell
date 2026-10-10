@@ -33,6 +33,8 @@ from insightfulcell.api.schemas import (
     DecideCleaningRequest,
     PlanColumnOut,
     PlanOut,
+    ReportOut,
+    RevisePlanRequest,
     RunEventOut,
     RunOut,
     RunPageOut,
@@ -47,6 +49,7 @@ from insightfulcell.engine.planning.language import CleaningKind
 from insightfulcell.services.datasets import MAX_PAGE_SIZE
 from insightfulcell.services.dto import RunDetail, RunEventInfo
 from insightfulcell.services.plans import ColumnEdit, PlanDecision, PlanView
+from insightfulcell.services.reports import ReportView
 from insightfulcell.services.run_store import EVENT_BATCH
 
 logger = logging.getLogger(__name__)
@@ -230,6 +233,8 @@ def to_plan_out(view: PlanView) -> PlanOut:
             "model_input": view.model_input,
             "columns": [PlanColumnOut.model_validate(c) for c in view.columns],
             "cleaning": cleaning,
+            "requests": plan.get("requests", []),
+            "removed_analyses": plan.get("removed_analyses", []),
         }
     )
 
@@ -287,6 +292,75 @@ async def decide_cleaning_plan(  # noqa: PLR0913, PLR0917  (FastAPI dependencies
     )
     response.headers["ETag"] = etag(detail.run.row_version)
     return to_run_out(detail)
+
+
+@router.post(
+    "/{run_id}/plan:revise",
+    response_model=RunOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Plan again with your changes; the run comes back for review",
+    responses={409: problem_response(), 412: problem_response()},
+)
+async def revise_plan(  # noqa: PLR0913, PLR0917  (FastAPI dependencies)
+    run_id: UUID,
+    body: RevisePlanRequest,
+    principal: CurrentPrincipal,
+    services: ServicesDep,
+    response: Response,
+    if_match: IfMatch = None,
+) -> RunOut:
+    """Saves your cleaning decisions so far, column edits, removed questions and requests in
+    your own words, then plans again: the engine first, then the planning model if one is
+    configured. Finished steps whose inputs did not change are reused. The run returns to
+    review with an outcome for every request. ``412`` when the run or its cleaning plan
+    changed since you loaded them."""
+    detail = await services.plans.revise(
+        principal,
+        run_id,
+        PlanDecision(
+            cleaning_revision=body.cleaning_revision,
+            decisions={d.operation_id: d.accept for d in body.decisions},
+            columns=[
+                ColumnEdit(
+                    name=c.name, display_name=c.display_name, unit=c.unit, excluded=c.excluded
+                )
+                for c in body.columns
+            ],
+            target=body.target,
+            no_target=body.no_target,
+            disabled_features=body.disabled_features,
+            removed_analyses=body.removed_analyses,
+            requests=body.requests,
+        ),
+        if_match=parse_if_match(if_match),
+    )
+    response.headers["ETag"] = etag(detail.run.row_version)
+    return to_run_out(detail)
+
+
+def to_report_out(view: ReportView) -> ReportOut:
+    return ReportOut.model_validate(
+        {
+            **view.document,
+            "run": to_run_out(view.run),
+            "revision": view.revision,
+            "created_at": view.created_at,
+            "facts": view.facts,
+        }
+    )
+
+
+@router.get(
+    "/{run_id}/report",
+    response_model=ReportOut,
+    summary="The finished run's report: answers, charts and the facts they cite",
+    responses={409: problem_response()},
+)
+async def get_report(run_id: UUID, principal: CurrentPrincipal, services: ServicesDep) -> ReportOut:
+    """Available once the analysis has finished (409 ``report-not-ready`` before). Every
+    sentence lists the ids of the facts it rests on; ``facts`` holds each fact's statement,
+    columns, the rows it rests on and how it was computed."""
+    return to_report_out(await services.reports.get_report(principal, run_id))
 
 
 @router.get(

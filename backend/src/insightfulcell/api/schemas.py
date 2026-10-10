@@ -301,6 +301,15 @@ class ChartItemOut(_Out):
     source: Literal["rules", "model", "person"]
 
 
+class RequestOutcomeOut(_Out):
+    request: str = Field(description="The request in the person's own words.")
+    status: Literal["added", "removed", "already_planned", "not_understood"]
+    note: str = Field(description="What was done with it, in plain words.")
+    source: Literal["model", "rules"] = Field(
+        description="Who read the request: the planning model or the engine's own reading."
+    )
+
+
 class RejectionOut(_Out):
     section: str
     item: str
@@ -339,6 +348,12 @@ class PlanOut(_Out):
     )
     columns: list[PlanColumnOut]
     cleaning: CleaningPlanOut | None
+    requests: list[RequestOutcomeOut] = Field(
+        description="The person's requests and what the planner did with each."
+    )
+    removed_analyses: list[AnalysisItemOut] = Field(
+        description="Planned questions the person removed (they can be brought back)."
+    )
 
 
 class CleaningDecisionIn(_In):
@@ -362,3 +377,184 @@ class DecideCleaningRequest(_In):
     target: str | None = Field(default=None, max_length=1000)
     no_target: bool = Field(default=False, description="This dataset has no outcome to explain.")
     disabled_features: list[str] | None = Field(default=None, max_length=200)
+
+
+class RevisePlanRequest(_In):
+    """Ask for the plan to be made again with your changes; the run comes back for review."""
+
+    cleaning_revision: int = Field(ge=1, description="The cleaning plan revision you reviewed.")
+    decisions: list[CleaningDecisionIn] = Field(
+        default_factory=list,
+        max_length=5_000,
+        description="Cleaning decisions made so far (any subset); they are kept.",
+    )
+    columns: list[ColumnEditIn] = Field(default_factory=list, max_length=500)
+    target: str | None = Field(default=None, max_length=1000)
+    no_target: bool = False
+    disabled_features: list[str] | None = Field(default=None, max_length=200)
+    removed_analyses: list[str] = Field(
+        default_factory=list,
+        max_length=200,
+        description="Ids of planned questions you do not want. Leave one out to bring it back.",
+    )
+    requests: list[Annotated[str, Field(max_length=500)]] = Field(
+        default_factory=list,
+        max_length=5,
+        description="What else to analyse or drop, in your own words (up to five).",
+    )
+
+
+# --------------------------------------------------------------------------- report
+
+
+class SentenceOut(_Out):
+    text: str
+    citations: list[str] = Field(description="Ids of the facts the sentence rests on.")
+
+
+class ChartPointOut(_Out):
+    label: str
+    value: float
+    x: float | None
+    x2: float | None
+    n: int | None
+
+
+class ChartOut(_Out):
+    kind: Literal["bar", "line", "scatter", "histogram"]
+    title: str
+    x_label: str
+    y_label: str
+    value_format: Literal["number", "percent", "count", "strength", "signed_percent"]
+    unit: str | None
+    points: list[ChartPointOut]
+    note: str | None
+
+
+class ColumnRefOut(_Out):
+    name: str
+    display_name: str
+
+
+class ReportSectionOut(_Out):
+    analysis_id: str
+    question: str
+    kind: str
+    kind_label: str
+    requested_by_person: bool
+    columns: list[ColumnRefOut]
+    answer: list[SentenceOut]
+    written_by: Literal["model", "engine"] | None
+    chart: ChartOut | None
+    facts: list[str]
+    skipped: str | None = Field(description="Why the question could not be answered, if not.")
+
+
+class UnderstandingOut(_Out):
+    summary: str
+    domain: str
+    grain: str
+    target: str | None
+    rows: int
+    columns: int
+    masked_columns: int
+    planned_by: Literal["model", "cache", "rules"]
+
+
+class CleaningStepOut(_Out):
+    label: str
+    column: str | None
+    rows: int
+
+
+class PreparationOut(_Out):
+    rows_before: int
+    rows_after: int
+    applied: list[CleaningStepOut]
+    not_applied: int
+    reviewed_by_person: bool
+
+
+class NarrationOut(_Out):
+    source: Literal["model", "engine", "mixed"]
+    provider: str | None
+    model: str | None
+    fallback_reason: str | None
+    sentences_kept: int
+    sentences_dropped: int
+
+
+class FactTestOut(_Out):
+    """The hypothesis test a fact rests on, after the run's false-discovery control."""
+
+    method: str
+    effect_name: str = Field(description="spearman, eta, cramers_v, kendall_tau, ...")
+    effect: float
+    ci_low: float | None = Field(description="Lower end of the 95% interval.")
+    ci_high: float | None
+    p_value: float
+    q_value: float = Field(description="After Benjamini-Hochberg across the run's tests.")
+
+
+class FactCheckOut(_Out):
+    """The sensitivity check: the fact re-tested on minimally cleaned data."""
+
+    outcome: Literal["holds", "weakens", "flips", "not_retested", "same_data"]
+    note: str
+    effect: float | None = Field(description="The effect on minimally cleaned data.")
+    p_value: float | None
+
+
+class FactOut(_Out):
+    id: str
+    analysis_id: str
+    kind: str
+    columns: list[ColumnRefOut]
+    rows: int = Field(description="Rows the numbers rest on.")
+    method: str
+    statement: str
+    values: dict[str, Any]
+    tier: Literal["descriptive", "strong", "supported", "inconclusive"] = Field(
+        description="strong: q at most 0.01; supported: q at most 0.05; inconclusive: did not "
+        "pass; descriptive: no test (a count, share or summary)."
+    )
+    test: FactTestOut | None
+    check: FactCheckOut | None
+    content_hash: str = Field(description="SHA-256 of the fact's content, fixed when stored.")
+
+
+class EvidenceOut(_Out):
+    tests: int = Field(description="Hypothesis tests in the run's false-discovery control.")
+    reliable: int = Field(description="Tests that passed at the run's false-discovery rate.")
+    alpha: float
+    rechecked: int = Field(description="Top findings re-tested on minimally cleaned data.")
+
+
+class FeatureNoteOut(_Out):
+    label: str
+    outcome: Literal["kept", "no_signal", "redundant", "not_computed", "no_target"]
+    redundant_with: str | None = None
+
+
+class ReportOut(_Out):
+    """A finished run's report: every sentence cites the facts it rests on."""
+
+    run: RunOut
+    revision: int
+    created_at: datetime
+    title: str
+    dataset_name: str
+    understanding: UnderstandingOut
+    preparation: PreparationOut
+    requests: list[RequestOutcomeOut]
+    removed_questions: int
+    summary: list[SentenceOut]
+    sections: list[ReportSectionOut]
+    narration: NarrationOut
+    method_notes: list[str]
+    highlights: list[str] = Field(
+        default_factory=list, description="Fact ids of the best findings, best first."
+    )
+    evidence: EvidenceOut | None = None
+    features: list[FeatureNoteOut] = Field(default_factory=list)
+    facts: list[FactOut]

@@ -14,7 +14,9 @@ from insightfulcell.ingestion.formats import FileFormat
 from insightfulcell.ingestion.limits import IngestLimits
 from insightfulcell.pipeline.definition import Pipeline, default_pipeline
 from insightfulcell.pipeline.ingest import IngestStage
-from insightfulcell.pipeline.stage import SourceFile, StageContext, checkpoint_key
+from insightfulcell.pipeline.profile import ProfileStage
+from insightfulcell.pipeline.stage import RunInputs, SourceFile, StageContext, checkpoint_key
+from insightfulcell.pipeline.understand import UnderstandStage
 from insightfulcell.services.run_executor import event_summary
 
 CSV = b"id,city,price\n1,Perth,10.5\n2,Darwin,7\n"
@@ -63,17 +65,40 @@ class TestCheckpointKey:
 
         assert checkpoint_key(Bumped(), src, []) != base
 
+    def test_a_stage_is_redone_only_when_the_inputs_it_reads_change(self) -> None:
+        """A person's requests re-plan the run; they do not re-profile the file."""
+        src = source()
+        before = RunInputs(today="2026-10-10")
+        after = RunInputs(today="2026-10-10", annotations={"requests": ["compare teams"]})
+        later = RunInputs(today="2026-10-11")
+        assert checkpoint_key(ProfileStage(), src, [], after) == checkpoint_key(
+            ProfileStage(), src, [], before
+        )
+        assert checkpoint_key(ProfileStage(), src, [], later) != checkpoint_key(
+            ProfileStage(), src, [], before
+        )
+        understand = UnderstandStage()
+        assert checkpoint_key(understand, src, [], after) != checkpoint_key(
+            understand, src, [], before
+        )
+
 
 class TestPipeline:
-    def test_default_pipeline_ships_the_four_phase_a_stages(self) -> None:
+    def test_default_pipeline_plans_then_answers(self) -> None:
         pipeline = default_pipeline()
         assert [(p.phase, p.position, p.stage.name) for p in pipeline.planned()] == [
             (Phase.A, 0, "ingest"),
             (Phase.A, 1, "profile"),
             (Phase.A, 2, "understand"),
             (Phase.A, 3, "clean_plan"),
+            (Phase.B, 4, "clean_apply"),
+            (Phase.B, 5, "geo"),
+            (Phase.B, 6, "features"),
+            (Phase.B, 7, "mine"),
+            (Phase.B, 8, "sensitivity"),
+            (Phase.B, 9, "rank"),
+            (Phase.B, 10, "report"),
         ]
-        assert pipeline.stages(Phase.B) == ()
 
     def test_the_model_does_not_change_the_stage_list(self) -> None:
         """The API plans runs without knowing the worker's model: both must agree."""

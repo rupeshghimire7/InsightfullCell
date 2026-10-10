@@ -1,9 +1,16 @@
-"""Plan use cases for the API: read a run's plan, decide its cleaning plan, export the recipe.
+"""Plan use cases for the API: read a run's plan, revise it, decide it, export the recipe.
 
-A decision appends: a new cleaning plan revision (who decided, when), a new resolved plan
-revision when names, units, exclusions, the target or features changed, and the person's
-choices saved for the dataset's later runs. Then the run leaves the review gate for Phase B.
-All in one transaction; ``If-Match`` (the run's row version) and the cleaning revision the
+At the review gate a person either:
+
+- **revises** the plan: their cleaning decisions so far, column edits, removed questions and
+  requests in their own words are saved, and the run goes back to Phase A, which plans again
+  (the engine first, then the model) and returns to review; or
+- **decides** (approves) it: a new cleaning plan revision (who decided, when), a new resolved
+  plan revision when names, units, exclusions, the target or features changed, and the
+  person's choices saved for the dataset's later runs. Then the run leaves the gate for
+  Phase B.
+
+Each in one transaction; ``If-Match`` (the run's row version) and the cleaning revision the
 person saw guard against acting on a stale view.
 """
 
@@ -43,6 +50,7 @@ from insightfulcell.engine import recipe
 from insightfulcell.engine.cleaning.operations import CATALOGUE, Decision, Operation
 from insightfulcell.engine.planning.language import CleaningKind, ResolvedPlan, content_hash
 from insightfulcell.engine.planning.merge import Annotations, ColumnAnnotation, apply_annotations
+from insightfulcell.engine.planning.requests import clean_requests
 from insightfulcell.queue.port import JobQueue, PhaseJob
 from insightfulcell.services import run_store
 from insightfulcell.services.analysis_store import insert_cleaning_plan
@@ -67,6 +75,9 @@ class PlanDecision:
     target: str | None = None
     no_target: bool = False
     disabled_features: Sequence[str] | None = None
+    #: Revisions only (None keeps what is saved).
+    removed_analyses: Sequence[str] | None = None
+    requests: Sequence[str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,6 +178,81 @@ class PlanService:
                 preferences_version=prefs_version or 0,
             )
 
+    # ------------------------------------------------------------------ revise
+
+    async def revise(
+        self,
+        principal: Principal,
+        run_id: UUID,
+        decision: PlanDecision,
+        *,
+        if_match: int | None = None,
+    ) -> RunDetail:
+        """Save the person's changes and plan again: the run goes back to Phase A (finished
+        steps whose inputs did not change are reused) and returns to the review gate."""
+        require(principal, Action.CLEANING_DECIDE)
+        async with self._db.transaction(principal) as session:
+            run = await run_store.require_run(session, principal.org_id, run_id, lock=True)
+            if if_match is not None and if_match != run.row_version:
+                raise RunChanged(
+                    "Someone or something changed this analysis after you loaded it.",
+                    hint="Reload the page, check the analysis, and try again.",
+                )
+            require_status(RunStatus(run.status), {RunStatus.AWAITING_REVIEW}, "revised")
+            latest = await _latest_cleaning(session, principal.org_id, run_id)
+            resolved = await _latest_plan(session, principal.org_id, run_id)
+            if latest is None or resolved is None:
+                raise PlanNotReady("This analysis has no plan to revise.")
+            plan_row, ops = latest
+            if decision.cleaning_revision != plan_row.revision:
+                raise CleaningPlanChanged(
+                    "The cleaning plan changed since you loaded it.",
+                    hint="Reload the page to see the latest changes, then try again.",
+                )
+            personal = await _personal_columns(session, principal.org_id, run_id)
+            _check_decisions(ops, decision.decisions, personal)
+            plan = ResolvedPlan.model_validate(resolved.plan)
+            known = {a.id for a in (*plan.analyses, *plan.removed_analyses)}
+            if set(decision.removed_analyses or ()) - known:
+                raise InvalidDecision(
+                    "A removed question is not part of this plan.",
+                    hint="Reload the page and try again.",
+                )
+            annotations = await self._save_preferences(session, principal, run, decision, resolved)
+            inputs = dict(run.inputs or {})
+            inputs["annotations"] = annotations.model_dump(mode="json")
+            inputs["cleaning_decisions"] = {k: bool(v) for k, v in decision.decisions.items()}
+            await run_store.transition(
+                session,
+                org_id=principal.org_id,
+                run_id=run_id,
+                target=RunStatus.QUEUED,
+                sources={RunStatus.AWAITING_REVIEW},
+                values={"phase": Phase.A.value, "stage": None, "attempts": 0, "inputs": inputs},
+            )
+            await run_store.append_event(
+                session,
+                org_id=principal.org_id,
+                run_id=run_id,
+                type_=EventType.REVIEW_REVISION_REQUESTED,
+                data={
+                    "requests": len(annotations.requests),
+                    "removed": len(annotations.removed_analyses),
+                },
+            )
+            detail = await run_store.run_detail(session, principal.org_id, run_id)
+        try:
+            await self._queue.defer_phase(
+                PhaseJob(run_id, principal.org_id, Phase.A, Queue(detail.run.queue))
+            )
+        except Exception:
+            logger.warning(
+                "could not defer phase job; the reconciler will retry",
+                extra={"run_id": str(run_id)},
+                exc_info=True,
+            )
+        return detail
+
     # ------------------------------------------------------------------ decide
 
     async def decide(
@@ -196,17 +282,7 @@ class PlanService:
                     "The cleaning plan changed since you loaded it.",
                     hint="Reload the page to see the latest changes, then decide again.",
                 )
-            personal = set(
-                (
-                    await session.execute(
-                        select(RunColumn.name).where(
-                            RunColumn.run_id == run_id,
-                            RunColumn.org_id == principal.org_id,
-                            RunColumn.personal_data.is_not(None),
-                        )
-                    )
-                ).scalars()
-            )
+            personal = await _personal_columns(session, principal.org_id, run_id)
             decided = _apply_decisions(ops, decision.decisions, personal)
             accepted = sum(1 for op in decided if op["decision"] == Decision.ACCEPTED.value)
             await insert_cleaning_plan(
@@ -307,6 +383,18 @@ class PlanService:
                 decision.disabled_features
                 if decision.disabled_features is not None
                 else current.disabled_features
+            ),
+            removed_analyses=tuple(
+                dict.fromkeys(
+                    decision.removed_analyses
+                    if decision.removed_analyses is not None
+                    else current.removed_analyses
+                )
+            ),
+            requests=(
+                clean_requests(decision.requests)
+                if decision.requests is not None
+                else current.requests
             ),
         )
         data = updated.model_dump(mode="json")
@@ -514,6 +602,44 @@ def _column_dict(c: RunColumn) -> dict[str, Any]:
         "flags": list(c.flags or []),
         "profile": c.profile,
     }
+
+
+async def _personal_columns(session: AsyncSession, org_id: UUID, run_id: UUID) -> set[str]:
+    return set(
+        (
+            await session.execute(
+                select(RunColumn.name).where(
+                    RunColumn.run_id == run_id,
+                    RunColumn.org_id == org_id,
+                    RunColumn.personal_data.is_not(None),
+                )
+            )
+        ).scalars()
+    )
+
+
+def _check_decisions(
+    ops: Sequence[CleaningOp], decisions: Mapping[str, bool], personal: set[str]
+) -> None:
+    """Decisions made so far (any subset) must name changes of this plan, and personal-data
+    exclusions always stay."""
+    by_id = {op.op_id: op for op in ops}
+    if set(decisions) - set(by_id):
+        raise InvalidDecision(
+            "The decision names changes that are not in this cleaning plan.",
+            hint="Reload the page and decide again.",
+        )
+    for op_id, accept in decisions.items():
+        op = by_id[op_id]
+        if (
+            op.kind == CleaningKind.EXCLUDE_COLUMN.value
+            and op.column_name in personal
+            and not accept
+        ):
+            raise InvalidDecision(
+                "Columns with personal data always stay out of the analysis.",
+                hint="Keep the personal-data exclusions.",
+            )
 
 
 def _apply_decisions(

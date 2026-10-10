@@ -65,19 +65,25 @@ class StageResult:
 class RunInputs:
     """What a run brings besides the file: the dataset's name, the organisation's cleaning
     policy, a person's saved choices for the dataset, and the run's reference date (which
-    dates count as "in the future"). Fixed when the run is claimed, so a retry sees the same."""
+    dates count as "in the future"). Fixed when the run is created, so a retry sees the same;
+    replaced only when a person asks for the plan to be revised."""
 
     dataset_id: UUID | None = None
     dataset_name: str = ""
     cleaning_policy: str = "review_lossy"
     annotations: Mapping[str, Any] = field(default_factory=dict)
     today: str = "1970-01-01"
+    #: Cleaning decisions a person already made in this run's review (operation id -> apply),
+    #: kept when they ask for the plan to be revised.
+    cleaning_decisions: Mapping[str, bool] = field(default_factory=dict)
 
     def fingerprint(self) -> dict[str, Any]:
         return {
+            "today": self.today,
             "dataset_name": self.dataset_name,
             "cleaning_policy": self.cleaning_policy,
             "annotations": dict(self.annotations),
+            "cleaning_decisions": dict(sorted(self.cleaning_decisions.items())),
         }
 
 
@@ -100,14 +106,22 @@ class StageContext:
         re-run writes to the same place, and never chosen by a client."""
         return f"gold/{self.org_id}/{self.run_id}/{stage}/{self.checkpoint_key[:16]}-{name}"
 
+    def silver_key(self, data_hash: str) -> str:
+        """``silver/{org}/{version}/{hash}.parquet``: cleaned data, keyed by the file and the
+        cleaning applied to it, so it can always be rebuilt from the upload and the plan."""
+        if len(data_hash) != 64 or not all(c in "0123456789abcdef" for c in data_hash):
+            raise ValueError("a silver key needs a SHA-256 hex digest")
+        return f"silver/{self.org_id}/{self.source.version_id}/{data_hash}.parquet"
+
 
 class Stage(Protocol):
     #: Stable identifier, stored in ``run_stages.name`` (lowercase, digits, underscores).
     name: str
     #: Bump whenever the stage's output for the same inputs could change.
     version: str
-    # A stage may also set ``uses_run_inputs = True``: the run's inputs (policy, a person's
-    # choices) then become part of its checkpoint key.
+    # A stage may also set ``uses_run_inputs``: ``True`` makes all of the run's inputs (policy,
+    # a person's choices, the reference date) part of its checkpoint key; a tuple of field
+    # names includes only those, so a change elsewhere does not redo the stage.
 
     def fingerprint(self, source: SourceFile) -> Mapping[str, Any]:
         """The inputs and configuration that determine this stage's output (JSON-safe)."""
@@ -128,8 +142,12 @@ def checkpoint_key(
         "inputs": stage.fingerprint(source),
         "upstream": list(upstream_keys),
     }
-    if inputs is not None and getattr(stage, "uses_run_inputs", False):
-        fingerprint["run_inputs"] = inputs.fingerprint()
+    uses = getattr(stage, "uses_run_inputs", False)
+    if inputs is not None and uses:
+        everything = inputs.fingerprint()
+        fingerprint["run_inputs"] = (
+            everything if uses is True else {name: everything[name] for name in uses}
+        )
     canonical = json.dumps(
         fingerprint,
         sort_keys=True,

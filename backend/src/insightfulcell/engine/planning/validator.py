@@ -460,6 +460,23 @@ def _analysis(ctx: Context, item: AnalysisProposal, target: str | None) -> Analy
     )
 
 
+def check_analysis(
+    item: AnalysisProposal,
+    semantics: Sequence[ColumnSemantics],
+    profile: Profile,
+    *,
+    target: str | None,
+    dataset_name: str,
+) -> tuple[AnalysisProposal | None, list[Rejection]]:
+    """One analysis through the same checks as a planner's (for the person's requests)."""
+    ctx = Context(
+        semantics={s.name: s for s in semantics},
+        profiles={p.name: p for p in profile.columns},
+        dataset_name=dataset_name,
+    )
+    return _analysis(ctx, item, target), ctx.rejected
+
+
 def _chart(ctx: Context, item: ChartProposal) -> ChartProposal | None:  # noqa: PLR0911
     what = f"{item.kind.value} of {item.x}" + (f" and {item.y}" if item.y else "")
     spec = CHARTS[item.kind]

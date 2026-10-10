@@ -12,6 +12,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     Date,
+    Double,
     Integer,
     LargeBinary,
     Numeric,
@@ -294,3 +295,77 @@ class UsageCounter(Base):
     output_tokens: Mapped[int] = mapped_column(BigInteger, server_default="0")
     cost_usd: Mapped[Decimal] = mapped_column(Numeric(14, 6), server_default="0")
     calls: Mapped[int] = mapped_column(Integer, server_default="0")
+
+
+class RunFact(Base):
+    __tablename__ = "run_facts"
+
+    org_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True))
+    run_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    fact_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    analysis_id: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(Text)
+    columns: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    rows: Mapped[int] = mapped_column(BigInteger)
+    method: Mapped[str] = mapped_column(Text)
+    statement: Mapped[str] = mapped_column(Text)
+    numbers: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'"))
+    labels: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'"))
+    value: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'"))
+    content_hash: Mapped[str] = mapped_column(Text)
+    tier: Mapped[str] = mapped_column(Text, server_default="descriptive")
+    hypothesis: Mapped[str | None] = mapped_column(Text, default=None)
+    test_method: Mapped[str | None] = mapped_column(Text, default=None)
+    effect_name: Mapped[str | None] = mapped_column(Text, default=None)
+    effect: Mapped[float | None] = mapped_column(Double, default=None)
+    ci_low: Mapped[float | None] = mapped_column(Double, default=None)
+    ci_high: Mapped[float | None] = mapped_column(Double, default=None)
+    p_value: Mapped[float | None] = mapped_column(Double, default=None)
+    q_value: Mapped[float | None] = mapped_column(Double, default=None)
+    provenance: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'"))
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=_NOW)
+    # ``search`` (a generated tsvector) is not mapped: it is only queried in SQL.
+
+
+class TestLog(Base):
+    """One hypothesis test of a run (append-only, partitioned by month)."""
+
+    __tablename__ = "test_log"
+    __test__ = False  # not a pytest class, despite the name
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    org_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True))
+    run_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True))
+    purpose: Mapped[str] = mapped_column(Text)
+    hypothesis: Mapped[str] = mapped_column(Text)
+    method: Mapped[str] = mapped_column(Text)
+    columns: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    n: Mapped[int] = mapped_column(BigInteger)
+    effect_name: Mapped[str] = mapped_column(Text)
+    effect: Mapped[float | None] = mapped_column(Double, default=None)
+    ci_low: Mapped[float | None] = mapped_column(Double, default=None)
+    ci_high: Mapped[float | None] = mapped_column(Double, default=None)
+    p_value: Mapped[float | None] = mapped_column(Double, default=None)
+    q_value: Mapped[float | None] = mapped_column(Double, default=None)
+    alpha: Mapped[float] = mapped_column(Double)
+    passed: Mapped[bool | None] = mapped_column(Boolean, default=None)
+    outcome: Mapped[str | None] = mapped_column(Text, default=None)
+    fact_id: Mapped[str | None] = mapped_column(Text, default=None)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=_NOW, primary_key=True
+    )
+
+
+class RunReport(Base):
+    __tablename__ = "run_reports"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    org_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True))
+    run_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True))
+    revision: Mapped[int] = mapped_column(Integer)
+    document: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    narration_source: Mapped[str] = mapped_column(Text)
+    provider: Mapped[str | None] = mapped_column(Text, default=None)
+    model: Mapped[str | None] = mapped_column(Text, default=None)
+    prompt_version: Mapped[str | None] = mapped_column(Text, default=None)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=_NOW)

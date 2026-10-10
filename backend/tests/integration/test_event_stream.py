@@ -25,8 +25,14 @@ from insightfulcell.pipeline.definition import default_pipeline
 from insightfulcell.services.run_executor import Outcome, RunExecutor
 from insightfulcell.storage.s3 import S3ObjectStore
 from tests.conftest import Identity, MakeTicket
-from tests.integration.conftest import AuthHeaders
-from tests.integration.runs_support import RecordingQueue, create_dataset, start_run
+from tests.integration.conftest import AuthHeaders, OwnerSql
+from tests.integration.runs_support import (
+    RecordingQueue,
+    approve,
+    create_dataset,
+    never_pause,
+    start_run,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -74,9 +80,15 @@ def executor(services: Services, settings: Settings) -> RunExecutor:
 
 
 async def finished_run(
-    client: httpx.AsyncClient, headers: dict[str, str], executor: RunExecutor, org_id: UUID
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    executor: RunExecutor,
+    org_id: UUID,
+    owner_sql: OwnerSql,
 ) -> str:
+    """A run straight through both phases (the organisation never pauses for review)."""
     dataset_id = (await create_dataset(client, headers))["dataset"]["id"]
+    never_pause(owner_sql, org_id)
     run_id = (await start_run(client, headers, dataset_id)).json()["id"]
     assert await executor.execute(UUID(run_id), org_id, Phase.A) is Outcome.PHASE_COMPLETED
     assert await executor.execute(UUID(run_id), org_id, Phase.B) is Outcome.SUCCEEDED
@@ -95,8 +107,9 @@ class TestReplay:
         alice: Identity,
         executor: RunExecutor,
         make_ticket: MakeTicket,
+        owner_sql: OwnerSql,
     ) -> None:
-        run_id = await finished_run(client, auth(alice), executor, alice.org_id)
+        run_id = await finished_run(client, auth(alice), executor, alice.org_id, owner_sql)
         response = await client.get(
             f"/v1/runs/{run_id}/events", headers=bearer(make_ticket(alice, run_id))
         )
@@ -105,12 +118,14 @@ class TestReplay:
         assert response.headers["cache-control"] == "no-store"
         assert response.text.startswith("retry: 3000\n\n")
         messages, _ = parse_stream(response.text)
-        assert [m.id for m in messages] == list(range(1, 14))
+        assert [m.id for m in messages] == list(range(1, 28))
         assert [m.event for m in messages] == [
             "run.queued",
             "run.started",
             *["stage.started", "stage.completed"] * 4,  # ingest, profile, understand, clean_plan
             "phase.completed",
+            # clean_apply, geo, features, mine, sensitivity, rank, report
+            *["stage.started", "stage.completed"] * 7,
             "phase.completed",
             "run.succeeded",
         ]
@@ -135,14 +150,15 @@ class TestReplay:
         alice: Identity,
         executor: RunExecutor,
         make_ticket: MakeTicket,
+        owner_sql: OwnerSql,
     ) -> None:
-        run_id = await finished_run(client, auth(alice), executor, alice.org_id)
+        run_id = await finished_run(client, auth(alice), executor, alice.org_id, owner_sql)
         response = await client.get(
             f"/v1/runs/{run_id}/events",
-            headers={**bearer(make_ticket(alice, run_id)), "Last-Event-ID": "11"},
+            headers={**bearer(make_ticket(alice, run_id)), "Last-Event-ID": "25"},
         )
         messages, _ = parse_stream(response.text)
-        assert [m.id for m in messages] == [12, 13]
+        assert [m.id for m in messages] == [26, 27]
 
 
 class TestTickets:
@@ -303,8 +319,9 @@ async def test_a_live_stream_receives_events_as_the_worker_writes_them(
         assert received == ["run.queued"]  # replayed; the stream now waits for NOTIFY
 
         assert await executor.execute(UUID(run_id), alice.org_id, Phase.A) is (
-            Outcome.PHASE_COMPLETED
+            Outcome.AWAITING_REVIEW
         )
+        assert (await approve(http, auth(alice), run_id)).status_code == 200
         assert await executor.execute(UUID(run_id), alice.org_id, Phase.B) is Outcome.SUCCEEDED
         # The stream ends by itself once the run is finished.
         await asyncio.wait_for(listener, 10)
@@ -312,7 +329,11 @@ async def test_a_live_stream_receives_events_as_the_worker_writes_them(
         "run.queued",
         "run.started",
         *["stage.started", "stage.completed"] * 4,  # ingest, profile, understand, clean_plan
-        "phase.completed",
+        "review.required",
+        "review.approved",
+        "run.started",
+        # clean_apply, geo, features, mine, sensitivity, rank, report
+        *["stage.started", "stage.completed"] * 7,
         "phase.completed",
         "run.succeeded",
     ]

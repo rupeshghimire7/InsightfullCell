@@ -185,6 +185,21 @@ class ChartProposal(_Proposal):
     title: str
 
 
+class RequestStatus(StrEnum):
+    """What became of one of the person's requests."""
+
+    ADDED = "added"
+    REMOVED = "removed"
+    ALREADY_PLANNED = "already_planned"
+    NOT_UNDERSTOOD = "not_understood"
+
+
+class RequestOutcomeProposal(_Proposal):
+    index: int = Field(description="The request's number, as given between <requests> tags.")
+    status: RequestStatus
+    note: str = Field(description="One short sentence for the person. No numbers.")
+
+
 class RelevanceProposal(_Proposal):
     column: str = Field(json_schema_extra=COLUMN)
     weight: float = Field(description="0 (ignore) to 1 (central to the dataset's purpose).")
@@ -205,6 +220,8 @@ class ProposedPlan(_Proposal):
     analyses: list[AnalysisProposal]
     charts: list[ChartProposal]
     relevance: list[RelevanceProposal]
+    #: One per request of the person's, when there were requests (the model fills it).
+    request_outcomes: list[RequestOutcomeProposal] = Field(default_factory=list)
 
 
 # --------------------------------------------------------------------------- resolved
@@ -264,6 +281,15 @@ class ResolvedChart(_Resolved):
     source: Source
 
 
+class RequestOutcome(_Resolved):
+    """One of the person's requests and what the planner did with it, in words."""
+
+    request: str
+    status: RequestStatus
+    note: str
+    source: Literal["model", "rules"]
+
+
 class Rejection(_Resolved):
     section: str
     item: str  # a short description of the rejected item (never a value from the data)
@@ -294,6 +320,10 @@ class ResolvedPlan(_Resolved):
     #: Validated cleaning proposals; the clean_plan stage turns them into operations.
     cleaning: tuple[CleaningProposal, ...]
     provenance: Provenance
+    #: The person's requests in their own words and what was done with each.
+    requests: tuple[RequestOutcome, ...] = ()
+    #: Analyses the person removed, kept so the review can offer them back.
+    removed_analyses: tuple[ResolvedAnalysis, ...] = ()
 
     def column(self, name: str) -> ResolvedColumn | None:
         return next((c for c in self.dictionary if c.column == name), None)

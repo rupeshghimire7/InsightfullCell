@@ -9,7 +9,9 @@ COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --no-install-project
 COPY src ./src
 COPY README.md ./
-RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev
+# Not editable: the runtime stage copies only .venv, so the package (and its data files, such as
+# the geographic reference set) must be installed into it rather than linked to ./src.
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --no-editable
 
 FROM python:3.13-slim
 RUN useradd --system --uid 10001 --no-create-home app

@@ -1,10 +1,17 @@
 """Which stages run in which phase.
 
-A run executes as two jobs split at the review gate. Phase A (this release) is complete:
-``ingest`` -> ``profile`` -> ``understand`` -> ``clean_plan``, ending at the review gate when a
-cleaning change needs a person. Phase B's eleven stages (``clean_apply`` ... ``assemble``)
-arrive in Phase 4 onwards; until then Phase B runs as its own job with no stages, so the
-queue, checkpoints and events are exercised end to end.
+A run executes as two jobs split at the review gate.
+
+- Phase A: ``ingest`` -> ``profile`` -> ``understand`` -> ``clean_plan``. It ends at the review
+  gate, where a person checks the plan and the cleaning, may ask for changes (Phase A then
+  runs again, reusing what did not change), and approves.
+- Phase B: ``clean_apply`` -> ``geo`` -> ``features`` -> ``mine`` -> ``sensitivity`` ->
+  ``rank`` -> ``report``: the approved cleaning applied, places resolved to regions, features
+  kept only if they pass the signal gate, every question answered with tested facts under the
+  run's false-discovery control (facts and test log stored), the top findings re-tested on
+  minimally cleaned data, the findings ranked, and the report written with citations. The
+  baseline's narrate, verify, visualize and assemble are inside ``report`` until Phases 5
+  and 6 split them out.
 """
 
 from __future__ import annotations
@@ -16,9 +23,16 @@ from dataclasses import dataclass
 from insightfulcell import __version__
 from insightfulcell.domain.runs import Phase
 from insightfulcell.ingestion.limits import IngestLimits
+from insightfulcell.pipeline.clean_apply import CleanApplyStage
 from insightfulcell.pipeline.clean_plan import CleanPlanStage
+from insightfulcell.pipeline.features import FeaturesStage
+from insightfulcell.pipeline.geo import GeoStage
 from insightfulcell.pipeline.ingest import IngestStage
+from insightfulcell.pipeline.mine import MineStage
 from insightfulcell.pipeline.profile import ProfileStage
+from insightfulcell.pipeline.rank import RankStage
+from insightfulcell.pipeline.report import ReportStage
+from insightfulcell.pipeline.sensitivity import SensitivityStage
 from insightfulcell.pipeline.stage import Stage
 from insightfulcell.pipeline.understand import UnderstandStage
 
@@ -71,5 +85,13 @@ def default_pipeline(
             UnderstandStage(card_token_budget=card_token_budget, model_identity=model_identity),
             CleanPlanStage(),
         ),
-        phase_b=(),
+        phase_b=(
+            CleanApplyStage(),
+            GeoStage(),
+            FeaturesStage(),
+            MineStage(),
+            SensitivityStage(),
+            RankStage(),
+            ReportStage(model_identity=model_identity),
+        ),
     )

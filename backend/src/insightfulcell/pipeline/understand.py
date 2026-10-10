@@ -1,11 +1,18 @@
-"""Stage 3, ``understand``: the first model call. Masked schema card in, analysis plan out.
+"""Stage 3, ``understand``: the engine plans first, then a model refines it.
 
 1. Build the schema card (masked; see ``engine.schema_card``).
-2. Check the plan cache: same organisation, same schema fingerprint, same prompt version.
-3. Otherwise ask the model through the gateway, with the run's personal values as the payload
-   guard. Any failure (model off, over budget, timed out, invalid) falls back to rules.
-4. Validate every item; merge with the rule plan and the person's saved choices.
-5. Freeze the resolved plan as a hashed artifact. It, not the model, makes the run
+2. **The engine plans**: the rule-based planner turns the card's columns into a complete,
+   validated plan. This plan always exists and is the fallback for everything below.
+3. Check the plan cache (same organisation, schema fingerprint and prompt version), unless the
+   person asked for changes.
+4. Otherwise send the card, the engine's draft and the person's requests to the model through
+   the gateway (the run's personal values are the payload guard). It returns a revised,
+   complete plan and an outcome for each request. Any failure (model off, over budget, timed
+   out, invalid) keeps the engine's plan.
+5. Validate every item; merge with the person's saved choices; apply the person's requests
+   (the model's reading, or the engine's own reading of any request the model did not
+   answer) and the analyses they removed.
+6. Freeze the resolved plan as a hashed artifact. It, not the model, makes the run
    reproducible.
 """
 
@@ -18,10 +25,12 @@ from pathlib import Path
 from typing import Any, Final
 
 from insightfulcell.engine.planning import merge, rules, validator
+from insightfulcell.engine.planning import requests as person_requests
 from insightfulcell.engine.planning.language import (
     PLAN_LANGUAGE_VERSION,
     ProposedPlan,
     Provenance,
+    RequestOutcome,
     ResolvedPlan,
     content_hash,
 )
@@ -36,19 +45,18 @@ from insightfulcell.engine.ports import ModelRequest, ModelUnavailable, PlanReco
 from insightfulcell.engine.profiling import Profile
 from insightfulcell.engine.schema_card import build_card, estimate_tokens, fingerprint_parts
 from insightfulcell.engine.semantics import ColumnSemantics, semantics_from_output
-from insightfulcell.engine.sql import ident
-from insightfulcell.pipeline.artifacts import fetch, fetch_json, put_json, table
+from insightfulcell.pipeline.artifacts import fetch, fetch_json, put_json, sensitive_values
 from insightfulcell.pipeline.profile import column_records
 from insightfulcell.pipeline.stage import SourceFile, StageContext, StageResult
 
 logger = logging.getLogger(__name__)
 
-SENSITIVE_VALUES_PER_COLUMN: Final = 2_000
+MAX_ANALYSES_WITH_REQUESTS: Final = 45
 
 
 class UnderstandStage:
     name = "understand"
-    version = "1"
+    version = "2"
     uses_run_inputs = True
 
     def __init__(
@@ -83,11 +91,23 @@ class UnderstandStage:
         )
         fingerprint = content_hash(fingerprint_parts(semantics))
 
+        requests = person_requests.clean_requests(annotations.requests)
+        removed = tuple(annotations.removed_analyses)
+
+        # The engine plans first; the model, if any, refines that plan.
         rule_plan, _ = validator.validate(
             rules.plan(semantics, profile), semantics, profile, dataset_name=name
         )
         model_plan, provenance = await self._model_plan(
-            ctx, parquet, semantics, profile, card, fingerprint
+            ctx,
+            parquet,
+            semantics,
+            profile,
+            card,
+            fingerprint,
+            draft=rule_plan,
+            requests=requests,
+            removed=removed,
         )
         plan = merge.resolve(
             rules=rule_plan,
@@ -96,6 +116,15 @@ class UnderstandStage:
             profile=profile,
             annotations=annotations,
             provenance=provenance,
+        )
+        plan = _apply_person(
+            plan,
+            requests=requests,
+            removed=removed,
+            model_plan=model_plan,
+            semantics=semantics,
+            profile=profile,
+            dataset_name=name,
         )
         plan_json = plan.model_dump(mode="json")
         await ctx.repository.save_plan(
@@ -130,6 +159,11 @@ class UnderstandStage:
                 "card_tokens": card["detail"]["estimated_tokens"],
                 "plan_hash": plan.digest(),
                 "summary": plan.dataset_summary,
+                "requests": len(plan.requests),
+                "requests_applied": sum(
+                    1 for r in plan.requests if r.status.value in {"added", "removed"}
+                ),
+                "removed_analyses": len(plan.removed_analyses),
             },
             artifacts={"plan": plan_key, "schema_card": card_key},
         )
@@ -142,8 +176,13 @@ class UnderstandStage:
         profile: Profile,
         card: Mapping[str, Any],
         fingerprint: str,
+        *,
+        draft: ProposedPlan,
+        requests: Sequence[str],
+        removed: Sequence[str],
     ) -> tuple[ProposedPlan | None, Provenance]:
         name = ctx.inputs.dataset_name
+        personal_choices = bool(requests or removed)
 
         def provenance(
             source: str,
@@ -163,7 +202,12 @@ class UnderstandStage:
                 rejected=tuple(rejected),
             )
 
-        cached = await ctx.repository.find_cached_plan(fingerprint, PROMPT_VERSION)
+        # A plan made for someone's requests is not reused for anyone else's.
+        cached = (
+            None
+            if personal_choices
+            else await ctx.repository.find_cached_plan(fingerprint, PROMPT_VERSION)
+        )
         if cached is not None:
             try:
                 proposed = ProposedPlan.model_validate(cached.plan)
@@ -186,10 +230,15 @@ class UnderstandStage:
             prompt_id=PROMPT_ID,
             prompt_version=PROMPT_VERSION,
             system=system_prompt(),
-            user=user_prompt(card),
+            user=user_prompt(
+                card,
+                draft=draft.model_dump(mode="json", exclude={"request_outcomes"}),
+                requests=requests,
+                removed=removed,
+            ),
             response_model=ProposedPlan,
             response_schema=response_schema(ProposedPlan, [s.name for s in semantics]),
-            sensitive_values=await asyncio.to_thread(_sensitive_values, parquet, semantics),
+            sensitive_values=await asyncio.to_thread(sensitive_values, parquet, semantics),
         )
         try:
             reply = await ctx.model.complete(request)
@@ -201,19 +250,23 @@ class UnderstandStage:
             return None, provenance("rules", fallback=exc.reason)
         assert isinstance(reply.data, ProposedPlan)  # noqa: S101  (the request's response model)
         accepted, rejected = validator.validate(reply.data, semantics, profile, dataset_name=name)
-        await ctx.repository.save_plan(
-            PlanRecord(
-                kind="proposal",
-                source="model",
-                schema_fingerprint=fingerprint,
-                prompt_version=PROMPT_VERSION,
-                provider=reply.provider,
-                model=reply.model,
-                plan=accepted.model_dump(mode="json"),
-                plan_hash=content_hash(accepted.model_dump(mode="json")),
-                rejected=[r.model_dump(mode="json") for r in rejected],
-            )
+        accepted = accepted.model_copy(
+            update={"request_outcomes": list(reply.data.request_outcomes)}
         )
+        if not personal_choices:  # the cache holds plans for the table alone
+            await ctx.repository.save_plan(
+                PlanRecord(
+                    kind="proposal",
+                    source="model",
+                    schema_fingerprint=fingerprint,
+                    prompt_version=PROMPT_VERSION,
+                    provider=reply.provider,
+                    model=reply.model,
+                    plan=accepted.model_dump(mode="json"),
+                    plan_hash=content_hash(accepted.model_dump(mode="json")),
+                    rejected=[r.model_dump(mode="json") for r in rejected],
+                )
+            )
         logger.info(
             "planner answered",
             extra={
@@ -229,24 +282,62 @@ class UnderstandStage:
         )
 
 
-def _sensitive_values(parquet: Path, semantics: Sequence[ColumnSemantics]) -> frozenset[str]:
-    """Distinct values of personal-data columns: the gateway refuses any payload holding one.
-    They stay in this process and are never stored."""
-    flagged = [s.name for s in semantics if s.personal_data is not None]
-    if not flagged:
-        return frozenset()
-    values: set[str] = set()
-    with table(parquet) as con:
-        for column in flagged:
-            c = ident(column)  # quoted: column names come from the user's file
-            rows = con.execute(
-                f"SELECT DISTINCT trim(CAST({c} AS VARCHAR)) FROM t WHERE {c} IS NOT NULL "  # noqa: S608
-                "LIMIT ?",
-                [SENSITIVE_VALUES_PER_COLUMN],
-            ).fetchall()
-            values.update(str(v) for (v,) in rows if v and len(str(v)) >= 4)
-    return frozenset(values)
-
-
 def _roles(plan: ResolvedPlan) -> dict[str, tuple[str, str | None, str | None]]:
     return {c.column: (c.role.value, c.display_name, c.unit) for c in plan.dictionary}
+
+
+def _apply_person(  # noqa: PLR0913  (keyword-only)
+    plan: ResolvedPlan,
+    *,
+    requests: Sequence[str],
+    removed: Sequence[str],
+    model_plan: ProposedPlan | None,
+    semantics: Sequence[ColumnSemantics],
+    profile: Profile,
+    dataset_name: str,
+) -> ResolvedPlan:
+    """The person's requests and removed analyses, applied to the merged plan.
+
+    The model already acted on the requests it answered (its plan includes them). Any request
+    without a model outcome (no model, or the model skipped it) is read by the engine and
+    applied here, so every request gets an outcome. Removed analyses always go, whoever
+    planned them."""
+    names = {c.column: c.display_name or c.column for c in plan.dictionary}
+    answered: dict[int, RequestOutcome] = {}
+    if model_plan is not None:
+        for item in model_plan.request_outcomes:
+            if 1 <= item.index <= len(requests) and item.index not in answered:
+                note = validator.tidy(item.note, 200) or "Handled by the planning model."
+                answered[item.index] = RequestOutcome(
+                    request=requests[item.index - 1],
+                    status=item.status,
+                    note=note,
+                    source="model",
+                )
+    unanswered = [text for i, text in enumerate(requests, 1) if i not in answered]
+    intents = person_requests.interpret(
+        unanswered,
+        semantics=semantics,
+        profile=profile,
+        names=names,
+        target=plan.target.column if plan.target else None,
+        dataset_name=dataset_name,
+    )
+    analyses, engine_outcomes = person_requests.apply(plan.analyses, intents, names)
+    by_text = {o.request: o for o in engine_outcomes}
+    outcomes = tuple(
+        answered[i] if i in answered else by_text[text]
+        for i, text in enumerate(requests, 1)
+        if i in answered or text in by_text
+    )
+
+    removed_ids = set(removed)
+    kept = [a for a in analyses if a.id not in removed_ids]
+    gone = tuple(a for a in analyses if a.id in removed_ids)
+    return plan.model_copy(
+        update={
+            "analyses": tuple(kept[:MAX_ANALYSES_WITH_REQUESTS]),
+            "requests": outcomes,
+            "removed_analyses": gone,
+        }
+    )

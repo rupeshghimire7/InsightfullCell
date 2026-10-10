@@ -30,7 +30,9 @@ from tests.integration.helpers import complete, csv_bytes, put_parts, start_uplo
 from tests.integration.runs_support import (
     FakeStage,
     RecordingQueue,
+    approve,
     create_dataset,
+    never_pause,
     start_run,
 )
 
@@ -109,6 +111,8 @@ class TestRealIngest:
         owner_sql: OwnerSql,
         raw_s3: S3Client,
     ) -> None:
+        await create_dataset(client, auth(alice))  # creates the organisation
+        never_pause(owner_sql, alice.org_id)  # this test is about execution, not review
         run_id, _ = await submit(client, auth(alice), csv_bytes(40))
         executor, queue = make_executor()
 
@@ -135,16 +139,28 @@ class TestRealIngest:
             for stage in ("ingest", "profile", "understand", "clean_plan")
             for kind in ("stage.started", "stage.completed")
         ]
+        phase_b = [
+            (kind, stage)
+            for stage in ("clean_apply", "geo", "features", "mine", "sensitivity", "rank", "report")
+            for kind in ("stage.started", "stage.completed")
+        ]
         assert events(owner_sql, run_id) == [
             ("run.queued", None),
             ("run.started", None),
             *phase_a,
             ("phase.completed", None),
+            *phase_b,
             ("phase.completed", None),
             ("run.succeeded", None),
         ]
+        # Phase B answered the plan's questions with stored facts and wrote the report.
+        facts = owner_sql("SELECT count(*) > 0 FROM app.run_facts WHERE run_id = :id", id=run_id)
+        assert facts == [(True,)]
+        assert owner_sql(
+            "SELECT revision, narration_source FROM app.run_reports WHERE run_id = :id", id=run_id
+        ) == [(1, "engine")]
         # Phase A recorded the run's columns, a plan (rules: no model in tests) and a cleaning
-        # plan that needed no review (a clean file: nothing lossy to decide).
+        # plan approved by the organisation's policy (auto_safe: no review).
         columns = owner_sql(
             "SELECT name, meaning, personal_data FROM app.run_columns WHERE run_id = :id "
             "ORDER BY position",
@@ -164,7 +180,31 @@ class TestRealIngest:
         assert owner_sql(
             "SELECT revision, policy, status FROM app.cleaning_plans WHERE run_id = :id",
             id=run_id,
-        ) == [(1, "review_lossy", "approved")]
+        ) == [(1, "auto_safe", "approved")]
+
+    async def test_every_plan_is_reviewed_and_approval_continues_to_the_report(
+        self,
+        client: httpx.AsyncClient,
+        auth: AuthHeaders,
+        alice: Identity,
+        make_executor: MakeExecutor,
+        owner_sql: OwnerSql,
+    ) -> None:
+        run_id, _ = await submit(client, auth(alice), csv_bytes(40))
+        executor, queue = make_executor()
+        assert await executor.execute(run_id, alice.org_id, Phase.A) is Outcome.AWAITING_REVIEW
+        assert queue.deferred == []  # nothing goes on until a person approves
+        assert run_row(owner_sql, run_id)["status"] == "awaiting_review"
+        response = await approve(client, auth(alice), str(run_id))
+        assert response.status_code == 200, response.text
+        assert await executor.execute(run_id, alice.org_id, Phase.B) is Outcome.SUCCEEDED
+        report = (await client.get(f"/v1/runs/{run_id}/report", headers=auth(alice))).json()
+        facts = {f["id"] for f in report["facts"]}
+        answered = [s for s in report["sections"] if not s["skipped"]]
+        assert answered
+        assert all(
+            set(sentence["citations"]) <= facts for s in answered for sentence in s["answer"]
+        )
 
     async def test_bytes_that_do_not_match_the_recorded_checksum_fail_the_run(
         self,

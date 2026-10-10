@@ -20,7 +20,7 @@ from insightfulcell.pipeline.stage import SourceFile, StageContext, StageResult
 class ProfileStage:
     name = "profile"
     version = "1"
-    uses_run_inputs = True  # the run's reference date decides what is "in the future"
+    uses_run_inputs = ("today",)  # the run's reference date decides what is "in the future"
 
     def fingerprint(self, source: SourceFile) -> Mapping[str, Any]:
         return {"sha256": source.sha256}

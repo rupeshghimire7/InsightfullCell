@@ -16,6 +16,7 @@ from insightfulcell.queue.port import JobQueue
 from insightfulcell.queue.procrastinate_queue import ProcrastinateQueue, create_procrastinate_app
 from insightfulcell.services.datasets import DatasetService
 from insightfulcell.services.plans import PlanService
+from insightfulcell.services.reports import ReportService
 from insightfulcell.services.runs import RunService
 from insightfulcell.services.uploads import UploadService
 from insightfulcell.storage.port import ObjectStore
@@ -33,6 +34,7 @@ class Services:
     datasets: DatasetService
     runs: RunService
     plans: PlanService
+    reports: ReportService
     queue: JobQueue
     broker: EventBroker
     owns_engine: bool = True
@@ -93,6 +95,7 @@ def build_services(  # noqa: PLR0913  (keyword-only overrides for tests)
         datasets=DatasetService(db),
         runs=RunService(db, queue, pipeline or default_pipeline()),
         plans=PlanService(db, queue),
+        reports=ReportService(db),
         queue=queue,
         broker=broker,
         owns_engine=owns_engine,

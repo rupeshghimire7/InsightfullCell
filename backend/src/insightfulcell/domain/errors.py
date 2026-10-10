@@ -200,6 +200,14 @@ class PlanNotReady(DomainError):
     title = "The analysis plan is not ready yet"
 
 
+class ReportNotReady(DomainError):
+    """The run has not finished writing its report yet."""
+
+    kind = ErrorKind.CONFLICT
+    code = "report-not-ready"
+    title = "The report is not ready yet"
+
+
 class CleaningPlanChanged(DomainError):
     """The decision names a cleaning plan revision that is no longer the latest."""
 

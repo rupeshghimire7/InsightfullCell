@@ -133,6 +133,38 @@ class CleaningRecord:
     operations: Sequence[Mapping[str, Any]] = field(default_factory=tuple)
 
 
+@dataclass(frozen=True, slots=True)
+class TestRecord:
+    """One row of the run's test log."""
+
+    __test__ = False  # not a pytest class, despite the name
+
+    purpose: str  # primary (in the run's false-discovery control) or sensitivity (a re-test)
+    hypothesis: str
+    method: str
+    columns: Sequence[str]
+    n: int
+    effect_name: str
+    effect: float | None
+    ci_low: float | None
+    ci_high: float | None
+    p_value: float | None
+    q_value: float | None
+    alpha: float
+    passed: bool | None = None  # primary tests
+    outcome: str | None = None  # sensitivity: holds, weakens, flips, not_retested, same_data
+    fact_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ReportRecord:
+    document: Mapping[str, Any]
+    narration_source: str  # model, engine or mixed
+    provider: str | None = None
+    model: str | None = None
+    prompt_version: str | None = None
+
+
 class AnalysisRepository(Protocol):
     """The run's records in the database, scoped to one run of one organisation."""
 
@@ -146,17 +178,27 @@ class AnalysisRepository(Protocol):
 
     async def save_cleaning_plan(self, record: CleaningRecord) -> None: ...
 
+    # --- Phase B
+    async def latest_resolved_plan(self) -> Mapping[str, Any] | None:
+        """The plan as the person approved it (their latest revision), or ``None``."""
+        ...
 
-class FactRepository(Protocol):
-    """Immutable facts with provenance (Phase B, ``facts`` stage)."""
+    async def approved_cleaning(self) -> Sequence[Mapping[str, Any]] | None:
+        """The operations of the latest cleaning plan revision, if it is approved."""
+        ...
 
-    async def save_facts(self, facts: Sequence[Mapping[str, Any]]) -> None: ...
+    async def save_findings(
+        self, facts: Sequence[Mapping[str, Any]], tests: Sequence[TestRecord]
+    ) -> None:
+        """Immutable facts and the tests behind them, together. Saving the same findings again
+        (a retry) changes nothing; different ones for the same run are refused."""
+        ...
 
+    async def save_rechecks(self, tests: Sequence[TestRecord]) -> None:
+        """The sensitivity re-tests; saved once per run."""
+        ...
 
-class ReferenceStore(Protocol):
-    """Geographic reference sets (Phase B, ``geo`` stage)."""
-
-    async def gazetteer(self, reference_set: str, dest: Path) -> Path: ...
+    async def save_report(self, record: ReportRecord) -> None: ...
 
 
 class NullRepository:
@@ -174,6 +216,23 @@ class NullRepository:
         return None
 
     async def save_cleaning_plan(self, record: CleaningRecord) -> None:
+        return None
+
+    async def latest_resolved_plan(self) -> Mapping[str, Any] | None:
+        return None
+
+    async def approved_cleaning(self) -> Sequence[Mapping[str, Any]] | None:
+        return None
+
+    async def save_findings(
+        self, facts: Sequence[Mapping[str, Any]], tests: Sequence[TestRecord]
+    ) -> None:
+        return None
+
+    async def save_rechecks(self, tests: Sequence[TestRecord]) -> None:
+        return None
+
+    async def save_report(self, record: ReportRecord) -> None:
         return None
 
 

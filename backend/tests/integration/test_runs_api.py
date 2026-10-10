@@ -42,6 +42,13 @@ class TestSubmit:
             ("profile", "pending", "A"),
             ("understand", "pending", "A"),
             ("clean_plan", "pending", "A"),
+            ("clean_apply", "pending", "B"),
+            ("geo", "pending", "B"),
+            ("features", "pending", "B"),
+            ("mine", "pending", "B"),
+            ("sensitivity", "pending", "B"),
+            ("rank", "pending", "B"),
+            ("report", "pending", "B"),
         ]
         assert body["last_event_seq"] == 1
         assert body["failure"] is None

@@ -1,21 +1,42 @@
-"""The ``AnalysisRepository`` port over PostgreSQL: a run's columns, plans and cleaning plans.
+"""The ``AnalysisRepository`` port over PostgreSQL: a run's columns, plans, cleaning plans,
+facts and report.
 
-Every write happens in a transaction scoped to the run's organisation (row-level security).
-Plans and cleaning plans are append-only: a new revision, never an update.
+Every read and write happens in a transaction scoped to the run's organisation (row-level
+security). Plans, cleaning plans, facts and reports are append-only: a new revision, never an
+update.
 """
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert
 
-from insightfulcell.db.models import AnalysisPlan, CleaningOp, CleaningPlan, RunColumn
+from insightfulcell.db.models import (
+    AnalysisPlan,
+    CleaningOp,
+    CleaningPlan,
+    RunColumn,
+    RunFact,
+    RunReport,
+    TestLog,
+)
 from insightfulcell.db.tenant import TenantDatabase
 from insightfulcell.domain.ids import new_uuid7
-from insightfulcell.engine.ports import CachedPlan, CleaningRecord, ColumnRecord, PlanRecord
+from insightfulcell.engine.cleaning.operations import CATALOGUE
+from insightfulcell.engine.planning.language import CleaningKind
+from insightfulcell.engine.ports import (
+    CachedPlan,
+    CleaningRecord,
+    ColumnRecord,
+    PlanRecord,
+    ReportRecord,
+    TestRecord,
+)
 
 
 class RunAnalysisStore:
@@ -113,6 +134,183 @@ class RunAnalysisStore:
                 plan_hash=record.plan_hash,
                 operations=record.operations,
             )
+
+    async def latest_resolved_plan(self) -> Mapping[str, Any] | None:
+        async with self._db.system_transaction(self._org_id) as session:
+            plan: Mapping[str, Any] | None = (
+                await session.execute(
+                    select(AnalysisPlan.plan)
+                    .where(
+                        AnalysisPlan.run_id == self._run_id,
+                        AnalysisPlan.org_id == self._org_id,
+                        AnalysisPlan.kind == "resolved",
+                    )
+                    .order_by(AnalysisPlan.revision.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+        return plan
+
+    async def approved_cleaning(self) -> Sequence[Mapping[str, Any]] | None:
+        async with self._db.system_transaction(self._org_id) as session:
+            plan = (
+                await session.execute(
+                    select(CleaningPlan)
+                    .where(
+                        CleaningPlan.run_id == self._run_id,
+                        CleaningPlan.org_id == self._org_id,
+                    )
+                    .order_by(CleaningPlan.revision.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if plan is None or plan.status != "approved":
+                return None
+            ops = (
+                await session.execute(
+                    select(CleaningOp)
+                    .where(CleaningOp.plan_id == plan.id, CleaningOp.org_id == self._org_id)
+                    .order_by(CleaningOp.position)
+                )
+            ).scalars()
+            return [
+                {
+                    "id": op.op_id,
+                    "kind": op.kind,
+                    "column": op.column_name,
+                    "params": op.params,
+                    "lossy": op.lossy,
+                    "default": op.default_mode,
+                    "decision": op.decision,
+                    "reason": op.reason,
+                    "source": op.source,
+                    "order": CATALOGUE[CleaningKind(op.kind)].order,
+                    "rows_affected": op.rows_affected,
+                    "values_lost": op.values_lost,
+                    "preview": op.preview,
+                    "notice": op.notice,
+                }
+                for op in ops
+            ]
+
+    async def save_findings(
+        self, facts: Sequence[Mapping[str, Any]], tests: Sequence[TestRecord]
+    ) -> None:
+        """Facts and their tests in one transaction. A retried stage computes the same facts
+        (mining is deterministic): then nothing is written again. Different facts under the
+        same ids would make the report cite something other than what is stored, so they are
+        refused."""
+        rows = [self._fact_row(f) for f in facts]
+        async with self._db.system_transaction(self._org_id) as session:
+            result = await session.execute(
+                select(RunFact.fact_id, RunFact.content_hash).where(
+                    RunFact.run_id == self._run_id, RunFact.org_id == self._org_id
+                )
+            )
+            stored = dict(result.all())
+            if stored:
+                if stored != {r["fact_id"]: r["content_hash"] for r in rows}:
+                    raise FactsChanged(
+                        "this run already stored different facts; facts are immutable"
+                    )
+                return
+            if rows:
+                await session.execute(insert(RunFact).values(rows))
+            if tests:
+                await session.execute(insert(TestLog).values([self._test_row(t) for t in tests]))
+
+    async def save_rechecks(self, tests: Sequence[TestRecord]) -> None:
+        async with self._db.system_transaction(self._org_id) as session:
+            done = (
+                await session.execute(
+                    select(func.count())
+                    .select_from(TestLog)
+                    .where(
+                        TestLog.run_id == self._run_id,
+                        TestLog.org_id == self._org_id,
+                        TestLog.purpose == "sensitivity",
+                    )
+                )
+            ).scalar_one()
+            if done or not tests:
+                return
+            await session.execute(insert(TestLog).values([self._test_row(t) for t in tests]))
+
+    def _fact_row(self, f: Mapping[str, Any]) -> dict[str, Any]:
+        test = f.get("test") or {}
+        return {
+            "org_id": self._org_id,
+            "run_id": self._run_id,
+            "fact_id": f["id"],
+            "analysis_id": f["analysis_id"],
+            "kind": f["kind"],
+            "columns": list(f["columns"]),
+            "rows": int(f["rows"]),
+            "method": str(f["method"])[:2000],
+            "statement": str(f["statement"])[:4000],
+            "numbers": list(f.get("numbers") or []),
+            "labels": list(f.get("labels") or []),
+            "value": dict(f.get("values") or {}),
+            "content_hash": f["content_hash"],
+            "tier": f.get("tier", "descriptive"),
+            "hypothesis": test.get("hypothesis"),
+            "test_method": test.get("method"),
+            "effect_name": test.get("effect_name"),
+            "effect": test.get("effect"),
+            "ci_low": test.get("ci_low"),
+            "ci_high": test.get("ci_high"),
+            "p_value": test.get("p_value"),
+            "q_value": test.get("q_value"),
+            "provenance": dict(f.get("provenance") or {}),
+        }
+
+    def _test_row(self, t: TestRecord) -> dict[str, Any]:
+        return {
+            "id": new_uuid7(),
+            "org_id": self._org_id,
+            "run_id": self._run_id,
+            "purpose": t.purpose,
+            "hypothesis": t.hypothesis[:4000],
+            "method": t.method[:500],
+            "columns": list(t.columns),
+            "n": int(t.n),
+            "effect_name": t.effect_name,
+            "effect": _finite(t.effect),
+            "ci_low": _finite(t.ci_low),
+            "ci_high": _finite(t.ci_high),
+            "p_value": _finite(t.p_value),
+            "q_value": _finite(t.q_value),
+            "alpha": t.alpha,
+            "passed": t.passed,
+            "outcome": t.outcome,
+            "fact_id": t.fact_id,
+        }
+
+    async def save_report(self, record: ReportRecord) -> None:
+        async with self._db.system_transaction(self._org_id) as session:
+            revision = await _next_revision(session, RunReport, RunReport.run_id == self._run_id)
+            session.add(
+                RunReport(
+                    id=new_uuid7(),
+                    org_id=self._org_id,
+                    run_id=self._run_id,
+                    revision=revision,
+                    document=dict(record.document),
+                    narration_source=record.narration_source,
+                    provider=record.provider,
+                    model=record.model,
+                    prompt_version=record.prompt_version,
+                )
+            )
+
+
+class FactsChanged(RuntimeError):
+    """A retry computed different facts than the run already stored (never expected: mining
+    is deterministic)."""
+
+
+def _finite(value: float | None) -> float | None:
+    return value if value is not None and math.isfinite(value) else None
 
 
 async def _next_revision(session: Any, model: Any, *conditions: Any) -> int:

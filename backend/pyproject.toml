@@ -1,6 +1,6 @@
 [project]
 name = "insightfulcell-backend"
-version = "0.3.0"
+version = "0.4.0"
 description = "InsightfulCell API: identity verification, tenancy, uploads and file ingestion."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -21,6 +21,11 @@ dependencies = [
   "openai>=3.27.0",
   "google-genai>=2.29.0",
   "httpx>=0.28",
+  "numpy>=2.2",
+  "scipy>=1.15",
+  "scikit-learn>=1.6",
+  "rapidfuzz>=3.12",
+  "shapely>=2.0",
 ]
 
 [dependency-groups]
@@ -36,6 +41,7 @@ dev = [
   "pip-audit>=2.7",
   "boto3-stubs[s3]>=1.35",
   "types-openpyxl>=3.1",
+  "scipy-stubs>=1.18.1.1",
 ]
 
 [build-system]
@@ -83,7 +89,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S105", "S106", "ANN", "PLR0913", "PLR0917", "S608"]
+# Tests build data with seeded pseudo-random generators (S311): reproducible, not security.
+"tests/**" = ["S101", "S105", "S106", "S311", "ANN", "PLR0913", "PLR0917", "S608"]
 "migrations/**" = ["S608", "E501"]
 "src/insightfulcell/ingestion/__main__.py" = ["T201"]
 # The engine writes DuckDB SQL by design. Every identifier and literal goes through
@@ -91,6 +98,7 @@ ignore = [
 "src/insightfulcell/engine/**" = ["S608"]
 # The planning prompt is text for a model, not code: its lines are as long as its sentences.
 "src/insightfulcell/engine/planning/prompt.py" = ["E501"]
+"src/insightfulcell/engine/analysis/prompt.py" = ["E501"]
 # The recipe is a template of another program; its lines are that program's lines.
 "src/insightfulcell/engine/recipe.py" = ["E501"]
 
@@ -110,7 +118,7 @@ files = ["src", "tests", "migrations"]
 warn_unreachable = true
 
 [[tool.mypy.overrides]]
-module = ["moto.*", "duckdb.*", "alembic.*"]
+module = ["moto.*", "duckdb.*", "alembic.*", "sklearn.*", "shapely.*"]
 ignore_missing_imports = true
 
 # --------------------------------------------------------------------------- pytest

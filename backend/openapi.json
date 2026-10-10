@@ -121,6 +121,138 @@
         "title": "ChartItemOut",
         "type": "object"
       },
+      "ChartOut": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "bar",
+              "line",
+              "scatter",
+              "histogram"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/ChartPointOut"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "value_format": {
+            "enum": [
+              "number",
+              "percent",
+              "count",
+              "strength",
+              "signed_percent"
+            ],
+            "title": "Value Format",
+            "type": "string"
+          },
+          "x_label": {
+            "title": "X Label",
+            "type": "string"
+          },
+          "y_label": {
+            "title": "Y Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "x_label",
+          "y_label",
+          "value_format",
+          "unit",
+          "points",
+          "note"
+        ],
+        "title": "ChartOut",
+        "type": "object"
+      },
+      "ChartPointOut": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          },
+          "x": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X"
+          },
+          "x2": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X2"
+          }
+        },
+        "required": [
+          "label",
+          "value",
+          "x",
+          "x2",
+          "n"
+        ],
+        "title": "ChartPointOut",
+        "type": "object"
+      },
       "CleaningDecisionIn": {
         "additionalProperties": false,
         "properties": {
@@ -318,6 +450,36 @@
         "title": "CleaningPlanOut",
         "type": "object"
       },
+      "CleaningStepOut": {
+        "properties": {
+          "column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "rows": {
+            "title": "Rows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "label",
+          "column",
+          "rows"
+        ],
+        "title": "CleaningStepOut",
+        "type": "object"
+      },
       "ColumnEditIn": {
         "additionalProperties": false,
         "properties": {
@@ -369,6 +531,24 @@
           "name"
         ],
         "title": "ColumnEditIn",
+        "type": "object"
+      },
+      "ColumnRefOut": {
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "display_name"
+        ],
+        "title": "ColumnRefOut",
         "type": "object"
       },
       "CompleteUploadRequest": {
@@ -760,6 +940,7 @@
           "review.required",
           "review.reminder",
           "review.approved",
+          "review.revision_requested",
           "run.succeeded",
           "run.failed",
           "run.cancelled",
@@ -768,6 +949,278 @@
         ],
         "title": "EventType",
         "type": "string"
+      },
+      "EvidenceOut": {
+        "properties": {
+          "alpha": {
+            "title": "Alpha",
+            "type": "number"
+          },
+          "rechecked": {
+            "description": "Top findings re-tested on minimally cleaned data.",
+            "title": "Rechecked",
+            "type": "integer"
+          },
+          "reliable": {
+            "description": "Tests that passed at the run's false-discovery rate.",
+            "title": "Reliable",
+            "type": "integer"
+          },
+          "tests": {
+            "description": "Hypothesis tests in the run's false-discovery control.",
+            "title": "Tests",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tests",
+          "reliable",
+          "alpha",
+          "rechecked"
+        ],
+        "title": "EvidenceOut",
+        "type": "object"
+      },
+      "FactCheckOut": {
+        "description": "The sensitivity check: the fact re-tested on minimally cleaned data.",
+        "properties": {
+          "effect": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The effect on minimally cleaned data.",
+            "title": "Effect"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "holds",
+              "weakens",
+              "flips",
+              "not_retested",
+              "same_data"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "p_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Value"
+          }
+        },
+        "required": [
+          "outcome",
+          "note",
+          "effect",
+          "p_value"
+        ],
+        "title": "FactCheckOut",
+        "type": "object"
+      },
+      "FactOut": {
+        "properties": {
+          "analysis_id": {
+            "title": "Analysis Id",
+            "type": "string"
+          },
+          "check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FactCheckOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/ColumnRefOut"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "content_hash": {
+            "description": "SHA-256 of the fact's content, fixed when stored.",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "rows": {
+            "description": "Rows the numbers rest on.",
+            "title": "Rows",
+            "type": "integer"
+          },
+          "statement": {
+            "title": "Statement",
+            "type": "string"
+          },
+          "test": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FactTestOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tier": {
+            "description": "strong: q at most 0.01; supported: q at most 0.05; inconclusive: did not pass; descriptive: no test (a count, share or summary).",
+            "enum": [
+              "descriptive",
+              "strong",
+              "supported",
+              "inconclusive"
+            ],
+            "title": "Tier",
+            "type": "string"
+          },
+          "values": {
+            "additionalProperties": true,
+            "title": "Values",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "analysis_id",
+          "kind",
+          "columns",
+          "rows",
+          "method",
+          "statement",
+          "values",
+          "tier",
+          "test",
+          "check",
+          "content_hash"
+        ],
+        "title": "FactOut",
+        "type": "object"
+      },
+      "FactTestOut": {
+        "description": "The hypothesis test a fact rests on, after the run's false-discovery control.",
+        "properties": {
+          "ci_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci High"
+          },
+          "ci_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Lower end of the 95% interval.",
+            "title": "Ci Low"
+          },
+          "effect": {
+            "title": "Effect",
+            "type": "number"
+          },
+          "effect_name": {
+            "description": "spearman, eta, cramers_v, kendall_tau, ...",
+            "title": "Effect Name",
+            "type": "string"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "p_value": {
+            "title": "P Value",
+            "type": "number"
+          },
+          "q_value": {
+            "description": "After Benjamini-Hochberg across the run's tests.",
+            "title": "Q Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "method",
+          "effect_name",
+          "effect",
+          "ci_low",
+          "ci_high",
+          "p_value",
+          "q_value"
+        ],
+        "title": "FactTestOut",
+        "type": "object"
+      },
+      "FeatureNoteOut": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "kept",
+              "no_signal",
+              "redundant",
+              "not_computed",
+              "no_target"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "redundant_with": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redundant With"
+          }
+        },
+        "required": [
+          "label",
+          "outcome"
+        ],
+        "title": "FeatureNoteOut",
+        "type": "object"
       },
       "FeatureOut": {
         "properties": {
@@ -945,6 +1398,70 @@
           "role"
         ],
         "title": "MeOut",
+        "type": "object"
+      },
+      "NarrationOut": {
+        "properties": {
+          "fallback_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Reason"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "sentences_dropped": {
+            "title": "Sentences Dropped",
+            "type": "integer"
+          },
+          "sentences_kept": {
+            "title": "Sentences Kept",
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "model",
+              "engine",
+              "mixed"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "provider",
+          "model",
+          "fallback_reason",
+          "sentences_kept",
+          "sentences_dropped"
+        ],
+        "title": "NarrationOut",
         "type": "object"
       },
       "PartTargetOut": {
@@ -1218,6 +1735,22 @@
             "title": "Relevance",
             "type": "object"
           },
+          "removed_analyses": {
+            "description": "Planned questions the person removed (they can be brought back).",
+            "items": {
+              "$ref": "#/components/schemas/AnalysisItemOut"
+            },
+            "title": "Removed Analyses",
+            "type": "array"
+          },
+          "requests": {
+            "description": "The person's requests and what the planner did with each.",
+            "items": {
+              "$ref": "#/components/schemas/RequestOutcomeOut"
+            },
+            "title": "Requests",
+            "type": "array"
+          },
           "revision": {
             "title": "Revision",
             "type": "integer"
@@ -1267,9 +1800,47 @@
           "rejected",
           "model_input",
           "columns",
-          "cleaning"
+          "cleaning",
+          "requests",
+          "removed_analyses"
         ],
         "title": "PlanOut",
+        "type": "object"
+      },
+      "PreparationOut": {
+        "properties": {
+          "applied": {
+            "items": {
+              "$ref": "#/components/schemas/CleaningStepOut"
+            },
+            "title": "Applied",
+            "type": "array"
+          },
+          "not_applied": {
+            "title": "Not Applied",
+            "type": "integer"
+          },
+          "reviewed_by_person": {
+            "title": "Reviewed By Person",
+            "type": "boolean"
+          },
+          "rows_after": {
+            "title": "Rows After",
+            "type": "integer"
+          },
+          "rows_before": {
+            "title": "Rows Before",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rows_before",
+          "rows_after",
+          "applied",
+          "not_applied",
+          "reviewed_by_person"
+        ],
+        "title": "PreparationOut",
         "type": "object"
       },
       "PresignPartsRequest": {
@@ -1448,6 +2019,345 @@
           "reason"
         ],
         "title": "RejectionOut",
+        "type": "object"
+      },
+      "ReportOut": {
+        "description": "A finished run's report: every sentence cites the facts it rests on.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dataset_name": {
+            "title": "Dataset Name",
+            "type": "string"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvidenceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/FactOut"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/FeatureNoteOut"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "highlights": {
+            "description": "Fact ids of the best findings, best first.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Highlights",
+            "type": "array"
+          },
+          "method_notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Method Notes",
+            "type": "array"
+          },
+          "narration": {
+            "$ref": "#/components/schemas/NarrationOut"
+          },
+          "preparation": {
+            "$ref": "#/components/schemas/PreparationOut"
+          },
+          "removed_questions": {
+            "title": "Removed Questions",
+            "type": "integer"
+          },
+          "requests": {
+            "items": {
+              "$ref": "#/components/schemas/RequestOutcomeOut"
+            },
+            "title": "Requests",
+            "type": "array"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "run": {
+            "$ref": "#/components/schemas/RunOut"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/ReportSectionOut"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "summary": {
+            "items": {
+              "$ref": "#/components/schemas/SentenceOut"
+            },
+            "title": "Summary",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "understanding": {
+            "$ref": "#/components/schemas/UnderstandingOut"
+          }
+        },
+        "required": [
+          "run",
+          "revision",
+          "created_at",
+          "title",
+          "dataset_name",
+          "understanding",
+          "preparation",
+          "requests",
+          "removed_questions",
+          "summary",
+          "sections",
+          "narration",
+          "method_notes",
+          "facts"
+        ],
+        "title": "ReportOut",
+        "type": "object"
+      },
+      "ReportSectionOut": {
+        "properties": {
+          "analysis_id": {
+            "title": "Analysis Id",
+            "type": "string"
+          },
+          "answer": {
+            "items": {
+              "$ref": "#/components/schemas/SentenceOut"
+            },
+            "title": "Answer",
+            "type": "array"
+          },
+          "chart": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChartOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/ColumnRefOut"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "facts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "kind_label": {
+            "title": "Kind Label",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "requested_by_person": {
+            "title": "Requested By Person",
+            "type": "boolean"
+          },
+          "skipped": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the question could not be answered, if not.",
+            "title": "Skipped"
+          },
+          "written_by": {
+            "anyOf": [
+              {
+                "enum": [
+                  "model",
+                  "engine"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Written By"
+          }
+        },
+        "required": [
+          "analysis_id",
+          "question",
+          "kind",
+          "kind_label",
+          "requested_by_person",
+          "columns",
+          "answer",
+          "written_by",
+          "chart",
+          "facts",
+          "skipped"
+        ],
+        "title": "ReportSectionOut",
+        "type": "object"
+      },
+      "RequestOutcomeOut": {
+        "properties": {
+          "note": {
+            "description": "What was done with it, in plain words.",
+            "title": "Note",
+            "type": "string"
+          },
+          "request": {
+            "description": "The request in the person's own words.",
+            "title": "Request",
+            "type": "string"
+          },
+          "source": {
+            "description": "Who read the request: the planning model or the engine's own reading.",
+            "enum": [
+              "model",
+              "rules"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "added",
+              "removed",
+              "already_planned",
+              "not_understood"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request",
+          "status",
+          "note",
+          "source"
+        ],
+        "title": "RequestOutcomeOut",
+        "type": "object"
+      },
+      "RevisePlanRequest": {
+        "additionalProperties": false,
+        "description": "Ask for the plan to be made again with your changes; the run comes back for review.",
+        "properties": {
+          "cleaning_revision": {
+            "description": "The cleaning plan revision you reviewed.",
+            "minimum": 1.0,
+            "title": "Cleaning Revision",
+            "type": "integer"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/ColumnEditIn"
+            },
+            "maxItems": 500,
+            "title": "Columns",
+            "type": "array"
+          },
+          "decisions": {
+            "description": "Cleaning decisions made so far (any subset); they are kept.",
+            "items": {
+              "$ref": "#/components/schemas/CleaningDecisionIn"
+            },
+            "maxItems": 5000,
+            "title": "Decisions",
+            "type": "array"
+          },
+          "disabled_features": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 200,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Features"
+          },
+          "no_target": {
+            "default": false,
+            "title": "No Target",
+            "type": "boolean"
+          },
+          "removed_analyses": {
+            "description": "Ids of planned questions you do not want. Leave one out to bring it back.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Removed Analyses",
+            "type": "array"
+          },
+          "requests": {
+            "description": "What else to analyse or drop, in your own words (up to five).",
+            "items": {
+              "maxLength": 500,
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Requests",
+            "type": "array"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          }
+        },
+        "required": [
+          "cleaning_revision"
+        ],
+        "title": "RevisePlanRequest",
         "type": "object"
       },
       "Role": {
@@ -1863,6 +2773,28 @@
         "title": "RunSummaryOut",
         "type": "object"
       },
+      "SentenceOut": {
+        "properties": {
+          "citations": {
+            "description": "Ids of the facts the sentence rests on.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "citations"
+        ],
+        "title": "SentenceOut",
+        "type": "object"
+      },
       "StageOut": {
         "properties": {
           "attempts": {
@@ -1981,6 +2913,66 @@
         "title": "TargetOut",
         "type": "object"
       },
+      "UnderstandingOut": {
+        "properties": {
+          "columns": {
+            "title": "Columns",
+            "type": "integer"
+          },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "grain": {
+            "title": "Grain",
+            "type": "string"
+          },
+          "masked_columns": {
+            "title": "Masked Columns",
+            "type": "integer"
+          },
+          "planned_by": {
+            "enum": [
+              "model",
+              "cache",
+              "rules"
+            ],
+            "title": "Planned By",
+            "type": "string"
+          },
+          "rows": {
+            "title": "Rows",
+            "type": "integer"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          }
+        },
+        "required": [
+          "summary",
+          "domain",
+          "grain",
+          "target",
+          "rows",
+          "columns",
+          "masked_columns",
+          "planned_by"
+        ],
+        "title": "UnderstandingOut",
+        "type": "object"
+      },
       "UploadOut": {
         "properties": {
           "expires_at": {
@@ -2093,7 +3085,7 @@
   "info": {
     "description": "Identity-verified, tenant-isolated uploads, datasets and analysis runs.",
     "title": "InsightfulCell API",
-    "version": "0.3.0"
+    "version": "0.4.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -3387,6 +4379,179 @@
         ]
       }
     },
+    "/v1/runs/{run_id}/plan:revise": {
+      "post": {
+        "description": "Saves your cleaning decisions so far, column edits, removed questions and requests in\nyour own words, then plans again: the engine first, then the planning model if one is\nconfigured. Finished steps whose inputs did not change are reused. The run returns to\nreview with an outcome for every request. ``412`` when the run or its cleaning plan\nchanged since you loaded them.",
+        "operationId": "revise_plan_v1_runs__run_id__plan_revise_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The run's row_version (ETag) you last saw; 412 if it changed since.",
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The run's row_version (ETag) you last saw; 412 if it changed since.",
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevisePlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Plan again with your changes; the run comes back for review",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
     "/v1/runs/{run_id}/recipe": {
       "get": {
         "description": "The approved plan as code: load the original file, clean it, add features, draw the\ncharts. Generated from the stored plan; nothing in it was written by a model.",
@@ -3512,6 +4677,135 @@
           }
         ],
         "summary": "Download the run's Python recipe (cleaning, features, charts)",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/v1/runs/{run_id}/report": {
+      "get": {
+        "description": "Available once the analysis has finished (409 ``report-not-ready`` before). Every\nsentence lists the ids of the facts it rests on; ``facts`` holds each fact's statement,\ncolumns, the rows it rests on and how it was computed.",
+        "operationId": "get_report_v1_runs__run_id__report_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The finished run's report: answers, charts and the facts they cite",
         "tags": [
           "runs"
         ]

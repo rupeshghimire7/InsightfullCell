@@ -1,10 +1,11 @@
 """Stage 4, ``clean_plan``: rule and planner proposals become typed operations, each lossless or
 lossy, measured on every row, with a starting decision under the organisation's policy.
 
-The run pauses at the review gate only when an operation needs a person's decision (a lossy
-change under ``review_lossy``, anything under ``always_review``). Under ``auto_safe`` lossy
-changes are simply not applied. Nothing is applied here: Phase B's ``clean_apply`` applies the
-approved plan to the original bytes.
+The run then pauses at the review gate, where a person checks the cleaning and the plan (and
+may ask for changes), unless the organisation's policy is ``auto_safe``: then lossy changes
+are simply not applied and the run goes on. Decisions a person already made in this run (before
+asking for the plan to be revised) are kept. Nothing is applied here: Phase B's
+``clean_apply`` applies the approved plan to the original bytes.
 """
 
 from __future__ import annotations
@@ -13,9 +14,9 @@ import asyncio
 from collections.abc import Mapping
 from typing import Any
 
-from insightfulcell.engine.cleaning.operations import Decision, Operation, Policy, needs_review
+from insightfulcell.engine.cleaning.operations import Decision, Operation, Policy
 from insightfulcell.engine.cleaning.proposals import propose
-from insightfulcell.engine.planning.language import ResolvedPlan, content_hash
+from insightfulcell.engine.planning.language import CleaningKind, ResolvedPlan, content_hash
 from insightfulcell.engine.ports import CleaningRecord
 from insightfulcell.engine.profiling import Profile
 from insightfulcell.engine.semantics import semantics_from_output
@@ -25,7 +26,7 @@ from insightfulcell.pipeline.stage import SourceFile, StageContext, StageResult
 
 class CleanPlanStage:
     name = "clean_plan"
-    version = "1"
+    version = "2"
     uses_run_inputs = True
 
     def fingerprint(self, source: SourceFile) -> Mapping[str, Any]:
@@ -49,8 +50,12 @@ class CleanPlanStage:
                     today=ctx.inputs.today,
                 )
 
-        operations = await asyncio.to_thread(compute)
-        review = needs_review(operations)
+        operations = _keep_decisions(
+            await asyncio.to_thread(compute), ctx.inputs.cleaning_decisions
+        )
+        # Every plan is reviewed (the person may add or remove questions), unless the
+        # organisation applies safe changes automatically and never pauses.
+        review = policy is not Policy.AUTO_SAFE
         dumped = [op.model_dump(mode="json") for op in operations]
         await ctx.repository.save_cleaning_plan(
             CleaningRecord(
@@ -77,3 +82,18 @@ class CleanPlanStage:
             artifacts={"cleaning_plan": key},
             needs_review=review,
         )
+
+
+def _keep_decisions(operations: list[Operation], decided: Mapping[str, bool]) -> list[Operation]:
+    """Decisions a person made before asking for a revised plan, for operations that are
+    still proposed. Personal-data exclusions stay applied whatever was sent."""
+    out = []
+    for op in operations:
+        choice = decided.get(op.id)
+        locked = op.kind is CleaningKind.EXCLUDE_COLUMN and op.decision is Decision.ACCEPTED
+        if choice is None or op.decision is not Decision.PENDING or locked:
+            out.append(op)
+            continue
+        decision = Decision.ACCEPTED if choice else Decision.REJECTED
+        out.append(op.model_copy(update={"decision": decision, "notice": "Decided by a person."}))
+    return out

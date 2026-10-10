@@ -47,4 +47,7 @@ def from_snapshot(data: dict[str, Any]) -> RunInputs:
         cleaning_policy=str(data.get("cleaning_policy") or "review_lossy"),
         annotations=dict(data.get("annotations") or {}),
         today=str(data.get("today") or "1970-01-01"),
+        cleaning_decisions={
+            str(k): bool(v) for k, v in dict(data.get("cleaning_decisions") or {}).items()
+        },
     )

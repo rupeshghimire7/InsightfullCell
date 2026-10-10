@@ -117,3 +117,31 @@ def run_ids(response: httpx.Response) -> tuple[UUID, UUID]:
     """(run id, dataset id) from a run response."""
     body = response.json()
     return UUID(body["id"]), UUID(body["dataset_id"])
+
+
+async def approve(
+    client: httpx.AsyncClient, headers: dict[str, str], run_id: str
+) -> httpx.Response:
+    """Approve a run waiting for review the way the review page does: every change still
+    waiting for a decision is applied."""
+    plan = (await client.get(f"/v1/runs/{run_id}/plan", headers=headers)).json()
+    cleaning = plan["cleaning"]
+    return await client.post(
+        f"/v1/runs/{run_id}/cleaning-plan:decide",
+        headers={**headers, "If-Match": f'"{plan["run"]["row_version"]}"'},
+        json={
+            "cleaning_revision": cleaning["revision"],
+            "decisions": [
+                {"operation_id": op["id"], "accept": True}
+                for op in cleaning["operations"]
+                if op["decision"] == "pending"
+            ],
+        },
+    )
+
+
+def never_pause(owner_sql: Callable[..., Any], org_id: UUID) -> None:
+    """The organisation applies safe changes automatically and never pauses for review."""
+    owner_sql(
+        "UPDATE app.organizations SET cleaning_policy = 'auto_safe' WHERE id = :id", id=org_id
+    )

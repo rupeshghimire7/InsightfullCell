@@ -16,14 +16,16 @@ from insightfulcell.api.container import Services
 from insightfulcell.config import Settings
 from insightfulcell.db.tenant import TenantDatabase
 from insightfulcell.domain.runs import Phase
+from insightfulcell.engine.ports import TestRecord
 from insightfulcell.llm.gateway import CallRecord
 from insightfulcell.pipeline.definition import default_pipeline
+from insightfulcell.services.analysis_store import FactsChanged, RunAnalysisStore
 from insightfulcell.services.llm_ledger import DbUsageLedger
 from insightfulcell.services.run_executor import Outcome, RunExecutor
 from insightfulcell.storage.s3 import S3ObjectStore
 from tests.conftest import Identity
 from tests.integration.conftest import AuthHeaders, OwnerSql
-from tests.integration.runs_support import RecordingQueue, create_dataset, start_run
+from tests.integration.runs_support import RecordingQueue, approve, create_dataset, start_run
 
 pytestmark = pytest.mark.integration
 
@@ -271,6 +273,227 @@ class TestDecide:
         assert (total["display_name"], total["source"]) == ("Invoice total", "person")
 
 
+class TestRevise:
+    async def test_requests_and_removals_plan_again_and_keep_decisions(
+        self,
+        client: httpx.AsyncClient,
+        auth: AuthHeaders,
+        alice: Identity,
+        executor: RunExecutor,
+        owner_sql: OwnerSql,
+    ) -> None:
+        run_id, dataset_id = await reviewed_run(client, auth(alice), executor, alice.org_id)
+        plan = await plan_of(client, auth(alice), run_id)
+        dropped = next(a for a in plan["analyses"] if "Postcode" in a["columns"])
+        body = {
+            "cleaning_revision": 1,
+            "decisions": [{"operation_id": "merge_categories:Technician", "accept": False}],
+            "removed_analyses": [dropped["id"]],
+            "requests": ["Is distance km related to wait days?", "make it nicer"],
+        }
+        url = f"/v1/runs/{run_id}/plan:revise"
+        response = await client.post(
+            url, headers={**auth(alice), "If-Match": f'"{plan["run"]["row_version"]}"'}, json=body
+        )
+        assert response.status_code == 202, response.text
+        assert (response.json()["status"], response.json()["phase"]) == ("queued", "A")
+        types = [t for (t,) in owner_sql(
+            "SELECT type FROM app.run_events WHERE run_id = :id ORDER BY seq", id=run_id
+        )]  # fmt: skip
+        assert types[-1] == "review.revision_requested"
+        prefs = owner_sql(
+            "SELECT data FROM app.dataset_preferences WHERE dataset_id = :id", id=dataset_id
+        )[0][0]
+        assert isinstance(prefs, dict)
+        assert prefs["requests"] == body["requests"]
+        assert prefs["removed_analyses"] == [dropped["id"]]
+
+        # Phase A plans again (ingest and profile are reused) and comes back for review.
+        assert await executor.execute(UUID(run_id), alice.org_id, Phase.A) is (
+            Outcome.AWAITING_REVIEW
+        )
+        reused = owner_sql(
+            "SELECT name FROM app.run_stages WHERE run_id = :id AND reused ORDER BY position",
+            id=run_id,
+        )
+        assert reused == [("ingest",), ("profile",)]
+        revised = await plan_of(client, auth(alice), run_id)
+        assert revised["revision"] == 2
+        assert [(r["status"], r["source"]) for r in revised["requests"]] == [
+            ("added", "rules"),
+            ("not_understood", "rules"),
+        ]
+        assert revised["analyses"][0]["question"] == "Is Distance km related to Wait Days?"
+        assert revised["analyses"][0]["source"] == "person"
+        assert [a["id"] for a in revised["removed_analyses"]] == [dropped["id"]]
+        assert dropped["id"] not in {a["id"] for a in revised["analyses"]}
+        cleaning = revised["cleaning"]
+        assert cleaning["revision"] == 2
+        technician = next(
+            op for op in cleaning["operations"] if op["id"] == "merge_categories:Technician"
+        )
+        assert (technician["decision"], technician["notice"]) == (
+            "rejected",
+            "Decided by a person.",
+        )
+
+    async def test_revisions_are_guarded(
+        self,
+        client: httpx.AsyncClient,
+        auth: AuthHeaders,
+        alice: Identity,
+        executor: RunExecutor,
+    ) -> None:
+        run_id, _ = await reviewed_run(client, auth(alice), executor, alice.org_id)
+        url = f"/v1/runs/{run_id}/plan:revise"
+        stale = await client.post(url, headers=auth(alice), json={"cleaning_revision": 2})
+        assert (stale.status_code, stale.json()["code"]) == (412, "cleaning-plan-changed")
+        unknown = await client.post(
+            url, headers=auth(alice), json={"cleaning_revision": 1, "removed_analyses": ["x:y"]}
+        )
+        assert (unknown.status_code, unknown.json()["code"]) == (422, "invalid-decision")
+        personal = await client.post(
+            url,
+            headers=auth(alice),
+            json={
+                "cleaning_revision": 1,
+                "decisions": [{"operation_id": "exclude_column:Email", "accept": False}],
+            },
+        )
+        assert (personal.status_code, personal.json()["code"]) == (422, "invalid-decision")
+        too_many = await client.post(
+            url, headers=auth(alice), json={"cleaning_revision": 1, "requests": ["a"] * 6}
+        )
+        assert too_many.status_code == 422
+        viewer = Identity(user_id=uuid.uuid4(), org_id=alice.org_id, role="viewer")
+        forbidden = await client.post(url, headers=auth(viewer), json={"cleaning_revision": 1})
+        assert forbidden.status_code == 403
+
+
+class TestReport:
+    async def test_the_report_cites_stored_facts_and_stays_in_its_organisation(
+        self,
+        client: httpx.AsyncClient,
+        auth: AuthHeaders,
+        alice: Identity,
+        bob: Identity,
+        executor: RunExecutor,
+        owner_sql: OwnerSql,
+    ) -> None:
+        run_id, _ = await reviewed_run(client, auth(alice), executor, alice.org_id)
+        early = await client.get(f"/v1/runs/{run_id}/report", headers=auth(alice))
+        assert (early.status_code, early.json()["code"]) == (409, "report-not-ready")
+        assert (await approve(client, auth(alice), run_id)).status_code == 200
+        assert await executor.execute(UUID(run_id), alice.org_id, Phase.B) is Outcome.SUCCEEDED
+
+        response = await client.get(f"/v1/runs/{run_id}/report", headers=auth(alice))
+        assert response.status_code == 200, response.text
+        report = response.json()
+        assert report["title"] == f"Report on {report['dataset_name']}"
+        assert report["narration"]["source"] == "engine"  # no model in tests
+        assert report["preparation"]["reviewed_by_person"] is True
+        assert report["preparation"]["rows_after"] == 23  # two exact duplicates dropped
+        facts = {f["id"]: f for f in report["facts"]}
+        assert facts
+        for section in report["sections"]:
+            for sentence in section["answer"]:
+                assert sentence["citations"]
+                assert set(sentence["citations"]) <= set(section["facts"]) <= set(facts)
+        any_fact = next(iter(facts.values()))
+        assert any_fact["columns"][0]["display_name"]
+        assert any_fact["rows"] > 0
+        assert "@" not in response.text  # personal data never reaches the report
+        # Every fact carries its evidence; every test is in the run's test log.
+        for fact in facts.values():
+            assert (fact["tier"] == "descriptive") == (fact["test"] is None)
+            assert len(fact["content_hash"]) == 64
+            if fact["test"]:
+                assert 0 <= fact["test"]["p_value"] <= fact["test"]["q_value"] <= 1
+        evidence = report["evidence"]
+        logged = owner_sql(
+            "SELECT count(*), count(*) FILTER (WHERE passed) FROM app.test_log "
+            "WHERE run_id = :id AND purpose = 'primary'",
+            id=run_id,
+        )
+        assert logged == [(evidence["tests"], evidence["reliable"])]
+        assert evidence["tests"] > 0
+        assert set(report["highlights"]) <= set(facts)
+        # The re-tested findings (on minimally cleaned data) show their check.
+        rechecked = {
+            fact_id
+            for (fact_id,) in owner_sql(
+                "SELECT fact_id FROM app.test_log WHERE run_id = :id AND purpose = 'sensitivity'",
+                id=run_id,
+            )
+        }
+        assert len(rechecked) == evidence["rechecked"]
+        assert {f for f, fact in facts.items() if fact["check"]} == rechecked
+        # Facts are searchable by the words of their statements and column names.
+        found = owner_sql(
+            "SELECT count(*) FROM app.run_facts WHERE run_id = :id "
+            "AND search @@ plainto_tsquery('english', 'rows')",
+            id=run_id,
+        )
+        assert found != [(0,)]
+
+        other = await client.get(f"/v1/runs/{run_id}/report", headers=auth(bob))
+        assert other.status_code == 404
+
+
+class TestFactStore:
+    async def test_a_retry_stores_nothing_new_and_different_facts_are_refused(
+        self,
+        client: httpx.AsyncClient,
+        auth: AuthHeaders,
+        alice: Identity,
+        services: Services,
+        owner_sql: OwnerSql,
+    ) -> None:
+        dataset_id = (await create_dataset(client, auth(alice)))["dataset"]["id"]
+        run_id = UUID((await start_run(client, auth(alice), dataset_id)).json()["id"])
+        store = RunAnalysisStore(
+            services.db, org_id=alice.org_id, run_id=run_id, dataset_id=UUID(dataset_id)
+        )
+        fact = {
+            "id": "F1",
+            "analysis_id": "relationship:a,b",
+            "kind": "correlation",
+            "columns": ["a", "b"],
+            "rows": 40,
+            "method": "Spearman rank correlation.",
+            "statement": "A and B rise together (rank correlation 0.42).",
+            "numbers": ["0.42"],
+            "tier": "strong",
+            "test": {"hypothesis": "correlation:a|b", "method": "Spearman", "effect_name":
+                     "spearman", "effect": 0.42, "ci_low": 0.1, "ci_high": 0.6,
+                     "p_value": 0.001, "q_value": 0.002},
+            "content_hash": "a" * 64,
+        }  # fmt: skip
+        test = TestRecord(
+            purpose="primary", hypothesis="correlation:a|b", method="Spearman",
+            columns=("a", "b"), n=40, effect_name="spearman", effect=0.42, ci_low=0.1,
+            ci_high=0.6, p_value=0.001, q_value=0.002, alpha=0.05, passed=True, fact_id="F1",
+        )  # fmt: skip
+        await store.save_findings([fact], [test])
+        await store.save_findings([fact], [test])  # a retry: nothing new
+        with pytest.raises(FactsChanged):
+            await store.save_findings([{**fact, "content_hash": "b" * 64}], [test])
+        assert owner_sql(
+            "SELECT count(*) FROM app.test_log WHERE run_id = :id", id=run_id
+        ) == [(1,)]  # fmt: skip
+        assert owner_sql(
+            "SELECT tier, q_value, hypothesis FROM app.run_facts WHERE run_id = :id", id=run_id
+        ) == [("strong", 0.002, "correlation:a|b")]
+        # A tested fact cannot be stored as descriptive, nor an untested one as strong.
+        with pytest.raises(sqlalchemy.exc.DBAPIError, match="run_facts_tested_tier"):
+            owner_sql(
+                "INSERT INTO app.run_facts (org_id, run_id, fact_id, analysis_id, kind, columns, "
+                "rows, method, statement, content_hash, tier) VALUES (:org, :run, 'F2', 'x', "
+                "'k', '{a}', 1, 'm', 's', :hash, 'strong')",
+                org=alice.org_id, run=run_id, hash="c" * 64,
+            )  # fmt: skip
+
+
 class TestSchemaGuarantees:
     async def test_every_tenant_table_forces_row_level_security(self, owner_sql: OwnerSql) -> None:
         rows = owner_sql(
@@ -289,10 +512,13 @@ class TestSchemaGuarantees:
             "dataset_preferences",
             "llm_calls",
             "usage_counters",
+            "run_facts",
+            "run_reports",
+            "test_log",
         } <= names
         assert [name for name, enabled, forced in rows if not (enabled and forced)] == []
 
-    async def test_plans_and_llm_calls_are_append_only(
+    async def test_plans_facts_reports_and_llm_calls_are_append_only(
         self,
         client: httpx.AsyncClient,
         auth: AuthHeaders,
@@ -300,8 +526,18 @@ class TestSchemaGuarantees:
         executor: RunExecutor,
         owner_sql: OwnerSql,
     ) -> None:
-        await reviewed_run(client, auth(alice), executor, alice.org_id)
-        for table in ("analysis_plans", "cleaning_plans", "cleaning_ops"):
+        run_id, _ = await reviewed_run(client, auth(alice), executor, alice.org_id)
+        assert (await approve(client, auth(alice), run_id)).status_code == 200
+        assert await executor.execute(UUID(run_id), alice.org_id, Phase.B) is Outcome.SUCCEEDED
+        tables = (
+            "analysis_plans",
+            "cleaning_plans",
+            "cleaning_ops",
+            "run_facts",
+            "run_reports",
+            "test_log",
+        )
+        for table in tables:
             with pytest.raises(sqlalchemy.exc.DBAPIError, match="append-only"):
                 owner_sql(f"DELETE FROM app.{table}")
 

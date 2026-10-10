@@ -1,8 +1,11 @@
 """Merge the rule plan, the model plan and a person's saved choices into the resolved plan.
 
 Precedence, per item: what a person confirmed for this dataset, then the model's validated
-proposal, then the rules. Items that touch an excluded column, or derive a feature from the
-target, are dropped. Each item records its source.
+proposal, then the rules. The model edits the engine's draft and returns a complete plan, so
+its features, analyses and charts replace the rules' (a section it left empty falls back to
+the rules); dictionary entries and the target are merged item by item. Items that touch an
+excluded column, or derive a feature from the target, are dropped. Each item records its
+source.
 """
 
 from __future__ import annotations
@@ -60,6 +63,10 @@ class Annotations(BaseModel):
     target: str | None = None
     no_target: bool = False  # the person said this dataset has no target
     disabled_features: tuple[str, ...] = ()
+    #: Planned analyses the person does not want (analysis ids).
+    removed_analyses: tuple[str, ...] = ()
+    #: What the person asked for in their own words ("compare hours across services").
+    requests: tuple[str, ...] = ()
 
 
 def resolve(  # noqa: PLR0913  (keyword-only)
@@ -79,12 +86,18 @@ def resolve(  # noqa: PLR0913  (keyword-only)
     blocked = excluded | ({target_name} if target_name else set())
 
     features = _features(
-        [*(model.features if model else []), *rules.features], blocked, annotations, model
+        (model.features if model and model.features else rules.features),
+        blocked,
+        annotations,
+        model,
     )
     analyses = _analyses(
-        [*(model.analyses if model else []), *rules.analyses], excluded, target_name, model
+        (model.analyses if model and model.analyses else rules.analyses),
+        excluded,
+        target_name,
+        model,
     )
-    charts = _charts([*(model.charts if model else []), *rules.charts], excluded, model)
+    charts = _charts((model.charts if model and model.charts else rules.charts), excluded, model)
     relevance = {r.column: r.weight for r in rules.relevance}
     if model:
         relevance.update({r.column: r.weight for r in model.relevance})
