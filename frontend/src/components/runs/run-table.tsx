@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { RunStatusBadge } from "@/components/runs/run-status-badge";
-import { formatDate } from "@/lib/format";
 import { formatDuration, stageLabel } from "@/lib/runs/status";
 import type { RunSummary } from "@/lib/runs/types";
+import { LocalTime } from "@/components/ui/local-time";
 
 /** Runs, newest first. Each row opens the run. */
 export function RunTable({
@@ -15,7 +15,12 @@ export function RunTable({
   showDataset?: boolean;
 }) {
   return (
-    <div className="overflow-x-auto rounded-panel border border-border bg-surface">
+    <div
+      role="region"
+      aria-label="Analysis runs"
+      tabIndex={0}
+      className="overflow-x-auto rounded-panel border border-border bg-surface"
+    >
       <table className="w-full border-collapse text-left text-[13px] leading-[1.35]">
         <caption className="sr-only">Analysis runs, newest first</caption>
         <thead>
@@ -50,18 +55,18 @@ export function RunTable({
                 </Link>
               </th>
               <td className="px-4 py-3">
-                <RunStatusBadge status={run.status} />
+                <RunStatusBadge status={run.status} animated={false} />
               </td>
               <td className="px-4 py-3 text-muted">
-                {run.stage ? stageLabel(run.stage).title : run.failure ? run.failure.code : "–"}
+                {run.stage ? stageLabel(run.stage).title : run.failure ? run.failure.code : "None"}
               </td>
               <td className="px-4 py-3 whitespace-nowrap text-muted">
-                <time dateTime={run.created_at}>{formatDate(run.created_at)}</time>
+                <LocalTime iso={run.created_at} />
               </td>
               <td className="tabular px-4 py-3 text-right whitespace-nowrap">
                 {run.started_at && run.finished_at
                   ? formatDuration(run.started_at, run.finished_at)
-                  : "–"}
+                  : "Not finished"}
               </td>
             </tr>
           ))}

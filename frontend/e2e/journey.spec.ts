@@ -147,9 +147,12 @@ test("sign in, upload, deduplicate, sign out", async ({ page, browser }) => {
   await page.getByRole("button", { name: "Analyse newest version" }).click();
   await expect(page).toHaveURL(/\/o\/[0-9a-f-]{36}\/runs\/[0-9a-f-]{36}$/);
   await expect(page.getByRole("heading", { name: "Analysis of Home sales 2026" })).toBeVisible();
-  await expect(page.getByText("Your file is verified and ready")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText("Your data is profiled, planned and ready to clean")).toBeVisible({
+    timeout: 90_000,
+  });
   await expect(page.getByTestId("connection")).toHaveCount(0); // finished: nothing to follow
-  await expect(page.getByText("300,000")).toBeVisible(); // rows read
+  // Rows read (ingest) and complete rows (profile): both are every row of the file.
+  await expect(page.getByText("300,000")).toHaveCount(2);
   await page.getByText(/Show the 4 columns/).click();
   await expect(page.getByText("suburb")).toBeVisible();
   await expectNoAxeViolations(page);
@@ -249,4 +252,63 @@ test("register with a password, sign out, sign back in", async ({ page }) => {
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/o\/[0-9a-f-]{36}$/);
+});
+
+test("a messy file pauses for review, and approving continues the analysis", async ({ page }) => {
+  test.setTimeout(240_000);
+  const email = `e2e-review-${Date.now()}@example.com`;
+  await page.goto("/sign-in?mode=register");
+  await page.getByLabel("Name").fill("E2E Reviewer");
+  await page.getByLabel("Email address").fill(email);
+  await page.getByLabel("Password").fill("a long enough passphrase");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByText("No datasets yet")).toBeVisible();
+
+  // Duplicates, placeholder codes, mixed date orders, personal data: see sample_data/README.
+  const messy = await readFile(
+    new URL("../../sample_data/3_complex/field_service_jobs.csv", import.meta.url),
+  );
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "Field service jobs.csv",
+    mimeType: "text/csv",
+    buffer: messy,
+  });
+  await expect(page.getByText("Saved")).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("link", { name: "Field service jobs" }).click();
+  await page.getByRole("button", { name: "Analyse newest version" }).click();
+
+  // --- the run stops at the review gate; nothing has been changed yet
+  await expect(page.getByRole("heading", { name: "Your review is needed" })).toBeVisible({
+    timeout: 90_000,
+  });
+  await expectNoAxeViolations(page);
+
+  // --- the plan: what the model would see is masked (no email address appears)
+  await page.getByRole("link", { name: "See the plan" }).click();
+  await expect(page.getByRole("heading", { name: "What the model saw" })).toBeVisible();
+  await page.getByText("Show the description exactly as it was sent").click();
+  await expect(page.locator("pre")).not.toContainText("@");
+  await expectNoAxeViolations(page);
+  await page.goBack();
+
+  // --- approving is refused until every change is decided, then continues the run
+  await page.getByRole("link", { name: "Review changes" }).click();
+  await expect(page.getByRole("heading", { name: "Needs your decision" })).toBeVisible();
+  await expectNoAxeViolations(page);
+  await page.getByRole("button", { name: "Approve and continue" }).click();
+  await expect(page.getByText("Decide every change first.")).toBeVisible();
+  const groups = page.getByRole("radiogroup");
+  const count = await groups.count();
+  expect(count).toBeGreaterThan(0);
+  for (let i = 0; i < count; i += 1) {
+    await groups.nth(i).getByText("Apply", { exact: true }).click();
+  }
+  await expect(page.getByText(`${count} of ${count} decided`)).toBeVisible();
+  await page.getByRole("button", { name: "Approve and continue" }).click();
+
+  await expect(page).toHaveURL(/\/runs\/[0-9a-f-]{36}$/);
+  await expect(page.getByText("Your data is profiled, planned and ready to clean")).toBeVisible({
+    timeout: 90_000,
+  });
+  await expectNoAxeViolations(page);
 });

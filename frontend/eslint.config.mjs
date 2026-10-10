@@ -19,6 +19,9 @@ export default defineConfig([
     files: ["**/*.{ts,tsx}"],
     rules: {
       ...jsxA11y.flatConfigs.recommended.rules,
+      // A scrolling container must be reachable by keyboard (axe: scrollable-region-focusable),
+      // so a labelled role="region" may take tabIndex={0}.
+      "jsx-a11y/no-noninteractive-tabindex": ["error", { tags: [], roles: ["tabpanel", "region"] }],
       "@typescript-eslint/consistent-type-imports": ["error", { fixStyle: "inline-type-imports" }],
       "@typescript-eslint/no-floating-promises": "off",
       "no-console": ["error", { allow: ["warn", "error"] }],

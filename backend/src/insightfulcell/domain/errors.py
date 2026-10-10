@@ -189,6 +189,36 @@ class RunChanged(DomainError):
     title = "The run changed since you last loaded it"
 
 
+# --------------------------------------------------------------------------- plans
+
+
+class PlanNotReady(DomainError):
+    """The run has not produced its analysis plan yet."""
+
+    kind = ErrorKind.CONFLICT
+    code = "plan-not-ready"
+    title = "The analysis plan is not ready yet"
+
+
+class CleaningPlanChanged(DomainError):
+    """The decision names a cleaning plan revision that is no longer the latest."""
+
+    kind = ErrorKind.PRECONDITION_FAILED
+    code = "cleaning-plan-changed"
+    title = "The cleaning plan changed since you loaded it"
+
+
+class DecisionsIncomplete(DomainError):
+    kind = ErrorKind.UNPROCESSABLE
+    code = "decisions-incomplete"
+    title = "Some changes still need a decision"
+
+
+class InvalidDecision(DomainError):
+    code = "invalid-decision"
+    title = "The decision is not valid"
+
+
 # --------------------------------------------------------------------------- ingestion
 
 

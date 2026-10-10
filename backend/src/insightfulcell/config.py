@@ -6,6 +6,7 @@ misconfigured deployment fails at start-up instead of running open.
 
 from __future__ import annotations
 
+import json
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -72,6 +73,31 @@ class Settings(BaseSettings):
     worker_scratch_dir: Path | None = None  # default: the system temp directory
     idempotency_key_ttl_hours: int = Field(default=24, ge=1)
 
+    # --- LLM gateway (ADR-031). One provider at a time; without its API key the model is off
+    # and every run uses the rule-based planner (a complete, correct fallback).
+    llm_provider: Literal["gemini", "openai", "anthropic", "deepseek", "none"] = "gemini"
+    # Override the provider's default model for each tier ("strong" plans and narrates, "fast"
+    # routes questions and judges). Defaults live in ``llm/providers/__init__.py``.
+    llm_model_strong: str | None = None
+    llm_model_fast: str | None = None
+    gemini_api_key: SecretStr | None = None
+    openai_api_key: SecretStr | None = None
+    anthropic_api_key: SecretStr | None = None
+    deepseek_api_key: SecretStr | None = None
+    deepseek_base_url: str = "https://api.deepseek.com"
+    llm_timeout_seconds: float = Field(default=90.0, gt=0, le=600)
+    llm_max_attempts: int = Field(default=3, ge=1, le=5)
+    llm_max_output_tokens: int = Field(default=16_000, ge=1_000, le=64_000)
+    llm_run_input_token_budget: int = Field(default=120_000, ge=1_000)
+    llm_breaker_failures: int = Field(default=5, ge=1, le=100)
+    llm_breaker_open_seconds: float = Field(default=60.0, gt=0, le=3_600)
+    # Prices (USD per million input / output tokens) for cost accounting, as JSON:
+    # {"model-id": [input, output]}. Merged over the built-in table; unknown models cost null.
+    llm_prices_json: str = "{}"
+    # Size of the masked schema card sent to the planner (estimated tokens). Wide tables are
+    # summarised in tiers to fit, never truncated silently.
+    schema_card_token_budget: int = Field(default=9_000, ge=1_000, le=60_000)
+
     @field_validator("database_url")
     @classmethod
     def _async_driver(cls, value: str) -> str:
@@ -79,9 +105,40 @@ class Settings(BaseSettings):
             raise ValueError("DATABASE_URL must use the 'postgresql+psycopg://' scheme")
         return value
 
+    @field_validator("llm_prices_json")
+    @classmethod
+    def _prices(cls, value: str) -> str:
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError("LLM_PRICES_JSON must be JSON") from exc
+        if not isinstance(parsed, dict) or not all(
+            isinstance(v, list)
+            and len(v) == 2
+            and all(isinstance(p, int | float) and p >= 0 for p in v)
+            for v in parsed.values()
+        ):
+            raise ValueError('LLM_PRICES_JSON must look like {"model": [input, output]}')
+        return value
+
+    @property
+    def llm_prices(self) -> dict[str, tuple[float, float]]:
+        return {k: (float(v[0]), float(v[1])) for k, v in json.loads(self.llm_prices_json).items()}
+
     @property
     def events_origins(self) -> list[str]:
         return [o.strip().rstrip("/") for o in self.events_allowed_origins.split(",") if o.strip()]
+
+    @property
+    def llm_api_key(self) -> SecretStr | None:
+        """The key of the configured provider, or ``None`` (the model is then off)."""
+        return {
+            "gemini": self.gemini_api_key,
+            "openai": self.openai_api_key,
+            "anthropic": self.anthropic_api_key,
+            "deepseek": self.deepseek_api_key,
+            "none": None,
+        }[self.llm_provider]
 
     @property
     def psycopg_conninfo(self) -> str:

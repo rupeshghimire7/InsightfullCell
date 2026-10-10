@@ -1,10 +1,10 @@
 """Which stages run in which phase.
 
-A run executes as two jobs split at the review gate (Phase A ends there, Phase B ends with the
-report). Stages are added here as they are built: this release ships ``ingest``; profile,
-understand and clean_plan (Phase A) and the eleven Phase B stages arrive in later phases. A
-Phase B with no stages yet still runs as its own job, so the queue, checkpoints and events are
-exercised end to end.
+A run executes as two jobs split at the review gate. Phase A (this release) is complete:
+``ingest`` -> ``profile`` -> ``understand`` -> ``clean_plan``, ending at the review gate when a
+cleaning change needs a person. Phase B's eleven stages (``clean_apply`` ... ``assemble``)
+arrive in Phase 4 onwards; until then Phase B runs as its own job with no stages, so the
+queue, checkpoints and events are exercised end to end.
 """
 
 from __future__ import annotations
@@ -16,8 +16,11 @@ from dataclasses import dataclass
 from insightfulcell import __version__
 from insightfulcell.domain.runs import Phase
 from insightfulcell.ingestion.limits import IngestLimits
+from insightfulcell.pipeline.clean_plan import CleanPlanStage
 from insightfulcell.pipeline.ingest import IngestStage
+from insightfulcell.pipeline.profile import ProfileStage
 from insightfulcell.pipeline.stage import Stage
+from insightfulcell.pipeline.understand import UnderstandStage
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,5 +58,18 @@ class Pipeline:
         return f"{__version__}+{hashlib.sha256(stages.encode()).hexdigest()[:12]}"
 
 
-def default_pipeline(limits: IngestLimits | None = None) -> Pipeline:
-    return Pipeline(phase_a=(IngestStage(limits),), phase_b=())
+def default_pipeline(
+    limits: IngestLimits | None = None,
+    *,
+    card_token_budget: int = 9_000,
+    model_identity: tuple[str, str] | None = None,
+) -> Pipeline:
+    return Pipeline(
+        phase_a=(
+            IngestStage(limits),
+            ProfileStage(),
+            UnderstandStage(card_token_budget=card_token_budget, model_identity=model_identity),
+            CleanPlanStage(),
+        ),
+        phase_b=(),
+    )

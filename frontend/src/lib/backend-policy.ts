@@ -38,6 +38,7 @@ export const FORWARDED_RESPONSE_HEADERS = [
   "retry-after",
   "etag",
   "location",
+  "content-disposition",
 ] as const;
 
 /** Mutations must come from this app's own pages (defence in depth next to SameSite=Lax). */

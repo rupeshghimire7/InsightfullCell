@@ -38,7 +38,10 @@ class TestSubmit:
         assert response.headers["location"] == f"/v1/runs/{body['id']}"
         assert response.headers["etag"] == f'"{body["row_version"]}"'
         assert [(s["name"], s["status"], s["phase"]) for s in body["stages"]] == [
-            ("ingest", "pending", "A")
+            ("ingest", "pending", "A"),
+            ("profile", "pending", "A"),
+            ("understand", "pending", "A"),
+            ("clean_plan", "pending", "A"),
         ]
         assert body["last_event_seq"] == 1
         assert body["failure"] is None
@@ -340,7 +343,7 @@ class TestRetry:
         assert body["failure"] is None
         assert body["finished_at"] is None
         assert body["attempts"] == 0
-        assert [s["status"] for s in body["stages"]] == ["pending"]
+        assert {s["status"] for s in body["stages"]} == {"pending"}
         jobs = owner_sql("SELECT args->>'phase', status FROM procrastinate.procrastinate_jobs")
         assert jobs == [("A", "todo")]
 

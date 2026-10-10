@@ -105,15 +105,20 @@ class TestReplay:
         assert response.headers["cache-control"] == "no-store"
         assert response.text.startswith("retry: 3000\n\n")
         messages, _ = parse_stream(response.text)
-        assert [m.id for m in messages] == list(range(1, 8))
+        assert [m.id for m in messages] == list(range(1, 14))
         assert [m.event for m in messages] == [
             "run.queued",
             "run.started",
-            "stage.started",
-            "stage.completed",
+            *["stage.started", "stage.completed"] * 4,  # ingest, profile, understand, clean_plan
             "phase.completed",
             "phase.completed",
             "run.succeeded",
+        ]
+        assert [m.data["stage"] for m in messages[3:10:2] if m.data] == [
+            "ingest",
+            "profile",
+            "understand",
+            "clean_plan",
         ]
         completed = messages[3].data
         assert completed is not None
@@ -134,10 +139,10 @@ class TestReplay:
         run_id = await finished_run(client, auth(alice), executor, alice.org_id)
         response = await client.get(
             f"/v1/runs/{run_id}/events",
-            headers={**bearer(make_ticket(alice, run_id)), "Last-Event-ID": "5"},
+            headers={**bearer(make_ticket(alice, run_id)), "Last-Event-ID": "11"},
         )
         messages, _ = parse_stream(response.text)
-        assert [m.id for m in messages] == [6, 7]
+        assert [m.id for m in messages] == [12, 13]
 
 
 class TestTickets:
@@ -306,8 +311,7 @@ async def test_a_live_stream_receives_events_as_the_worker_writes_them(
     assert received == [
         "run.queued",
         "run.started",
-        "stage.started",
-        "stage.completed",
+        *["stage.started", "stage.completed"] * 4,  # ingest, profile, understand, clean_plan
         "phase.completed",
         "phase.completed",
         "run.succeeded",

@@ -6,8 +6,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { ProblemAlert } from "@/components/ui/problem-alert";
 import { serverApi } from "@/lib/backend";
 import { isUuid } from "@/lib/ids";
-import { formatDate } from "@/lib/format";
 import { load } from "@/lib/load";
+import { LocalTime } from "@/components/ui/local-time";
 
 export const metadata: Metadata = { title: "Analysis" };
 
@@ -46,7 +46,7 @@ export default async function RunPage({
         back={back}
         meta={
           <span className="text-muted">
-            Requested <time dateTime={run.created_at}>{formatDate(run.created_at)}</time>
+            Requested <LocalTime iso={run.created_at} />
             <span className="mx-2" aria-hidden="true">
               ·
             </span>

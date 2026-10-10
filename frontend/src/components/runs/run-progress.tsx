@@ -5,15 +5,24 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { RunStatusBadge } from "@/components/runs/run-status-badge";
 import { StageList } from "@/components/runs/stage-list";
 import { Button } from "@/components/ui/button";
-import { Info, Pulse, SealCheck, WifiSlash } from "@/components/ui/icons";
+import {
+  Compass,
+  DownloadSimple,
+  Hourglass,
+  Info,
+  Pulse,
+  SealCheck,
+  WifiSlash,
+} from "@/components/ui/icons";
+import { plansApi } from "@/lib/plans/api";
 import { ProblemAlert } from "@/components/ui/problem-alert";
-import { formatDate } from "@/lib/format";
 import { describeError, ProblemError, type Problem } from "@/lib/problem";
 import { runsApi, type RunsApi } from "@/lib/runs/api";
 import { applyEvent, initialView, REFRESH_AFTER, type RunView } from "@/lib/runs/reducer";
 import { followRunEvents, type FollowOptions, type StreamResult } from "@/lib/runs/sse";
 import { CANCELLABLE, formatDuration, isTerminal, stageLabel } from "@/lib/runs/status";
 import type { Run, RunEvent } from "@/lib/runs/types";
+import { LocalTime } from "@/components/ui/local-time";
 
 /** How live updates reach the page while the run is active (nothing is shown once it ends). */
 type Connection = "connecting" | "live" | "reconnecting" | "polling";
@@ -165,6 +174,10 @@ export function RunProgress({
     }
   }
 
+  const planned = run.stages.some((s) => s.name === "understand" && s.status === "succeeded");
+  const cleanPlan = run.stages.find((s) => s.name === "clean_plan");
+  const waiting = Number(cleanPlan?.output?.waiting_for_review ?? 0);
+  const planHref = `/o/${orgId}/runs/${runId}/plan`;
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <div className="min-w-0 space-y-6">
@@ -190,10 +203,43 @@ export function RunProgress({
         ) : null}
 
         {run.status === "awaiting_review" ? (
-          <p className="flex items-start gap-2 rounded-panel border border-warning/40 bg-warning/10 p-3 text-sm">
-            <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning" />
-            This analysis is paused until someone decides on its proposed cleaning changes.
-          </p>
+          <section
+            aria-labelledby="review-title"
+            className="enter flex flex-col gap-4 rounded-panel border border-warning/45 bg-warning/10 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
+          >
+            <div className="flex items-start gap-3">
+              <Hourglass
+                aria-hidden="true"
+                weight="fill"
+                className="mt-0.5 size-5 shrink-0 text-warning"
+              />
+              <div>
+                <h2 id="review-title" className="font-semibold">
+                  Your review is needed
+                </h2>
+                <p className="mt-1 max-w-[52ch] text-sm text-muted">
+                  {waiting === 1
+                    ? "1 cleaning change could remove or replace values."
+                    : `${waiting > 0 ? waiting : "Some"} cleaning changes could remove or replace values.`}{" "}
+                  Nothing has been changed yet.
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Link
+                href={`/o/${orgId}/runs/${runId}/review`}
+                className="press inline-flex min-h-9 items-center justify-center rounded-control border border-transparent bg-accent px-4 text-sm font-medium text-accent-contrast hover:brightness-110 pointer-coarse:min-h-11"
+              >
+                Review changes
+              </Link>
+              <Link
+                href={planHref}
+                className="press inline-flex min-h-9 items-center justify-center rounded-control border border-border bg-surface px-4 text-sm font-medium hover:bg-bg pointer-coarse:min-h-11"
+              >
+                See the plan
+              </Link>
+            </div>
+          </section>
         ) : null}
 
         {run.status === "succeeded" ? (
@@ -203,12 +249,33 @@ export function RunProgress({
               weight="fill"
               className="mt-0.5 size-5 shrink-0 text-success"
             />
-            <div>
-              <p className="font-semibold">Your file is verified and ready</p>
-              <p className="mt-1 text-muted">
-                The stored bytes match your upload, and every row was read into typed columns.
-                Column profiles, cleaning and findings are not available in this release yet.
-              </p>
+            <div className="space-y-3">
+              <div>
+                <p className="font-semibold">Your data is profiled, planned and ready to clean</p>
+                <p className="mt-1 max-w-[60ch] text-muted">
+                  Every column is described, the cleaning plan is approved, and the questions to
+                  answer are chosen. Findings, charts and the report arrive with the next release.
+                </p>
+              </div>
+              {planned ? (
+                <div className="flex flex-wrap gap-x-5 gap-y-2">
+                  <Link
+                    href={planHref}
+                    className="inline-flex items-center gap-1.5 font-medium text-accent underline underline-offset-2"
+                  >
+                    <Compass aria-hidden="true" className="size-4" />
+                    Open the plan
+                  </Link>
+                  <a
+                    href={plansApi.recipeUrl(runId)}
+                    download
+                    className="inline-flex items-center gap-1.5 font-medium text-accent underline underline-offset-2"
+                  >
+                    <DownloadSimple aria-hidden="true" className="size-4" />
+                    Download recipe
+                  </a>
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -247,11 +314,7 @@ export function RunProgress({
             </Link>
           </Detail>
           <Detail label="Started">
-            {run.started_at ? (
-              <time dateTime={run.started_at}>{formatDate(run.started_at)}</time>
-            ) : (
-              "Not yet"
-            )}
+            {run.started_at ? <LocalTime iso={run.started_at} /> : "Not yet"}
           </Detail>
           <Detail label={run.finished_at ? "Took" : "Running for"}>
             <Elapsed
@@ -334,6 +397,6 @@ function Elapsed({
     const timer = setInterval(() => setNow(Date.now()), 1_000);
     return () => clearInterval(timer);
   }, [ticking]);
-  if (!from) return <span className="text-muted">–</span>;
+  if (!from) return <span className="text-muted">Not started</span>;
   return <span className="tabular">{formatDuration(from, to ?? now)}</span>;
 }

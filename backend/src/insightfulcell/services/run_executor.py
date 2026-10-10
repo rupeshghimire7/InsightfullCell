@@ -41,10 +41,12 @@ from insightfulcell.db.models import DatasetVersion, Organization, Run, RunEvent
 from insightfulcell.db.tenant import TenantDatabase
 from insightfulcell.domain.errors import DomainError, ErrorKind
 from insightfulcell.domain.runs import EventType, Phase, Queue, RunStatus, StageStatus
+from insightfulcell.engine.ports import LanguageModel, NoModel
 from insightfulcell.ingestion.formats import FileFormat
 from insightfulcell.logging_config import exception_summary
 from insightfulcell.pipeline.definition import Pipeline
 from insightfulcell.pipeline.stage import (
+    RunInputs,
     SourceFile,
     Stage,
     StageContext,
@@ -52,7 +54,8 @@ from insightfulcell.pipeline.stage import (
     checkpoint_key,
 )
 from insightfulcell.queue.port import JobQueue, PhaseJob
-from insightfulcell.services import run_store
+from insightfulcell.services import run_inputs, run_store
+from insightfulcell.services.analysis_store import RunAnalysisStore
 from insightfulcell.storage.port import ObjectNotFoundError, ObjectStore
 
 logger = logging.getLogger(__name__)
@@ -87,10 +90,12 @@ class Failure:
 class _Claim:
     run_id: UUID
     org_id: UUID
+    dataset_id: UUID
     phase: Phase
     queue: Queue
     attempts: int
     source: SourceFile
+    inputs: RunInputs
     stages: dict[str, RunStage] = field(default_factory=dict)
 
 
@@ -126,19 +131,22 @@ def internal_failure(stage: str | None) -> Failure:
 
 
 class RunExecutor:
-    def __init__(
+    def __init__(  # noqa: PLR0913  (collaborators)
         self,
         db: TenantDatabase,
         store: ObjectStore,
         queue: JobQueue,
         pipeline: Pipeline,
         settings: Settings,
+        *,
+        model: LanguageModel | None = None,
     ) -> None:
         self._db = db
         self._store = store
         self._queue = queue
         self._pipeline = pipeline
         self._settings = settings
+        self._model: LanguageModel = model or NoModel()
 
     # ================================================================== entry point
 
@@ -214,9 +222,19 @@ class RunExecutor:
                 # the stages in between): its rows cannot record this pipeline's work.
                 await self._fail_in(session, org_id, run_id, None, PIPELINE_CHANGED)
                 return Outcome.FAILED
+            inputs = run.inputs
+            if inputs is None:  # a run created before inputs were snapshotted
+                inputs = await run_inputs.snapshot(
+                    session, org_id=org_id, dataset_id=run.dataset_id, created_at=run.created_at
+                )
+                await session.execute(
+                    update(Run).where(Run.id == run_id, Run.org_id == org_id).values(inputs=inputs)
+                )
             return _Claim(
                 run_id=run_id,
                 org_id=org_id,
+                dataset_id=run.dataset_id,
+                inputs=run_inputs.from_snapshot(inputs),
                 phase=phase,
                 queue=Queue(run.queue),
                 attempts=attempts,
@@ -279,7 +297,7 @@ class RunExecutor:
             if planned.phase is Phase.B and claim.phase is Phase.A:
                 break
             stage = planned.stage
-            key = checkpoint_key(stage, claim.source, keys)
+            key = checkpoint_key(stage, claim.source, keys, claim.inputs)
             row = claim.stages.get(stage.name)
             done = row is not None and row.status == StageStatus.SUCCEEDED.value
             if planned.phase is not claim.phase:
@@ -314,6 +332,14 @@ class RunExecutor:
                         store=self._store,
                         checkpoint_key=key,
                         upstream=dict(upstream),
+                        inputs=claim.inputs,
+                        repository=RunAnalysisStore(
+                            self._db,
+                            org_id=claim.org_id,
+                            run_id=claim.run_id,
+                            dataset_id=claim.dataset_id,
+                        ),
+                        model=self._model,
                     )
                 )
         except asyncio.CancelledError:

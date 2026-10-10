@@ -16,7 +16,8 @@ export interface IngestOutput {
   format?: string;
   rows?: number;
   column_count?: number;
-  columns?: { name: string; type: string }[];
+  columns?: { name: string; type: string; meaning?: string; personal_data?: string | null }[];
+  personal_data_columns?: number;
   source_bytes?: number;
   parquet_bytes?: number;
   warnings?: string[];
@@ -27,4 +28,35 @@ export interface EventTicket {
   ticket: string;
   url: string;
   expires_at: string;
+}
+
+/** What the profile stage reports. */
+export interface ProfileOutput {
+  rows?: number;
+  duplicate_rows?: number;
+  complete_rows?: number;
+  columns_with_issues?: number;
+  personal_data_columns?: number;
+}
+
+/** What the understand stage reports. */
+export interface UnderstandOutput {
+  plan_source?: "model" | "cache" | "rules";
+  provider?: string | null;
+  model?: string | null;
+  fallback_reason?: string | null;
+  target?: string | null;
+  analyses?: number;
+  charts?: number;
+  features?: number;
+  rejected?: number;
+  summary?: string;
+}
+
+/** What the clean_plan stage reports. */
+export interface CleanPlanOutput {
+  operations?: number;
+  applied_automatically?: number;
+  waiting_for_review?: number;
+  not_applied?: number;
 }

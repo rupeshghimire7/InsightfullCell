@@ -41,7 +41,22 @@ const STAGE_LABEL: Record<string, { title: string; description: string }> = {
   ingest: {
     title: "Verify and read the file",
     description:
-      "Checks the stored bytes match what you uploaded, then reads every row into typed columns.",
+      "Checks the stored bytes match what you uploaded, reads every row into typed columns, and finds personal data to mask.",
+  },
+  profile: {
+    title: "Profile every column",
+    description:
+      "Counts missing values, duplicates, outliers and placeholder codes, column by column.",
+  },
+  understand: {
+    title: "Plan the analysis",
+    description:
+      "Describes the table without any rows or personal values, asks the planning model what is worth computing, and checks every suggestion.",
+  },
+  clean_plan: {
+    title: "Propose cleaning",
+    description:
+      "Lists each change with the rows it affects. Changes that could remove data wait for you.",
   },
 };
 

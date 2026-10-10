@@ -9,9 +9,10 @@ import { ListChecks } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/page-header";
 import { ProblemAlert } from "@/components/ui/problem-alert";
 import { serverApi } from "@/lib/backend";
-import { formatBytes, formatDate } from "@/lib/format";
+import { formatBytes } from "@/lib/format";
 import { load } from "@/lib/load";
 import { isUuid } from "@/lib/ids";
+import { LocalTime } from "@/components/ui/local-time";
 
 export const metadata: Metadata = { title: "Dataset" };
 
@@ -55,7 +56,13 @@ export default async function DatasetPage({
       <PageHeader
         title={info.name}
         back={back}
-        description={`Added ${formatDate(info.created_at)}. ${versions.length === 1 ? "1 version" : `${versions.length} versions`}; analyses use the newest.`}
+        description={
+          <>
+            Added <LocalTime iso={info.created_at} />.{" "}
+            {versions.length === 1 ? "1 version" : `${versions.length} versions`}; analyses use the
+            newest.
+          </>
+        }
         actions={
           latest ? (
             <StartRunButton orgId={org} datasetId={info.id} label="Analyse newest version" />
@@ -104,7 +111,7 @@ export default async function DatasetPage({
                 </div>
                 <p className="mt-1 text-muted">
                   {FORMAT_LABEL[version.format] ?? version.format}, uploaded{" "}
-                  <time dateTime={version.created_at}>{formatDate(version.created_at)}</time>
+                  <LocalTime iso={version.created_at} />
                 </p>
                 <p className="mt-1 truncate font-mono text-xs text-muted" title={version.sha256}>
                   SHA-256 {version.sha256.slice(0, 16)}…

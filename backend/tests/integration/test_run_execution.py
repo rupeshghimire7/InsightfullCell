@@ -130,15 +130,41 @@ class TestRealIngest:
         row = run_row(owner_sql, run_id)
         assert (row["status"], row["phase"], row["stage"]) == ("succeeded", "B", None)
         assert row["finished_at"] is not None
+        phase_a = [
+            (kind, stage)
+            for stage in ("ingest", "profile", "understand", "clean_plan")
+            for kind in ("stage.started", "stage.completed")
+        ]
         assert events(owner_sql, run_id) == [
             ("run.queued", None),
             ("run.started", None),
-            ("stage.started", "ingest"),
-            ("stage.completed", "ingest"),
+            *phase_a,
             ("phase.completed", None),
             ("phase.completed", None),
             ("run.succeeded", None),
         ]
+        # Phase A recorded the run's columns, a plan (rules: no model in tests) and a cleaning
+        # plan that needed no review (a clean file: nothing lossy to decide).
+        columns = owner_sql(
+            "SELECT name, meaning, personal_data FROM app.run_columns WHERE run_id = :id "
+            "ORDER BY position",
+            id=run_id,
+        )
+        assert columns == [
+            ("id", "identifier", None),
+            ("name", "identifier", None),  # unique codes; a bare "name" is a person only by value
+            ("amount", "currency", None),
+        ]
+        plans = owner_sql(
+            "SELECT kind, revision, source, fallback_reason FROM app.analysis_plans "
+            "WHERE run_id = :id",
+            id=run_id,
+        )
+        assert plans == [("resolved", 1, "rules", "disabled")]
+        assert owner_sql(
+            "SELECT revision, policy, status FROM app.cleaning_plans WHERE run_id = :id",
+            id=run_id,
+        ) == [(1, "review_lossy", "approved")]
 
     async def test_bytes_that_do_not_match_the_recorded_checksum_fail_the_run(
         self,

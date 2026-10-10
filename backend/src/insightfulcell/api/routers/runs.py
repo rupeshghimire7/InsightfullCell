@@ -16,7 +16,7 @@ from typing import Annotated, Any, Final
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, Response, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from insightfulcell.api.container import Services
@@ -27,7 +27,12 @@ from insightfulcell.api.problems import (
     problem_response,
 )
 from insightfulcell.api.schemas import (
+    CleaningOperationOut,
+    CleaningPlanOut,
     CreateRunRequest,
+    DecideCleaningRequest,
+    PlanColumnOut,
+    PlanOut,
     RunEventOut,
     RunOut,
     RunPageOut,
@@ -37,8 +42,11 @@ from insightfulcell.api.schemas import (
 from insightfulcell.auth.tokens import EventTicket
 from insightfulcell.domain.errors import DomainError, RunChanged, RunNotFound, Unauthenticated
 from insightfulcell.domain.runs import RunStatus
+from insightfulcell.engine.cleaning.operations import CATALOGUE
+from insightfulcell.engine.planning.language import CleaningKind
 from insightfulcell.services.datasets import MAX_PAGE_SIZE
 from insightfulcell.services.dto import RunDetail, RunEventInfo
+from insightfulcell.services.plans import ColumnEdit, PlanDecision, PlanView
 from insightfulcell.services.run_store import EVENT_BATCH
 
 logger = logging.getLogger(__name__)
@@ -178,6 +186,132 @@ async def retry_run(
     detail = await services.runs.retry_run(principal, run_id, if_match=parse_if_match(if_match))
     response.headers["ETag"] = etag(detail.run.row_version)
     return to_run_out(detail)
+
+
+# --------------------------------------------------------------------------- plans
+
+
+def to_plan_out(view: PlanView) -> PlanOut:
+    plan = view.plan
+    cleaning = None
+    if view.cleaning is not None:
+        cleaning = CleaningPlanOut(
+            revision=view.cleaning.revision,
+            policy=view.cleaning.policy,
+            status=view.cleaning.status,
+            decided_by_you=view.cleaning.decided_by_you,
+            decided_at=view.cleaning.decided_at,
+            operations=[
+                CleaningOperationOut.model_validate(
+                    {**op, "label": CATALOGUE[CleaningKind(op["kind"])].label}
+                )
+                for op in view.cleaning.operations
+            ],
+        )
+    return PlanOut.model_validate(
+        {
+            "run": to_run_out(view.run),
+            "revision": view.revision,
+            "source": view.source,
+            "provider": view.provider,
+            "model": view.model,
+            "prompt_version": view.prompt_version,
+            "fallback_reason": view.fallback_reason,
+            "dataset_summary": plan.get("dataset_summary", ""),
+            "domain": plan.get("domain", ""),
+            "grain": plan.get("grain", ""),
+            "dictionary": plan.get("dictionary", []),
+            "target": plan.get("target"),
+            "features": plan.get("features", []),
+            "analyses": plan.get("analyses", []),
+            "charts": plan.get("charts", []),
+            "relevance": plan.get("relevance", {}),
+            "rejected": view.rejected,
+            "model_input": view.model_input,
+            "columns": [PlanColumnOut.model_validate(c) for c in view.columns],
+            "cleaning": cleaning,
+        }
+    )
+
+
+@router.get(
+    "/{run_id}/plan",
+    response_model=PlanOut,
+    summary="The run's analysis plan, columns and cleaning plan",
+    responses={409: problem_response()},
+)
+async def get_plan(
+    run_id: UUID, principal: CurrentPrincipal, services: ServicesDep, response: Response
+) -> PlanOut:
+    """Available once the 'understand' step has finished (409 ``plan-not-ready`` before)."""
+    view = await services.plans.get_plan(principal, run_id)
+    response.headers["ETag"] = etag(view.run.run.row_version)
+    return to_plan_out(view)
+
+
+@router.post(
+    "/{run_id}/cleaning-plan:decide",
+    response_model=RunOut,
+    summary="Accept or reject each cleaning change and approve the plan",
+    responses={409: problem_response(), 412: problem_response()},
+)
+async def decide_cleaning_plan(  # noqa: PLR0913, PLR0917  (FastAPI dependencies)
+    run_id: UUID,
+    body: DecideCleaningRequest,
+    principal: CurrentPrincipal,
+    services: ServicesDep,
+    response: Response,
+    if_match: IfMatch = None,
+) -> RunOut:
+    """Every change waiting for a decision must be accepted or rejected. The decision is
+    recorded as a new cleaning plan revision (who and when), the person's names, units,
+    exclusions, target and features are saved for the dataset's next runs, and the run
+    continues. ``412`` when the run or its cleaning plan changed since you loaded them."""
+    detail = await services.plans.decide(
+        principal,
+        run_id,
+        PlanDecision(
+            cleaning_revision=body.cleaning_revision,
+            decisions={d.operation_id: d.accept for d in body.decisions},
+            columns=[
+                ColumnEdit(
+                    name=c.name, display_name=c.display_name, unit=c.unit, excluded=c.excluded
+                )
+                for c in body.columns
+            ],
+            target=body.target,
+            no_target=body.no_target,
+            disabled_features=body.disabled_features,
+        ),
+        if_match=parse_if_match(if_match),
+    )
+    response.headers["ETag"] = etag(detail.run.row_version)
+    return to_run_out(detail)
+
+
+@router.get(
+    "/{run_id}/recipe",
+    response_class=PlainTextResponse,
+    summary="Download the run's Python recipe (cleaning, features, charts)",
+    responses={
+        200: {"content": {"text/x-python": {}}, "description": "A runnable Python script."},
+        409: problem_response(),
+    },
+)
+async def get_recipe(
+    run_id: UUID, principal: CurrentPrincipal, services: ServicesDep
+) -> PlainTextResponse:
+    """The approved plan as code: load the original file, clean it, add features, draw the
+    charts. Generated from the stored plan; nothing in it was written by a model."""
+    filename, source = await services.plans.recipe(principal, run_id)
+    return PlainTextResponse(
+        source,
+        media_type="text/x-python; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 # --------------------------------------------------------------------------- live progress

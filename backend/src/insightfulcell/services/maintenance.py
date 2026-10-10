@@ -168,14 +168,19 @@ class Maintenance:
     # ------------------------------------------------------------------ housekeeping
 
     async def ensure_event_partitions(self) -> int:
+        """Monthly partitions ahead of time for the partitioned logs (run events, LLM calls)."""
+        created = 0
         async with self._db.unscoped_transaction() as session:
-            created = (
-                await session.execute(
-                    text("SELECT app.ensure_run_event_partitions(:months)"),
-                    {"months": EVENT_PARTITION_MONTHS_AHEAD},
+            for function in ("ensure_run_event_partitions", "ensure_llm_call_partitions"):
+                created += int(
+                    (
+                        await session.execute(
+                            text(f"SELECT app.{function}(:months)"),
+                            {"months": EVENT_PARTITION_MONTHS_AHEAD},
+                        )
+                    ).scalar_one()
                 )
-            ).scalar_one()
-        return int(created)
+        return created
 
     async def expire_abandoned_uploads(self) -> int:
         """Pending uploads past their expiry: mark them expired and abort their multipart

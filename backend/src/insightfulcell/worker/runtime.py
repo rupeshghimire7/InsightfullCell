@@ -14,8 +14,13 @@ from insightfulcell.config import Settings
 from insightfulcell.db.engine import create_engine
 from insightfulcell.db.tenant import TenantDatabase
 from insightfulcell.domain.runs import Queue
+from insightfulcell.engine.ports import LanguageModel
+from insightfulcell.llm.breaker import CircuitBreaker
+from insightfulcell.llm.gateway import GatewayConfig, LLMGateway
+from insightfulcell.llm.providers import build_transport, models_for
 from insightfulcell.pipeline.definition import Pipeline, default_pipeline
 from insightfulcell.queue.procrastinate_queue import ProcrastinateQueue, create_procrastinate_app
+from insightfulcell.services.llm_ledger import DbUsageLedger
 from insightfulcell.services.maintenance import Maintenance
 from insightfulcell.services.run_executor import RunExecutor
 from insightfulcell.storage.port import ObjectStore
@@ -78,12 +83,37 @@ class WorkerRuntime:
         )
 
 
+def build_gateway(settings: Settings, db: TenantDatabase) -> LLMGateway:
+    """The LLM gateway for the configured provider (off when it has no API key)."""
+    transport = build_transport(settings)
+    if transport is None:
+        logger.info(
+            "language model off: runs plan with rules", extra={"provider": settings.llm_provider}
+        )
+    return LLMGateway(
+        transport,
+        DbUsageLedger(db),
+        GatewayConfig(
+            models=models_for(settings),
+            max_attempts=settings.llm_max_attempts,
+            run_input_token_budget=settings.llm_run_input_token_budget,
+            max_output_tokens=settings.llm_max_output_tokens,
+            prices=settings.llm_prices,
+        ),
+        CircuitBreaker(
+            threshold=settings.llm_breaker_failures,
+            open_seconds=settings.llm_breaker_open_seconds,
+        ),
+    )
+
+
 def build_worker(
     settings: Settings,
     *,
     engine: AsyncEngine | None = None,
     store: ObjectStore | None = None,
     pipeline: Pipeline | None = None,
+    model: LanguageModel | None = None,
 ) -> WorkerRuntime:
     owns_engine = engine is None
     engine = engine or create_engine(settings)
@@ -91,7 +121,11 @@ def build_worker(
     store = store or S3ObjectStore(settings)
     app = create_procrastinate_app(settings, max_pool_size=settings.worker_concurrency + 4)
     queue = ProcrastinateQueue(app)
-    executor = RunExecutor(db, store, queue, pipeline or default_pipeline(), settings)
+    model = model or build_gateway(settings, db)
+    pipeline = pipeline or default_pipeline(
+        card_token_budget=settings.schema_card_token_budget, model_identity=model.identity
+    )
+    executor = RunExecutor(db, store, queue, pipeline, settings, model=model)
     maintenance = Maintenance(db, store, queue, executor, settings)
     register_tasks(app, executor, maintenance)
     return WorkerRuntime(

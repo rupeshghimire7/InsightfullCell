@@ -46,6 +46,13 @@ BUCKET = "ic-test"
 PART_BYTES = 5 * MIB
 
 TENANT_TABLES = (
+    "app.usage_counters",
+    "app.llm_calls",
+    "app.dataset_preferences",
+    "app.cleaning_ops",
+    "app.cleaning_plans",
+    "app.analysis_plans",
+    "app.run_columns",
     "app.run_events",
     "app.run_stages",
     "app.runs",

@@ -33,7 +33,8 @@ describe("run status presentation", () => {
 describe("stageLabel", () => {
   it("names known stages in plain language and humanises future ones", () => {
     expect(stageLabel("ingest").title).toBe("Verify and read the file");
-    expect(stageLabel("clean_plan")).toEqual({ title: "Clean plan", description: "" });
+    expect(stageLabel("clean_plan").title).toBe("Propose cleaning");
+    expect(stageLabel("narrate_report")).toEqual({ title: "Narrate report", description: "" });
   });
 });
 

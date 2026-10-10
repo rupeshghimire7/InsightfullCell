@@ -15,15 +15,24 @@ from pathlib import Path
 from typing import Any, Protocol
 from uuid import UUID
 
+from insightfulcell.engine.ports import (
+    AnalysisRepository,
+    ArtifactStore,
+    LanguageModel,
+    NoModel,
+    NullRepository,
+)
 from insightfulcell.ingestion.formats import FileFormat
 
-
-class ArtifactStore(Protocol):
-    """What a stage may do with object storage. ``storage.S3ObjectStore`` satisfies it."""
-
-    async def download_file(self, key: str, dest: Path) -> None: ...
-
-    async def upload_file(self, source: Path, key: str) -> None: ...
+__all__ = [
+    "ArtifactStore",
+    "RunInputs",
+    "SourceFile",
+    "Stage",
+    "StageContext",
+    "StageResult",
+    "checkpoint_key",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +62,26 @@ class StageResult:
 
 
 @dataclass(frozen=True, slots=True)
+class RunInputs:
+    """What a run brings besides the file: the dataset's name, the organisation's cleaning
+    policy, a person's saved choices for the dataset, and the run's reference date (which
+    dates count as "in the future"). Fixed when the run is claimed, so a retry sees the same."""
+
+    dataset_id: UUID | None = None
+    dataset_name: str = ""
+    cleaning_policy: str = "review_lossy"
+    annotations: Mapping[str, Any] = field(default_factory=dict)
+    today: str = "1970-01-01"
+
+    def fingerprint(self) -> dict[str, Any]:
+        return {
+            "dataset_name": self.dataset_name,
+            "cleaning_policy": self.cleaning_policy,
+            "annotations": dict(self.annotations),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class StageContext:
     org_id: UUID
     run_id: UUID
@@ -62,6 +91,9 @@ class StageContext:
     checkpoint_key: str
     #: Results of the stages before this one, in this run.
     upstream: Mapping[str, StageResult] = field(default_factory=dict)
+    inputs: RunInputs = field(default_factory=RunInputs)
+    repository: AnalysisRepository = field(default_factory=NullRepository)
+    model: LanguageModel = field(default_factory=NoModel)
 
     def artifact_key(self, stage: str, name: str) -> str:
         """``gold/{org}/{run}/{stage}/{checkpoint}-{name}``: keyed by inputs, so an identical
@@ -74,6 +106,8 @@ class Stage(Protocol):
     name: str
     #: Bump whenever the stage's output for the same inputs could change.
     version: str
+    # A stage may also set ``uses_run_inputs = True``: the run's inputs (policy, a person's
+    # choices) then become part of its checkpoint key.
 
     def fingerprint(self, source: SourceFile) -> Mapping[str, Any]:
         """The inputs and configuration that determine this stage's output (JSON-safe)."""
@@ -82,14 +116,22 @@ class Stage(Protocol):
     async def run(self, ctx: StageContext) -> StageResult: ...
 
 
-def checkpoint_key(stage: Stage, source: SourceFile, upstream_keys: Sequence[str]) -> str:
+def checkpoint_key(
+    stage: Stage,
+    source: SourceFile,
+    upstream_keys: Sequence[str],
+    inputs: RunInputs | None = None,
+) -> str:
+    fingerprint: dict[str, Any] = {
+        "stage": stage.name,
+        "version": stage.version,
+        "inputs": stage.fingerprint(source),
+        "upstream": list(upstream_keys),
+    }
+    if inputs is not None and getattr(stage, "uses_run_inputs", False):
+        fingerprint["run_inputs"] = inputs.fingerprint()
     canonical = json.dumps(
-        {
-            "stage": stage.name,
-            "version": stage.version,
-            "inputs": stage.fingerprint(source),
-            "upstream": list(upstream_keys),
-        },
+        fingerprint,
         sort_keys=True,
         separators=(",", ":"),
         default=str,

@@ -114,7 +114,9 @@ describe("RunProgress", () => {
       />,
     );
     stream.emit(event(2, "run.succeeded"));
-    expect(screen.getByText("Your file is verified and ready")).toBeInTheDocument();
+    expect(
+      screen.getByText("Your data is profiled, planned and ready to clean"),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("connection")).not.toBeInTheDocument();
     expect(screen.getByTestId("run-announcer")).toHaveTextContent("The analysis finished.");
     expect(stream.options()?.signal.aborted).toBe(true);
@@ -156,7 +158,9 @@ describe("RunProgress", () => {
     expect(await screen.findByText(/refreshing every few seconds/)).toBeInTheDocument();
     await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
     finished = true;
-    expect(await screen.findByText("Your file is verified and ready")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Your data is profiled, planned and ready to clean"),
+    ).toBeInTheDocument();
     const reads = vi.mocked(api.get).mock.calls.length;
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(vi.mocked(api.get).mock.calls.length).toBe(reads); // polling stops once finished
@@ -245,7 +249,11 @@ describe("RunProgress", () => {
     stream.emit(event(2, "run.waiting"));
     expect(screen.getByText(/Waiting for a free slot/)).toBeInTheDocument();
     stream.emit(event(3, "run.started"), event(4, "review.required"));
-    expect(screen.getByText(/paused until someone decides/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Your review is needed" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Review changes" })).toHaveAttribute(
+      "href",
+      expect.stringMatching(/\/o\/org-1\/runs\/.+\/review$/),
+    );
     expect(screen.getByTestId("run-announcer")).toHaveTextContent("waiting for your review");
   });
 });

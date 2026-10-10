@@ -91,6 +91,8 @@ backend_env() {
   export S3_FORCE_PATH_STYLE=true S3_BUCKET=insightfulcell-dev
   # The browser opens live-progress streams on the API directly (with a run-scoped ticket).
   export EVENTS_ALLOWED_ORIGINS="$WEB_URL"
+  # Plan with the built-in rules: deterministic, and a key in backend/.env never spends money.
+  export LLM_PROVIDER=none
 }
 
 echo "• api"

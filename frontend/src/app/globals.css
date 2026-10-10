@@ -4,21 +4,27 @@
  * Design tokens: 08-ui-ux-spec.md section 2. One accent (deep green); colour is reserved for
  * meaning (status), never decoration. Shape rule: controls 6 px, panels 10 px, badges full pill.
  * Type: Geist for text, Geist Mono for numbers, ids and code (loaded by next/font in layout.tsx).
+ * No pure white or black. --chart is the accent's data-mark step: a little more chroma than the
+ * UI accent so a single series never reads as grey (checked with the dataviz palette validator
+ * against --surface in both modes).
  */
 :root {
   color-scheme: light;
   --bg: #f4f3f1;
-  --surface: #ffffff;
-  --surface-raised: #ffffff;
+  --surface: #fcfcfa;
+  --surface-raised: #fefefc;
   --border: #dedcd6;
   --text: #1f2421;
   --text-muted: #5e625e;
   --accent: #2f6f62;
-  --accent-contrast: #ffffff;
+  --accent-contrast: #fbfaf7;
   --warning: #86621f;
   --danger: #a3402c;
   --success: #2f6f62;
   --focus: #2f6f62;
+  --chart: #1a8a6f;
+  --brand-panel: #2f6f62;
+  --brand-panel-text: #fbfaf7;
 }
 
 :root[data-theme="dark"] {
@@ -35,6 +41,10 @@
   --danger: #d0664f;
   --success: #4fa391;
   --focus: #4fa391;
+  --chart: #2fa585;
+  /* A deep green slab, not the bright accent: the sign-in panel stays the page's quiet side. */
+  --brand-panel: #17302a;
+  --brand-panel-text: #e8e6e1;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -52,6 +62,9 @@
     --danger: #d0664f;
     --success: #4fa391;
     --focus: #4fa391;
+    --chart: #2fa585;
+    --brand-panel: #17302a;
+    --brand-panel-text: #e8e6e1;
   }
 }
 
@@ -67,6 +80,9 @@
   --color-warning: var(--warning);
   --color-danger: var(--danger);
   --color-success: var(--success);
+  --color-chart: var(--chart);
+  --color-brand-panel: var(--brand-panel);
+  --color-brand-panel-text: var(--brand-panel-text);
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
   --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);

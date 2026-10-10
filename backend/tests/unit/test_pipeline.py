@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import pytest
 
+from insightfulcell import __version__
 from insightfulcell.domain.errors import IntegrityMismatch, ParseFailure
 from insightfulcell.domain.runs import Phase
 from insightfulcell.ingestion.formats import FileFormat
@@ -58,18 +59,28 @@ class TestCheckpointKey:
         assert checkpoint_key(IngestStage(), src, ["a" * 64]) != base
 
         class Bumped(IngestStage):
-            version = "2"
+            version = "99"
 
         assert checkpoint_key(Bumped(), src, []) != base
 
 
 class TestPipeline:
-    def test_default_pipeline_ships_ingest_in_phase_a(self) -> None:
+    def test_default_pipeline_ships_the_four_phase_a_stages(self) -> None:
         pipeline = default_pipeline()
         assert [(p.phase, p.position, p.stage.name) for p in pipeline.planned()] == [
-            (Phase.A, 0, "ingest")
+            (Phase.A, 0, "ingest"),
+            (Phase.A, 1, "profile"),
+            (Phase.A, 2, "understand"),
+            (Phase.A, 3, "clean_plan"),
         ]
         assert pipeline.stages(Phase.B) == ()
+
+    def test_the_model_does_not_change_the_stage_list(self) -> None:
+        """The API plans runs without knowing the worker's model: both must agree."""
+        assert (
+            default_pipeline(model_identity=("gemini", "gemini-3.8-flash")).code_version
+            == default_pipeline().code_version
+        )
 
     def test_positions_run_across_both_phases(self) -> None:
         a, b = IngestStage(), type("Other", (IngestStage,), {"name": "other"})()
@@ -83,7 +94,7 @@ class TestPipeline:
     def test_code_version_tracks_the_stage_list(self) -> None:
         one = default_pipeline().code_version
         assert one == default_pipeline().code_version
-        assert one.startswith("0.1.0+")
+        assert one.startswith(f"{__version__}+")
         bumped = type("Bumped", (IngestStage,), {"version": "9"})()
         assert Pipeline(phase_a=(bumped,)).code_version != one
 
@@ -100,7 +111,13 @@ class TestIngestStage:
 
         assert result.output["rows"] == 2
         assert result.output["column_count"] == 3
-        assert result.output["columns"][1] == {"name": "city", "type": "VARCHAR"}
+        assert result.output["columns"][1] == {
+            "name": "city",
+            "type": "VARCHAR",
+            "meaning": "geography",
+            "personal_data": None,
+        }
+        assert set(result.artifacts) == {"data", "semantics"}
         artifact = result.artifacts["data"]
         assert artifact == f"gold/{org}/{run}/ingest/{key[:16]}-data.parquet"
         assert store.objects[artifact].startswith(b"PAR1")

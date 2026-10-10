@@ -52,7 +52,8 @@ describe("DatasetTable", () => {
     render(<DatasetTable datasets={datasets} orgId="org-1" />);
     expect(screen.getByText("Excel")).toBeInTheDocument();
     expect(screen.getByText(/2\.5\sMB/)).toBeInTheDocument();
-    expect(screen.getAllByText("–").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("No file")).toBeInTheDocument();
+    expect(screen.getByText("None")).toBeInTheDocument();
   });
 
   it("shows the latest analysis as a status link, or says there is none", () => {

@@ -29,8 +29,15 @@ const TONE: Record<Tone, { badge: string; icon: string }> = {
   negative: { badge: "border-danger/35 bg-danger/10", icon: "text-danger" },
 };
 
-/** A run's status as a pill: an icon and a word, so colour is never the only signal. */
-export function RunStatusBadge({ status }: { status: RunStatus }) {
+/** A run's status as a pill: an icon and a word, so colour is never the only signal. In lists
+ * pass ``animated={false}``: one moving spinner per row is noise; the run page keeps it. */
+export function RunStatusBadge({
+  status,
+  animated = true,
+}: {
+  status: RunStatus;
+  animated?: boolean;
+}) {
   const { label, tone } = RUN_STATUS[status];
   const Icon = ICON[status];
   const styles = TONE[tone];
@@ -42,7 +49,7 @@ export function RunStatusBadge({ status }: { status: RunStatus }) {
       <Icon
         aria-hidden="true"
         weight={status === "running" ? "bold" : "fill"}
-        className={`size-3.5 ${styles.icon} ${status === "running" ? "animate-spin motion-reduce:animate-none" : ""}`}
+        className={`size-3.5 ${styles.icon} ${status === "running" && animated ? "animate-spin motion-reduce:animate-none" : ""}`}
       />
       {label}
     </span>

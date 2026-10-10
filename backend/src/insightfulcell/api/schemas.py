@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -196,3 +196,169 @@ class RunEventOut(_Out):
     stage: str | None
     data: dict[str, Any]
     at: datetime
+
+
+# --------------------------------------------------------------------------- plans
+
+
+class PreviewPairOut(_Out):
+    before: str | None
+    after: str | None
+    rows: int
+
+
+class CleaningOperationOut(_Out):
+    id: str = Field(description="Stable id: the same change to the same column keeps it.")
+    kind: str
+    label: str = Field(description="What the change does, in plain words.")
+    column: str | None = Field(description="Null for a change to whole rows (duplicates).")
+    params: dict[str, Any]
+    lossy: bool = Field(description="True when the change can remove or replace data.")
+    default: Literal["auto", "review", "opt_in"]
+    decision: Literal["accepted", "rejected", "pending"]
+    reason: str
+    source: Literal["rules", "model", "person"]
+    rows_affected: int
+    values_lost: int = Field(description="Non-empty values the change would empty.")
+    preview: list[PreviewPairOut] = Field(
+        description="Up to five before/after pairs. Personal data is masked."
+    )
+    notice: str | None
+
+
+class CleaningPlanOut(_Out):
+    revision: int = Field(description="Send back with a decision; 412 if it changed.")
+    policy: Literal["always_review", "review_lossy", "auto_safe"]
+    status: Literal["proposed", "approved"]
+    decided_by_you: bool
+    decided_at: datetime | None
+    operations: list[CleaningOperationOut]
+
+
+class PlanColumnOut(_Out):
+    position: int
+    name: str
+    physical_type: str
+    meaning: str
+    confidence: Literal["high", "medium", "low"]
+    personal_data: str | None = Field(description="Set when the column is masked.")
+    unit: str | None
+    display_name: str | None
+    role: str | None
+    flags: list[str] = Field(description="Quality flags, e.g. case_variants, sentinel_values.")
+    profile: dict[str, Any] = Field(
+        description="Statistics for the column. Counts only for personal-data columns."
+    )
+
+
+class DictionaryEntryOut(_Out):
+    column: str
+    display_name: str
+    description: str
+    unit: str | None
+    meaning: str
+    role: str
+    personal_data: str | None
+    source: Literal["rules", "model", "person"]
+
+
+class TargetOut(_Out):
+    column: str
+    kind: Literal["numeric", "binary", "categorical"]
+    rationale: str
+    source: Literal["rules", "model", "person"]
+
+
+class FeatureOut(_Out):
+    id: str
+    kind: str
+    columns: list[str]
+    part: str | None
+    bins: int | None
+    name: str
+    reason: str
+    source: Literal["rules", "model", "person"]
+    enabled: bool
+
+
+class AnalysisItemOut(_Out):
+    id: str
+    kind: str
+    columns: list[str]
+    question: str
+    priority: int
+    source: Literal["rules", "model", "person"]
+
+
+class ChartItemOut(_Out):
+    id: str
+    kind: str
+    x: str
+    y: str | None
+    group: str | None
+    aggregate: str | None
+    title: str
+    source: Literal["rules", "model", "person"]
+
+
+class RejectionOut(_Out):
+    section: str
+    item: str
+    reason: str
+
+
+class PlanOut(_Out):
+    """The run's resolved analysis plan, its columns, its cleaning plan, and exactly what the
+    planning model was shown."""
+
+    run: RunOut
+    revision: int
+    source: Literal["model", "cache", "rules", "person"] = Field(
+        description="Where the plan came from: the model, the plan cache, the rules, or a "
+        "person's revision."
+    )
+    provider: str | None
+    model: str | None
+    prompt_version: str | None
+    fallback_reason: str | None = Field(
+        description="Why the rule-based planner was used instead of the model, if it was."
+    )
+    dataset_summary: str
+    domain: str
+    grain: str
+    dictionary: list[DictionaryEntryOut]
+    target: TargetOut | None
+    features: list[FeatureOut]
+    analyses: list[AnalysisItemOut]
+    charts: list[ChartItemOut]
+    relevance: dict[str, float]
+    rejected: list[RejectionOut] = Field(description="Model proposals that failed validation.")
+    model_input: dict[str, Any] | None = Field(
+        description="The masked schema card sent to the planning model (no rows, no personal "
+        "values)."
+    )
+    columns: list[PlanColumnOut]
+    cleaning: CleaningPlanOut | None
+
+
+class CleaningDecisionIn(_In):
+    operation_id: str = Field(min_length=1, max_length=1100)
+    accept: bool
+
+
+class ColumnEditIn(_In):
+    name: str = Field(min_length=1, max_length=1000)
+    display_name: str | None = Field(default=None, max_length=60)
+    unit: str | None = Field(default=None, max_length=16, description="Empty string clears it.")
+    excluded: bool | None = Field(
+        default=None, description="Leave out of (or bring back into) the analysis."
+    )
+
+
+class DecideCleaningRequest(_In):
+    cleaning_revision: int = Field(ge=1, description="The cleaning plan revision you reviewed.")
+    decisions: list[CleaningDecisionIn] = Field(max_length=5_000)
+    columns: list[ColumnEditIn] = Field(default_factory=list, max_length=500)
+    target: str | None = Field(default=None, max_length=1000)
+    no_target: bool = Field(default=False, description="This dataset has no outcome to explain.")
+    disabled_features: list[str] | None = Field(default=None, max_length=200)

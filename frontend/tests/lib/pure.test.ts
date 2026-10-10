@@ -8,7 +8,7 @@ import {
 import { buildCsp } from "@/lib/csp";
 import { describeError, ProblemError, readProblem } from "@/lib/problem";
 import { effectiveRole } from "@/lib/roles";
-import { formatBytes, formatCount, formatPercent } from "@/lib/format";
+import { formatBytes, formatCount, formatPercent, formatUtc } from "@/lib/format";
 import { renderSignInEmail } from "@/lib/email";
 import { workspaceName, workspaceSlug } from "@/lib/identity";
 import { parseEnv } from "@/lib/env";
@@ -154,6 +154,10 @@ describe("format", () => {
     expect(formatPercent(0.456, "en-US")).toBe("46%");
     expect(formatPercent(5, "en-US")).toBe("100%");
     expect(formatCount(1234567, "en-US")).toBe("1,234,567");
+  });
+  it("formats a server-safe UTC time the same in every locale and zone", () => {
+    expect(formatUtc("2026-10-10T13:45:12.345+13:45")).toBe("2026-10-10 00:00\u00a0UTC");
+    expect(formatUtc("not a date")).toBe("not a date");
   });
 });
 

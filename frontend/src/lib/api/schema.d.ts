@@ -132,6 +132,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/runs/{run_id}/cleaning-plan:decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept or reject each cleaning change and approve the plan
+         * @description Every change waiting for a decision must be accepted or rejected. The decision is
+         *     recorded as a new cleaning plan revision (who and when), the person's names, units,
+         *     exclusions, target and features are saved for the dataset's next runs, and the run
+         *     continues. ``412`` when the run or its cleaning plan changed since you loaded them.
+         */
+        post: operations["decide_cleaning_plan_v1_runs__run_id__cleaning_plan_decide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/runs/{run_id}/events": {
         parameters: {
             query?: never;
@@ -141,6 +164,47 @@ export interface paths {
         };
         /** Live progress (Server-Sent Events) with replay from Last-Event-ID */
         get: operations["stream_events_v1_runs__run_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs/{run_id}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The run's analysis plan, columns and cleaning plan
+         * @description Available once the 'understand' step has finished (409 ``plan-not-ready`` before).
+         */
+        get: operations["get_plan_v1_runs__run_id__plan_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs/{run_id}/recipe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the run's Python recipe (cleaning, features, charts)
+         * @description The approved plan as code: load the original file, clean it, add features, draw the
+         *     charts. Generated from the stored plan; nothing in it was written by a model.
+         */
+        get: operations["get_recipe_v1_runs__run_id__recipe_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -283,6 +347,154 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AnalysisItemOut */
+        AnalysisItemOut: {
+            /** Columns */
+            columns: string[];
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Priority */
+            priority: number;
+            /** Question */
+            question: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "rules" | "model" | "person";
+        };
+        /** ChartItemOut */
+        ChartItemOut: {
+            /** Aggregate */
+            aggregate: string | null;
+            /** Group */
+            group: string | null;
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "rules" | "model" | "person";
+            /** Title */
+            title: string;
+            /** X */
+            x: string;
+            /** Y */
+            y: string | null;
+        };
+        /** CleaningDecisionIn */
+        CleaningDecisionIn: {
+            /** Accept */
+            accept: boolean;
+            /** Operation Id */
+            operation_id: string;
+        };
+        /** CleaningOperationOut */
+        CleaningOperationOut: {
+            /**
+             * Column
+             * @description Null for a change to whole rows (duplicates).
+             */
+            column: string | null;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "accepted" | "rejected" | "pending";
+            /**
+             * Default
+             * @enum {string}
+             */
+            default: "auto" | "review" | "opt_in";
+            /**
+             * Id
+             * @description Stable id: the same change to the same column keeps it.
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Label
+             * @description What the change does, in plain words.
+             */
+            label: string;
+            /**
+             * Lossy
+             * @description True when the change can remove or replace data.
+             */
+            lossy: boolean;
+            /** Notice */
+            notice: string | null;
+            /** Params */
+            params: {
+                [key: string]: unknown;
+            };
+            /**
+             * Preview
+             * @description Up to five before/after pairs. Personal data is masked.
+             */
+            preview: components["schemas"]["PreviewPairOut"][];
+            /** Reason */
+            reason: string;
+            /** Rows Affected */
+            rows_affected: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "rules" | "model" | "person";
+            /**
+             * Values Lost
+             * @description Non-empty values the change would empty.
+             */
+            values_lost: number;
+        };
+        /** CleaningPlanOut */
+        CleaningPlanOut: {
+            /** Decided At */
+            decided_at: string | null;
+            /** Decided By You */
+            decided_by_you: boolean;
+            /** Operations */
+            operations: components["schemas"]["CleaningOperationOut"][];
+            /**
+             * Policy
+             * @enum {string}
+             */
+            policy: "always_review" | "review_lossy" | "auto_safe";
+            /**
+             * Revision
+             * @description Send back with a decision; 412 if it changed.
+             */
+            revision: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "proposed" | "approved";
+        };
+        /** ColumnEditIn */
+        ColumnEditIn: {
+            /** Display Name */
+            display_name?: string | null;
+            /**
+             * Excluded
+             * @description Leave out of (or bring back into) the analysis.
+             */
+            excluded?: boolean | null;
+            /** Name */
+            name: string;
+            /**
+             * Unit
+             * @description Empty string clears it.
+             */
+            unit?: string | null;
+        };
         /** CompleteUploadRequest */
         CompleteUploadRequest: {
             /** Parts */
@@ -377,12 +589,80 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** DecideCleaningRequest */
+        DecideCleaningRequest: {
+            /**
+             * Cleaning Revision
+             * @description The cleaning plan revision you reviewed.
+             */
+            cleaning_revision: number;
+            /** Columns */
+            columns?: components["schemas"]["ColumnEditIn"][];
+            /** Decisions */
+            decisions: components["schemas"]["CleaningDecisionIn"][];
+            /** Disabled Features */
+            disabled_features?: string[] | null;
+            /**
+             * No Target
+             * @description This dataset has no outcome to explain.
+             * @default false
+             */
+            no_target: boolean;
+            /** Target */
+            target?: string | null;
+        };
+        /** DictionaryEntryOut */
+        DictionaryEntryOut: {
+            /** Column */
+            column: string;
+            /** Description */
+            description: string;
+            /** Display Name */
+            display_name: string;
+            /** Meaning */
+            meaning: string;
+            /** Personal Data */
+            personal_data: string | null;
+            /** Role */
+            role: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "rules" | "model" | "person";
+            /** Unit */
+            unit: string | null;
+        };
         /**
          * EventType
          * @description What the browser is told. Payloads never carry cell values.
          * @enum {string}
          */
         EventType: "run.queued" | "run.started" | "run.waiting" | "stage.started" | "stage.completed" | "stage.reused" | "stage.failed" | "stage.retrying" | "run.moved_to_large_queue" | "phase.completed" | "review.required" | "review.reminder" | "review.approved" | "run.succeeded" | "run.failed" | "run.cancelled" | "run.expired" | "run.retried";
+        /** FeatureOut */
+        FeatureOut: {
+            /** Bins */
+            bins: number | null;
+            /** Columns */
+            columns: string[];
+            /** Enabled */
+            enabled: boolean;
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+            /** Part */
+            part: string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "rules" | "model" | "person";
+        };
         /** FieldError */
         FieldError: {
             /** Field */
@@ -448,10 +728,119 @@ export interface components {
          * @enum {string}
          */
         Phase: "A" | "B";
+        /** PlanColumnOut */
+        PlanColumnOut: {
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "high" | "medium" | "low";
+            /** Display Name */
+            display_name: string | null;
+            /**
+             * Flags
+             * @description Quality flags, e.g. case_variants, sentinel_values.
+             */
+            flags: string[];
+            /** Meaning */
+            meaning: string;
+            /** Name */
+            name: string;
+            /**
+             * Personal Data
+             * @description Set when the column is masked.
+             */
+            personal_data: string | null;
+            /** Physical Type */
+            physical_type: string;
+            /** Position */
+            position: number;
+            /**
+             * Profile
+             * @description Statistics for the column. Counts only for personal-data columns.
+             */
+            profile: {
+                [key: string]: unknown;
+            };
+            /** Role */
+            role: string | null;
+            /** Unit */
+            unit: string | null;
+        };
+        /**
+         * PlanOut
+         * @description The run's resolved analysis plan, its columns, its cleaning plan, and exactly what the
+         *     planning model was shown.
+         */
+        PlanOut: {
+            /** Analyses */
+            analyses: components["schemas"]["AnalysisItemOut"][];
+            /** Charts */
+            charts: components["schemas"]["ChartItemOut"][];
+            cleaning: components["schemas"]["CleaningPlanOut"] | null;
+            /** Columns */
+            columns: components["schemas"]["PlanColumnOut"][];
+            /** Dataset Summary */
+            dataset_summary: string;
+            /** Dictionary */
+            dictionary: components["schemas"]["DictionaryEntryOut"][];
+            /** Domain */
+            domain: string;
+            /**
+             * Fallback Reason
+             * @description Why the rule-based planner was used instead of the model, if it was.
+             */
+            fallback_reason: string | null;
+            /** Features */
+            features: components["schemas"]["FeatureOut"][];
+            /** Grain */
+            grain: string;
+            /** Model */
+            model: string | null;
+            /**
+             * Model Input
+             * @description The masked schema card sent to the planning model (no rows, no personal values).
+             */
+            model_input: {
+                [key: string]: unknown;
+            } | null;
+            /** Prompt Version */
+            prompt_version: string | null;
+            /** Provider */
+            provider: string | null;
+            /**
+             * Rejected
+             * @description Model proposals that failed validation.
+             */
+            rejected: components["schemas"]["RejectionOut"][];
+            /** Relevance */
+            relevance: {
+                [key: string]: number;
+            };
+            /** Revision */
+            revision: number;
+            run: components["schemas"]["RunOut"];
+            /**
+             * Source
+             * @description Where the plan came from: the model, the plan cache, the rules, or a person's revision.
+             * @enum {string}
+             */
+            source: "model" | "cache" | "rules" | "person";
+            target: components["schemas"]["TargetOut"] | null;
+        };
         /** PresignPartsRequest */
         PresignPartsRequest: {
             /** Part Numbers */
             part_numbers: number[];
+        };
+        /** PreviewPairOut */
+        PreviewPairOut: {
+            /** After */
+            after: string | null;
+            /** Before */
+            before: string | null;
+            /** Rows */
+            rows: number;
         };
         /**
          * Problem
@@ -491,6 +880,15 @@ export interface components {
          * @enum {string}
          */
         Queue: "standard" | "large" | "maintenance";
+        /** RejectionOut */
+        RejectionOut: {
+            /** Item */
+            item: string;
+            /** Reason */
+            reason: string;
+            /** Section */
+            section: string;
+        };
         /**
          * Role
          * @enum {string}
@@ -696,6 +1094,23 @@ export interface components {
          * @enum {string}
          */
         StageStatus: "pending" | "running" | "succeeded" | "failed";
+        /** TargetOut */
+        TargetOut: {
+            /** Column */
+            column: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "numeric" | "binary" | "categorical";
+            /** Rationale */
+            rationale: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "rules" | "model" | "person";
+        };
         /** UploadOut */
         UploadOut: {
             /**
@@ -1312,6 +1727,105 @@ export interface operations {
             };
         };
     };
+    decide_cleaning_plan_v1_runs__run_id__cleaning_plan_decide_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The run's row_version (ETag) you last saw; 412 if it changed since. */
+                "If-Match"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideCleaningRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     stream_events_v1_runs__run_id__events_get: {
         parameters: {
             query?: never;
@@ -1368,6 +1882,171 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_plan_v1_runs__run_id__plan_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_recipe_v1_runs__run_id__recipe_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A runnable Python script. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                    "text/x-python": unknown;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                    "text/plain": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                    "text/plain": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                    "text/plain": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                    "text/plain": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                    "text/plain": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                    "text/plain": components["schemas"]["Problem"];
                 };
             };
         };

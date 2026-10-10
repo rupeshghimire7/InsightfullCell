@@ -9,6 +9,7 @@ may send the ``row_version`` they last saw (``If-Match``) to refuse acting on a 
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import func, select, tuple_, update
@@ -35,7 +36,7 @@ from insightfulcell.domain.runs import (
 from insightfulcell.domain.security import Action, Principal, require
 from insightfulcell.pipeline.definition import Pipeline
 from insightfulcell.queue.port import JobQueue, PhaseJob
-from insightfulcell.services import idempotency, run_store
+from insightfulcell.services import idempotency, run_inputs, run_store
 from insightfulcell.services.datasets import MAX_PAGE_SIZE, decode_cursor, encode_cursor
 from insightfulcell.services.dto import RunAccepted, RunDetail, RunEventBatch, RunPage
 
@@ -87,6 +88,12 @@ class RunService:
                 dataset_version_id=version.id,
                 created_by=principal.user_id,
                 code_version=self._pipeline.code_version,
+                inputs=await run_inputs.snapshot(
+                    session,
+                    org_id=principal.org_id,
+                    dataset_id=dataset_id,
+                    created_at=datetime.now(UTC),
+                ),
             )
             session.add(run)
             await session.flush()

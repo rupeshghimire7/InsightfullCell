@@ -116,12 +116,15 @@ class TestReaper:
             "UPDATE app.runs SET status = 'running', stage = 'ingest', attempts = 1 WHERE id = :id",
             id=run_id,
         )
-        owner_sql("UPDATE app.run_stages SET status = 'running' WHERE run_id = :id", id=run_id)
+        owner_sql(
+            "UPDATE app.run_stages SET status = 'running' WHERE run_id = :id AND name = 'ingest'",
+            id=run_id,
+        )
 
         assert await maintenance.reap_stalled_jobs() == 1
         assert jobs(owner_sql) == [(run_id, "todo", "standard", "A")]
         assert owner_sql("SELECT crash_count, queue FROM app.runs") == [(1, "standard")]
-        assert owner_sql("SELECT status FROM app.run_stages") == [("pending",)]
+        assert owner_sql("SELECT DISTINCT status FROM app.run_stages") == [("pending",)]
 
         owner_sql("UPDATE procrastinate.procrastinate_jobs SET status = 'doing'")
         assert await maintenance.reap_stalled_jobs() == 1
@@ -276,6 +279,7 @@ async def test_maintenance_functions_return_ids_only_and_are_not_public(
     )
     assert [(name, public, app) for name, public, app in rows] == [
         ("abandoned_uploads", False, True),
+        ("ensure_llm_call_partitions", False, True),
         ("ensure_run_event_partitions", False, True),
         ("purge_idempotency_keys", False, True),
         ("reviews_due", False, True),

@@ -63,10 +63,10 @@ export default async function SignInPage({
       {/* After the form in reading order; shown first (left) on wide screens. */}
       <section
         aria-labelledby="promise-title"
-        className="relative hidden flex-col justify-between overflow-hidden bg-accent p-12 text-accent-contrast lg:order-first lg:flex xl:p-16"
+        className="relative hidden flex-col justify-between overflow-hidden bg-brand-panel p-12 text-brand-panel-text lg:order-first lg:flex xl:p-16"
       >
         <p className="flex items-center gap-2 font-semibold">
-          <span aria-hidden="true" className="size-3.5 rounded-[3px] bg-accent-contrast" />
+          <span aria-hidden="true" className="size-3.5 rounded-[3px] bg-brand-panel-text" />
           InsightfulCell
         </p>
         <div className="max-w-lg space-y-5">

@@ -1,0 +1,227 @@
+import type { CleaningOperation, Plan, PlanColumn } from "@/lib/plans/types";
+import { run } from "./runs-fixtures";
+
+export function operation(overrides: Partial<CleaningOperation> = {}): CleaningOperation {
+  return {
+    id: "trim_whitespace:State",
+    kind: "trim_whitespace",
+    label: "Trim spaces",
+    column: "State",
+    params: {},
+    lossy: false,
+    default: "auto",
+    decision: "accepted",
+    reason: "Some values have spaces before or after them.",
+    source: "rules",
+    rows_affected: 2,
+    values_lost: 0,
+    preview: [{ before: "QLD ", after: "QLD", rows: 2 }],
+    notice: null,
+    ...overrides,
+  };
+}
+
+export function column(overrides: Partial<PlanColumn> = {}): PlanColumn {
+  return {
+    position: 0,
+    name: "Labour Hours",
+    physical_type: "DOUBLE",
+    meaning: "continuous",
+    confidence: "high",
+    personal_data: null,
+    unit: "hours",
+    display_name: "Labour hours",
+    role: "measure",
+    flags: ["sentinel_values"],
+    profile: {
+      rows: 25,
+      missing: 0,
+      distinct: 20,
+      unparsed: 0,
+      numeric: {
+        count: 25,
+        p05: 1.2,
+        p50: 3.72,
+        p95: 6.9,
+        outliers: 2,
+        histogram: [1, 3, 5, 8, 4, 2, 0, 1],
+        histogram_range: [1, 9],
+      },
+    },
+    ...overrides,
+  };
+}
+
+export const EMAIL = column({
+  position: 1,
+  name: "Email",
+  physical_type: "VARCHAR",
+  meaning: "identifier",
+  personal_data: "email",
+  unit: null,
+  display_name: "Email",
+  role: "excluded",
+  flags: ["missing_tokens"],
+  profile: { rows: 25, missing: 6, distinct: 18 },
+});
+
+export const PENDING = [
+  operation({
+    id: "set_invalid_to_null:Labour Hours",
+    kind: "set_invalid_to_null",
+    label: "Set impossible values to empty",
+    column: "Labour Hours",
+    lossy: true,
+    default: "review",
+    decision: "pending",
+    reason: "Some values are placeholder codes far outside the real range.",
+    rows_affected: 2,
+    values_lost: 2,
+    preview: [{ before: "-999.0", after: null, rows: 2 }],
+  }),
+  operation({
+    id: "drop_duplicates:*",
+    kind: "drop_duplicates",
+    label: "Drop exact duplicate rows",
+    column: null,
+    lossy: true,
+    default: "review",
+    decision: "pending",
+    reason: "2 rows are an exact copy of another row.",
+    rows_affected: 2,
+    preview: [],
+  }),
+];
+
+export function plan(overrides: Partial<Plan> = {}): Plan {
+  return {
+    run: { ...run({ status: "awaiting_review" }), review_requested_at: "2026-10-10T00:00:00Z" },
+    revision: 1,
+    source: "model",
+    provider: "gemini",
+    model: "gemini-3.8-flash",
+    prompt_version: "understand-v1",
+    fallback_reason: null,
+    dataset_summary:
+      "One row per home-maintenance job, with its cost and whether it drew a complaint.",
+    domain: "field service",
+    grain: "A job.",
+    dictionary: [
+      {
+        column: "Labour Hours",
+        display_name: "Labour hours",
+        description: "Hours a technician worked.",
+        unit: "hours",
+        meaning: "continuous",
+        role: "measure",
+        personal_data: null,
+        source: "model",
+      },
+      {
+        column: "Email",
+        display_name: "Email",
+        description: "",
+        unit: null,
+        meaning: "identifier",
+        role: "excluded",
+        personal_data: "email",
+        source: "rules",
+      },
+      {
+        column: "Complaint Raised",
+        display_name: "Complaint raised",
+        description: "Whether the customer complained.",
+        unit: null,
+        meaning: "nominal",
+        role: "dimension",
+        personal_data: null,
+        source: "model",
+      },
+    ],
+    target: {
+      column: "Complaint Raised",
+      kind: "binary",
+      rationale: "The outcome.",
+      source: "model",
+    },
+    features: [
+      {
+        id: "log:Labour Hours",
+        kind: "log",
+        columns: ["Labour Hours"],
+        part: null,
+        bins: null,
+        name: "f_log__labour_hours",
+        reason: "Skewed.",
+        source: "rules",
+        enabled: true,
+      },
+    ],
+    analyses: [
+      {
+        id: "segment:Complaint Raised,Labour Hours",
+        kind: "segment",
+        columns: ["Complaint Raised", "Labour Hours"],
+        question: "Do complaints follow longer jobs?",
+        priority: 1,
+        source: "model",
+      },
+      {
+        id: "distribution:Labour Hours",
+        kind: "distribution",
+        columns: ["Labour Hours"],
+        question: "How are labour hours distributed?",
+        priority: 3,
+        source: "rules",
+      },
+    ],
+    charts: [
+      {
+        id: "histogram:Labour Hours",
+        kind: "histogram",
+        x: "Labour Hours",
+        y: null,
+        group: null,
+        aggregate: null,
+        title: "Distribution of labour hours",
+        source: "rules",
+      },
+    ],
+    relevance: { "Labour Hours": 0.7 },
+    rejected: [{ section: "dictionary", item: "unit of Email", reason: "The unit is not shown." }],
+    model_input: { card_version: "card-v1", columns: [{ name: "Email", personal_data: "email" }] },
+    columns: [column(), EMAIL],
+    cleaning: {
+      revision: 1,
+      policy: "review_lossy",
+      status: "proposed",
+      decided_by_you: false,
+      decided_at: null,
+      operations: [
+        ...PENDING,
+        operation(),
+        operation({
+          id: "exclude_column:Email",
+          kind: "exclude_column",
+          label: "Leave out of the analysis",
+          column: "Email",
+          rows_affected: 0,
+          preview: [],
+          notice: "Analysis only: the column stays in the cleaned data.",
+        }),
+        operation({
+          id: "winsorize:Labour Hours",
+          kind: "winsorize",
+          label: "Cap extreme values",
+          column: "Labour Hours",
+          lossy: true,
+          default: "opt_in",
+          decision: "rejected",
+          source: "model",
+          notice: "Off unless you turn it on.",
+        }),
+      ],
+    },
+    ...overrides,
+  };
+}

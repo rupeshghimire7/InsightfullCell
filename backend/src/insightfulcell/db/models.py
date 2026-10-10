@@ -3,12 +3,23 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import BigInteger, Boolean, Integer, LargeBinary, SmallInteger, Text, text
-from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Date,
+    Integer,
+    LargeBinary,
+    Numeric,
+    SmallInteger,
+    Text,
+    text,
+)
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TIMESTAMP
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -25,6 +36,8 @@ class Organization(Base):
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
     name: Mapped[str] = mapped_column(Text)
     max_concurrent_runs: Mapped[int] = mapped_column(Integer, server_default="3")
+    cleaning_policy: Mapped[str] = mapped_column(Text, server_default="review_lossy")
+    monthly_token_budget: Mapped[int] = mapped_column(BigInteger, server_default="20000000")
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=_NOW)
 
 
@@ -125,6 +138,7 @@ class Run(Base):
     review_reminded_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), default=None
     )
+    inputs: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
 
 
 class RunStage(Base):
@@ -158,3 +172,125 @@ class RunEvent(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=_NOW, primary_key=True
     )
+
+
+class RunColumn(Base):
+    __tablename__ = "run_columns"
+
+    org_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True))
+    run_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    position: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    name: Mapped[str] = mapped_column(Text)
+    physical_type: Mapped[str] = mapped_column(Text)
+    meaning: Mapped[str] = mapped_column(Text)
+    confidence: Mapped[str] = mapped_column(Text)
+    personal_data: Mapped[str | None] = mapped_column(Text, default=None)
+    unit: Mapped[str | None] = mapped_column(Text, default=None)
+    display_name: Mapped[str | None] = mapped_column(Text, default=None)
+    role: Mapped[str | None] = mapped_column(Text, default=None)
+    flags: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'"))
+    profile: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'"))
+
+
+class AnalysisPlan(Base):
+    __tablename__ = "analysis_plans"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    org_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True))
+    run_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True))
+    dataset_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True))
+    kind: Mapped[str] = mapped_column(Text)
+    revision: Mapped[int] = mapped_column(Integer)
+    source: Mapped[str] = mapped_column(Text)
+    schema_fingerprint: Mapped[str] = mapped_column(Text)
+    prompt_version: Mapped[str | None] = mapped_column(Text, default=None)
+    provider: Mapped[str | None] = mapped_column(Text, default=None)
+    model: Mapped[str | None] = mapped_column(Text, default=None)
+    plan: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    plan_hash: Mapped[str] = mapped_column(Text)
+    rejected: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, server_default=text("'[]'"))
+    input_card: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
+    fallback_reason: Mapped[str | None] = mapped_column(Text, default=None)
+    created_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), default=None)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=_NOW)
+
+
+class CleaningPlan(Base):
+    __tablename__ = "cleaning_plans"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    org_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True))
+    run_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True))
+    revision: Mapped[int] = mapped_column(Integer)
+    policy: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text)
+    decided_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), default=None)
+    decided_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), default=None)
+    plan_hash: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=_NOW)
+
+
+class CleaningOp(Base):
+    __tablename__ = "cleaning_ops"
+
+    org_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True))
+    plan_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    position: Mapped[int] = mapped_column(Integer, primary_key=True)
+    op_id: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(Text)
+    column_name: Mapped[str | None] = mapped_column(Text, default=None)
+    params: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'"))
+    lossy: Mapped[bool] = mapped_column(Boolean)
+    default_mode: Mapped[str] = mapped_column(Text)
+    decision: Mapped[str] = mapped_column(Text)
+    reason: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(Text)
+    rows_affected: Mapped[int] = mapped_column(BigInteger, server_default="0")
+    values_lost: Mapped[int] = mapped_column(BigInteger, server_default="0")
+    preview: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, server_default=text("'[]'"))
+    notice: Mapped[str | None] = mapped_column(Text, default=None)
+
+
+class DatasetPreferences(Base):
+    __tablename__ = "dataset_preferences"
+
+    org_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True))
+    dataset_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'"))
+    row_version: Mapped[int] = mapped_column(Integer, server_default="1")
+    updated_by: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True))
+    updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=_NOW)
+
+
+class LlmCall(Base):
+    __tablename__ = "llm_calls"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    org_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True))
+    run_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), default=None)
+    purpose: Mapped[str] = mapped_column(Text)
+    provider: Mapped[str] = mapped_column(Text)
+    model: Mapped[str] = mapped_column(Text)
+    prompt_id: Mapped[str] = mapped_column(Text)
+    prompt_version: Mapped[str] = mapped_column(Text)
+    attempt: Mapped[int] = mapped_column(SmallInteger)
+    outcome: Mapped[str] = mapped_column(Text)
+    input_tokens: Mapped[int] = mapped_column(Integer, server_default="0")
+    output_tokens: Mapped[int] = mapped_column(Integer, server_default="0")
+    cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 6), default=None)
+    latency_ms: Mapped[int] = mapped_column(Integer, server_default="0")
+    provider_request_id: Mapped[str | None] = mapped_column(Text, default=None)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=_NOW, primary_key=True
+    )
+
+
+class UsageCounter(Base):
+    __tablename__ = "usage_counters"
+
+    org_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    month: Mapped[date] = mapped_column(Date, primary_key=True)
+    input_tokens: Mapped[int] = mapped_column(BigInteger, server_default="0")
+    output_tokens: Mapped[int] = mapped_column(BigInteger, server_default="0")
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(14, 6), server_default="0")
+    calls: Mapped[int] = mapped_column(Integer, server_default="0")

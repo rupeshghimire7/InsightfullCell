@@ -1,6 +1,6 @@
 [project]
 name = "insightfulcell-backend"
-version = "0.1.0"
+version = "0.3.0"
 description = "InsightfulCell API: identity verification, tenancy, uploads and file ingestion."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -17,6 +17,10 @@ dependencies = [
   "duckdb>=1.1",
   "openpyxl>=3.1",
   "procrastinate==3.10.0",
+  "anthropic>=1.13.0",
+  "openai>=3.27.0",
+  "google-genai>=2.29.0",
+  "httpx>=0.28",
 ]
 
 [dependency-groups]
@@ -82,6 +86,13 @@ ignore = [
 "tests/**" = ["S101", "S105", "S106", "ANN", "PLR0913", "PLR0917", "S608"]
 "migrations/**" = ["S608", "E501"]
 "src/insightfulcell/ingestion/__main__.py" = ["T201"]
+# The engine writes DuckDB SQL by design. Every identifier and literal goes through
+# engine/sql.py (ident, literal, number); values that vary per call are bound parameters.
+"src/insightfulcell/engine/**" = ["S608"]
+# The planning prompt is text for a model, not code: its lines are as long as its sentences.
+"src/insightfulcell/engine/planning/prompt.py" = ["E501"]
+# The recipe is a template of another program; its lines are that program's lines.
+"src/insightfulcell/engine/recipe.py" = ["E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["insightfulcell"]
@@ -136,7 +147,12 @@ include_external_packages = true
 [[tool.importlinter.contracts]]
 name = "Pure layers do not depend on frameworks or infrastructure"
 type = "forbidden"
-source_modules = ["insightfulcell.domain", "insightfulcell.ingestion", "insightfulcell.pipeline"]
+source_modules = [
+  "insightfulcell.domain",
+  "insightfulcell.ingestion",
+  "insightfulcell.engine",
+  "insightfulcell.pipeline",
+]
 forbidden_modules = [
   "insightfulcell.api",
   "insightfulcell.worker",
@@ -145,12 +161,36 @@ forbidden_modules = [
   "insightfulcell.queue",
   "insightfulcell.services",
   "insightfulcell.auth",
+  "insightfulcell.llm",
   "fastapi",
   "sqlalchemy",
   "boto3",
   "psycopg",
   "procrastinate",
+  "httpx",
+  "anthropic",
+  "openai",
+  "google",
 ]
+
+[[tool.importlinter.contracts]]
+name = "Only the LLM gateway's provider adapters import model SDKs (ADR-031)"
+type = "forbidden"
+source_modules = [
+  "insightfulcell.api",
+  "insightfulcell.services",
+  "insightfulcell.db",
+  "insightfulcell.storage",
+  "insightfulcell.auth",
+  "insightfulcell.queue",
+  "insightfulcell.worker",
+  "insightfulcell.llm.gateway",
+  "insightfulcell.llm.breaker",
+  "insightfulcell.llm.pricing",
+]
+forbidden_modules = ["anthropic", "openai", "google"]
+# The worker's composition root builds the configured adapter; it never calls an SDK itself.
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Only the queue adapter and the worker import Procrastinate (ADR-030)"
@@ -170,7 +210,11 @@ allow_indirect_imports = true
 name = "Services depend on ports, never on adapters"
 type = "forbidden"
 source_modules = ["insightfulcell.services"]
-forbidden_modules = ["insightfulcell.queue.procrastinate_queue", "insightfulcell.storage.s3"]
+forbidden_modules = [
+  "insightfulcell.queue.procrastinate_queue",
+  "insightfulcell.storage.s3",
+  "insightfulcell.llm.providers",
+]
 
 [[tool.importlinter.contracts]]
 name = "The API and the worker are separate entry points"
@@ -183,6 +227,6 @@ type = "layers"
 layers = [
   "insightfulcell.api | insightfulcell.worker",
   "insightfulcell.services",
-  "insightfulcell.db | insightfulcell.storage | insightfulcell.auth | insightfulcell.queue",
+  "insightfulcell.db | insightfulcell.storage | insightfulcell.auth | insightfulcell.queue | insightfulcell.llm",
   "insightfulcell.domain",
 ]

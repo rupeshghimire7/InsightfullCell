@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { RunStatusBadge } from "@/components/runs/run-status-badge";
-import { formatBytes, formatCount, formatDate } from "@/lib/format";
+import { formatBytes, formatCount } from "@/lib/format";
 import type { components } from "@/lib/api/schema";
+import { LocalTime } from "@/components/ui/local-time";
 
 type Dataset = components["schemas"]["DatasetOut"];
 
@@ -16,7 +17,12 @@ export const FORMAT_LABEL: Record<string, string> = {
 /** Datasets, newest first. The name opens the dataset; the last column shows its latest run. */
 export function DatasetTable({ datasets, orgId }: { datasets: Dataset[]; orgId: string }) {
   return (
-    <div className="overflow-x-auto rounded-panel border border-border bg-surface">
+    <div
+      role="region"
+      aria-label="Datasets"
+      tabIndex={0}
+      className="overflow-x-auto rounded-panel border border-border bg-surface"
+    >
       <table className="w-full border-collapse text-left text-[13px] leading-[1.35]">
         <caption className="sr-only">Datasets, newest first</caption>
         <thead>
@@ -56,10 +62,10 @@ export function DatasetTable({ datasets, orgId }: { datasets: Dataset[]; orgId: 
               <td className="px-4 py-3">
                 {dataset.latest_version
                   ? (FORMAT_LABEL[dataset.latest_version.format] ?? dataset.latest_version.format)
-                  : "–"}
+                  : "No file"}
               </td>
               <td className="tabular px-4 py-3 text-right whitespace-nowrap">
-                {dataset.latest_version ? formatBytes(dataset.latest_version.bytes) : "–"}
+                {dataset.latest_version ? formatBytes(dataset.latest_version.bytes) : "None"}
               </td>
               <td className="tabular px-4 py-3 text-right">{formatCount(dataset.version_count)}</td>
               <td className="px-4 py-3">
@@ -69,14 +75,14 @@ export function DatasetTable({ datasets, orgId }: { datasets: Dataset[]; orgId: 
                     className="inline-flex rounded-full"
                     title={`Open the latest analysis of ${dataset.name}`}
                   >
-                    <RunStatusBadge status={dataset.latest_run.status} />
+                    <RunStatusBadge status={dataset.latest_run.status} animated={false} />
                   </Link>
                 ) : (
                   <span className="text-muted">Not analysed</span>
                 )}
               </td>
               <td className="px-4 py-3 whitespace-nowrap text-muted">
-                <time dateTime={dataset.created_at}>{formatDate(dataset.created_at)}</time>
+                <LocalTime iso={dataset.created_at} />
               </td>
             </tr>
           ))}

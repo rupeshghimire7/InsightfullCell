@@ -47,7 +47,7 @@ describe("StageList", () => {
     expect(screen.getByText(/Done/)).toHaveTextContent(/Done in 3\ss/);
     expect(screen.getByText("1,234")).toBeInTheDocument();
     expect(screen.getByText("CSV")).toBeInTheDocument();
-    await user.click(screen.getByText("Show the 3 columns and their types"));
+    await user.click(screen.getByText("Show the 3 columns and what they mean"));
     expect(screen.getByText("suburb")).toBeVisible();
     expect(screen.getByText("DOUBLE")).toBeVisible();
     expect(await axe(container)).toHaveNoViolations();
@@ -75,8 +75,8 @@ describe("StageList", () => {
       />,
     );
     expect(screen.getByText("The file was not UTF-8.")).toBeInTheDocument();
-    expect(screen.getAllByText("–").length).toBeGreaterThanOrEqual(3);
-    expect(screen.getByRole("heading", { name: "Profile" })).toBeInTheDocument();
+    expect(screen.getAllByText("Unknown").length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByRole("heading", { name: "Profile every column" })).toBeInTheDocument();
   });
 });
 

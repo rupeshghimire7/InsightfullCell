@@ -28,6 +28,7 @@ class Action(StrEnum):
     RUN_CREATE = "run:create"
     RUN_READ = "run:read"
     RUN_CANCEL = "run:cancel"
+    CLEANING_DECIDE = "cleaning:decide"
 
 
 _ALL: Final = frozenset(Role)
@@ -41,6 +42,8 @@ POLICY: Final[dict[Action, frozenset[Role]]] = {
     Action.RUN_CREATE: _WRITERS,
     Action.RUN_READ: _ALL,
     Action.RUN_CANCEL: _WRITERS,
+    # Approving cleaning changes is analyst work; viewers read plans but never decide them.
+    Action.CLEANING_DECIDE: _WRITERS,
 }
 
 
