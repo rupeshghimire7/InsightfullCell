@@ -25,10 +25,10 @@ The single place that says what exists, what is half-built and what is next. Upd
 | 0 | Foundation and local environment | Environments and delivery, Technology choices | ✅ local stack runs; CI not yet run on GitHub |
 | 1 | Sign-in, tenancy, API, upload, ingestion engine | Web app, Identity, API service, Upload path, Ingest | ✅ built scope green locally; remaining gaps listed below |
 | 2 | Runs, job queue, worker, live progress | Job queue and runs, Live progress | ✅ **done** (iteration 6): all 11 tasks built and tested locally |
-| 3 | Analysis Phase A: ingest + profile in the worker, LLM gateway, understand, clean_plan, review gate | Ingest and profile, Understand, Cleaning, LLM gateway | ✅ **done** (iterations 7 and 8) |
-| 4 | Analysis Phase B: clean_apply, geo, features, mine, facts, sensitivity, rank | Cleaning, Places and maps, Features and mining, Fact store | ⬜ |
-| 5 | Narration and verification | Narration and verification, Guardrail layers | ⬜ |
-| 6 | Charts, dashboard, report, exports, drill-downs | Charts, dashboard, report | ⬜ |
+| 3 | Analysis Phase A: ingest + profile in the worker, LLM gateway, understand, clean_plan, review gate | Ingest and profile, Understand, Cleaning, LLM gateway | ✅ **done** (iterations 7 and 8), plus plan revision with the person's requests (iteration 9 audit) |
+| 4 | Analysis Phase B: clean_apply, geo, features, mine, facts, sensitivity, rank | Cleaning, Places and maps, Features and mining, Fact store | ✅ **done** (iteration 9); rates per resident and spatial clustering move to Phase 6 (maps) |
+| 5 | Narration and verification | Narration and verification, Guardrail layers | 🟡 verified narration with an engine fallback exists; slots, repair, judge, corrupted-narrator suite not started |
+| 6 | Charts, dashboard, report, exports, drill-downs | Charts, dashboard, report | 🟡 report page with cited facts, evidence and charts; Vega-Lite, dashboard, exports, maps, drill-downs not started |
 | 7 | Question data (tiered Q&A) | Question data | ⬜ |
 | 8 | Running it: staging, observability, hardening | Security, When things fail, Observability, Caching | ⬜ |
 | R2 | Release 2 additions: embeddings (pgvector + HNSW), fused word/meaning search | Fact store and search | ⬜ |
@@ -47,7 +47,7 @@ The single place that says what exists, what is half-built and what is next. Upd
 | Local services: PostgreSQL 18 + S3-compatible storage in Compose | ✅ ↔ | PostgreSQL 18 + RustFS 1.0.0 (ADR-027). Both containers healthy; migrations, integration tests and e2e pass on them (iteration 3). |
 | Dev machine tooling | ✅ | uv, Node 22.23.3 + pnpm 10.28.0 (`~/.local`), Docker 29.1.3 + Compose 2.40.3, Playwright Chromium build 1194. |
 | Migration lint for dangerous operations | ⬜ | Baseline: "linted for dangerous operations". Today `check-migrations.sh` checks up/down/up only. |
-| Evaluation suites in CI (planted-effect, corrupted-narrator) | ⬜ | Arrive with Phases 4 and 5. |
+| Evaluation suites in CI (planted-effect, corrupted-narrator) | 🟡 | Planted-effect: `test_engine_evidence.py` (planted effects found, pure noise yields no finding) runs with every unit suite in CI. Corrupted-narrator: Phase 5. |
 | Vercel preview per PR | ⬜ | Phase 8. |
 
 ## Phase 1 · Sign-in, tenancy, API, upload, ingestion engine
@@ -56,7 +56,7 @@ The single place that says what exists, what is half-built and what is next. Upd
 
 | Task | Status | Evidence / notes |
 |---|---|---|
-| Email sign-in link (Better Auth magic link) | ✅ | `frontend/src/lib/auth-options.ts`, sign-in tests |
+| Email sign-in link (Better Auth magic link) | ✅ ↔ | Built and tested, but **off by default** (`EMAIL_LINK_SIGN_IN=off`, ADR-033): the server has no endpoint and the button is shown inert with a note, after "or", below Google. `auth-options.test.ts`, sign-in tests, e2e checks the 404. |
 | Google sign-in (optional) | ✅ | Shown only when configured (SETUP_MANUAL part 2) |
 | Email + password registration and sign-in | ✅ | ADR-028. No verification email or code (needs a mail provider). Password reset ⬜. |
 | GitHub sign-in | ⬜ | Baseline lists Google and GitHub. |
@@ -134,7 +134,7 @@ Decision record: ADR-030. Verified locally in iteration 6 (see "Last check run")
 | `POST /v1/runs` → 202 with run id and events URL in under 0.5 s | ✅ | `api/routers/runs.py`: 202 + `Location` + `ETag` + `events_url`; Idempotency-Key; commits the run first, then defers (a failed defer leaves it for the reconciler). About 0.3 s in the integration tests' access log. `test_runs_api.py` |
 | Procrastinate on PostgreSQL, `queueing_lock = run_id`; queues standard, large, maintenance | ✅ ↔ | Migration 0003: Procrastinate 3.10.0 schema vendored and digest-checked, in its own `procrastinate` schema, `search_path` pinned on its functions. `lock` = run id too. `queue/procrastinate_queue.py` |
 | Worker entry point (same image as the API) | ✅ | `python -m insightfulcell.worker` / `make worker`; `test_worker.py` runs a real worker through both phases. |
-| Two jobs: Phase A (ends at the review gate), Phase B (ends with the report) | ✅ ↔ | `services/run_executor.py`. Phase A ships the real `ingest` stage; Phase B has no stages until Phase 4 but runs as its own job. Review gate (`awaiting_review`, `approve_review`) tested with fake stages; the decision endpoint is Phase 3. |
+| Two jobs: Phase A (ends at the review gate), Phase B (ends with the report) | ✅ ↔ | `services/run_executor.py`. Phase A ships the real `ingest` stage; Phase B runs as its own job (its seven stages arrived in Phases 3 and 4). Review gate (`awaiting_review`, `approve_review`) tested with fake stages; the decision endpoint is Phase 3. |
 | `run_stages` checkpoints keyed by hash of inputs, config and code version | ✅ | `pipeline/stage.checkpoint_key`; reused stages emit `stage.reused`; a run planned by another pipeline fails `pipeline-changed`. |
 | Reconciler and stalled-job reaper; two out-of-memory failures → large queue; three parser crashes → fail with reason | ✅ | `services/maintenance.py` (every minute). `MemoryError` and reaped jobs count as crashes; `worker-crashed` after `run_max_attempts` (3). `test_maintenance.py`, `test_run_execution.py` |
 | Cancel at the next stage boundary; 7-day review expiry with a reminder after 24 hours | ✅ | `:cancel` (any of queued/running/awaiting_review); the worker stops at the next boundary and keeps finished checkpoints. `sweep_reviews` every 15 minutes. The reminder is an event shown on the run page (no email: needs a mail provider). |
@@ -151,7 +151,7 @@ Decision record: ADR-031. Verified in iteration 8 (see "Last check run").
 | Task | Status | Evidence / notes |
 |---|---|---|
 | Engine package with ports: ArtifactStore, FactRepository (plans), ReferenceStore, LLMTransport | ✅ ↔ | `engine/` (semantics, profiling, schema card, planning, cleaning, recipe), `engine/ports.py`. Import-linter keeps the engine free of frameworks. Fact and reference stores arrive with Phase 4. |
-| Object layout | 🟡 ↔ | `gold/{org}/{run}/{stage}/{checkpoint}-{artifact}` (keyed by inputs). `silver/{org}/{version}/{plan_hash}.parquet` is written by `clean_apply` (Phase 4). |
+| Object layout | ✅ ↔ | `gold/{org}/{run}/{stage}/{checkpoint}-{artifact}` (keyed by inputs); `clean_apply` writes cleaned data to `silver/{org}/{version}/{hash}.parquet`, the hash covering the plan and the accepted operations (Phase 4). |
 | ingest stage in the worker: re-hash, parse, meanings, personal-data flags, `run_columns` | ✅ | `pipeline/ingest.py`, `engine/semantics.py`; `test_engine_semantics.py`, `test_run_execution.py` |
 | profile stage: per-column statistics, missing patterns, duplicates, outliers | ✅ | `engine/profiling.py` (DuckDB); `test_phase_a_stages.py` |
 | LLM gateway: purpose → model, budgets (120k input tokens per run, monthly per org), PII payload block, prompt registry, retries, breaker, `llm_calls` | ✅ ↔ | `llm/gateway.py`; providers Gemini (default), OpenAI, Anthropic, DeepSeek (ADR-031; the baseline names Claude only). `test_llm_gateway.py`, ledger in `test_plans_api.py`. Model default ids must be re-checked before release. |
@@ -159,37 +159,43 @@ Decision record: ADR-031. Verified in iteration 8 (see "Last check run").
 | clean_plan: typed operation catalogue, lossless/lossy, policies always_review / review_lossy / auto_safe | ✅ | `engine/cleaning/`; `test_engine_cleaning.py` (policies, previews, the cleaned SELECT, the recipe rebuilds the table) |
 | Review gate UI + `GET /v1/runs/{id}/plan` + `POST …/cleaning-plan:decide` (If-Match) + `GET …/recipe` | ✅ | Plan page, review page, run-page callout; `test_plans_api.py`, `plans.test.tsx`, e2e "a messy file pauses for review" |
 | Saved choices per dataset (names, units, outcome, exclusions) reused by the next run | ✅ | `dataset_preferences`; `test_plans_api.py` |
+| Plan again from the review: requests in the person's own words, removed questions, `POST …/plan:revise` (If-Match) | ✅ | Found uncommitted in the iteration 9 audit and checked: `engine/planning/requests.py` (the engine's reading of a request; anything it cannot map is reported as not understood), the model reads requests when configured, Phase A re-runs reusing unchanged checkpoints, every request gets an outcome. `test_engine_analysis.py` (requests), `test_plans_api.py`. |
+| Recipe page in the UI (the Python recipe, with the privacy note) | ✅ | `/o/{org}/runs/{id}/recipe`, `components/plans/recipe-view.tsx`, `privacy-note.tsx` |
 
-## Phase 4 · Analysis Phase B
+## Phase 4 · Analysis Phase B · done
 
-| Task | Status |
-|---|---|
-| clean_apply: approved plan applied to the original bytes; export as a Python recipe | ⬜ |
-| geo: gazetteer resolution, ≥80% match rule, spatial index for points, `ref.geo_reference_sets` | ⬜ |
-| features: candidates + signal gate (bias-corrected MI beats 19 shuffles), redundancy removal | ⬜ |
-| mine: nine miners in a process pool, `test_log`, Benjamini-Hochberg at 5% per run, driver skill check, leakage flag, small-group suppression (n < 10) | ⬜ |
-| facts table: immutable (trigger), provenance, content hash, full-text index | ⬜ |
-| sensitivity: top ten findings re-tested on minimally cleaned data | ⬜ |
-| rank: significance, effect size, relevance, novelty, de-duplication | ⬜ |
+Decision record: ADR-032. Verified in iteration 9 (see "Last check run"). Phase B runs `clean_apply` → `geo` → `features` → `mine` → `sensitivity` → `rank` → `report`, each checkpointed.
+
+| Task | Status | Evidence / notes |
+|---|---|---|
+| clean_apply: approved plan applied to the original bytes; export as a Python recipe | ✅ | `pipeline/clean_apply.py` (v2): accepted operations only, same SQL as the recipe; cleaned data to silver; a minimally cleaned table (lossless operations only) for the sensitivity check. Recipe from Phase 3. |
+| geo: gazetteer resolution, ≥80% match rule, spatial index for points, `ref.geo_reference_sets` | ✅ ↔ | `engine/geo/`: exact, alias, then fuzzy (RapidFuzz, full names only, unique best) matching per scope (all countries, or one country's states), the scope most values match wins ("WA", "CA", "GA" resolve correctly); Australian postcodes by Australia Post ranges; coordinates through a Shapely STRtree, with a 5 km coast margin. Reference set packaged (Natural Earth 5.1.2 1:50m, public domain, SHA-256 pinned and in `ref.geo_reference_sets`, migration 0007). Regions become standard groups (`NSW` and `New South Wales` are one) and add place findings. Not in v1: suburbs/LGAs, US ZIP codes, rates per resident, spatial clustering (move to Phase 6 maps). |
+| features: candidates + signal gate (bias-corrected MI beats 19 shuffles), redundancy removal | ✅ | `engine/analysis/signal.py`: Miller-Madow MI against 19 shuffles, redundancy at rank correlation 0.95 against own columns and kept features; no outcome, no features. Kept features are driver candidates. |
+| mine: nine miners in a process pool, `test_log`, Benjamini-Hochberg at 5% per run, driver skill check, leakage flag, small-group suppression (n < 10) | ✅ ↔ | `engine/analysis/miners.py` + `stats.py`: one primary test per hypothesis (keyed by the data it reads, so a segment and a benchmark of the same columns are one test), BH across the run, tiers strong/supported/inconclusive/descriptive, wording chosen after BH. Drivers only after a gradient-boosting model shows held-out skill; leakage at 0.95. Groups under 10 rows pooled. Sequential, not a process pool: measured slower with threads (ADR-032). Planted-effect evaluation passes. |
+| facts table: immutable (trigger), provenance, content hash, full-text index | ✅ | `run_facts` (append-only, RLS) gains tier, test columns, provenance and a generated `tsvector` with a GIN index (migration 0007). Retries store nothing new; different facts are refused (`FactsChanged`). `test_plans_api.py::TestFactStore`. |
+| sensitivity: top ten findings re-tested on minimally cleaned data | ✅ | `engine/analysis/sensitivity.py`: holds / weakens / flips (sign, or which group is highest) / not re-tested; recorded in `test_log` (purpose `sensitivity`), shown on each fact. |
+| rank: significance, effect size, relevance, novelty, de-duplication | ✅ | `engine/analysis/rank.py`: evidence, size, plan relevance, novelty, sensitivity; duplicates marked; highlights (at most two per kind) lead the summary. |
+| test_log: every test with effect size, interval, p and q | ✅ | `app.test_log`, monthly partitions (`ensure_test_log_partitions`, run by upkeep), append-only, forced RLS. |
+| Report shows the evidence | ✅ | API `GET /v1/runs/{id}/report`: each fact's tier, test, check and content hash; evidence and feature summaries. UI: evidence badge (icon and words), test line, check line, "Evidence" block. |
 
 ## Phase 5 · Narration and verification
 
 | Task | Status |
 |---|---|
-| Section-scoped narration with numeric slots (Sonnet 5) | ⬜ |
-| Verifier: citations, stray digits, direction, wording strength, causal language, conditions | ⬜ |
-| Repair once, then template; section falls back at 30% failure; "narration simplified" marker | ⬜ |
-| Haiku judge (can only reject), off until its spike passes | ⬜ |
-| Summary last, built only from verified body facts | ⬜ |
-| Template narrator as a complete fallback | ⬜ |
+| Section-scoped narration with numeric slots (Sonnet 5) | 🟡 ↔ | One call for all sections (prompt `narrate-v2`); numbers are checked against cited facts instead of slots. |
+| Verifier: citations, stray digits, direction, wording strength, causal language, conditions | 🟡 | `engine/analysis/narrate.py`: citations, numbers, direction, causal and significance words, and (iteration 9) wording strength for inconclusive facts. Conditions not checked. |
+| Repair once, then template; section falls back at 30% failure; "narration simplified" marker | 🟡 | No repair call; a section that loses more than a third of its sentences is written by the engine, and the report says which sections were. |
+| Haiku judge (can only reject), off until its spike passes | ⬜ | |
+| Summary last, built only from verified body facts | 🟡 | The summary may cite only ranked highlights candidates (reliable or descriptive, iteration 9); it is not yet re-verified as a separate step. |
+| Template narrator as a complete fallback | ✅ | `engine_narration`: every answer from the facts' own statements when the model is off or fails. |
 
 ## Phase 6 · Charts, dashboard, report
 
 | Task | Status |
 |---|---|
-| Catalogue chart builders → Vega-Lite spec + checkable claims; recomputed against cleaned data | ⬜ |
-| Report and dashboard documents (versioned JSON), suggested questions pre-answered | ⬜ |
-| Web rendering: streamed Server Components, lazy vega-embed, citation chips → fact inspector | ⬜ |
+| Catalogue chart builders → Vega-Lite spec + checkable claims; recomputed against cleaned data | 🟡 ↔ | Charts are data computed by the miners (`ChartData`) and drawn by our own accessible SVG components with a table view; no Vega-Lite, no checkable claims yet. |
+| Report and dashboard documents (versioned JSON), suggested questions pre-answered | 🟡 | Report document v2 (`run_reports`, append-only); no dashboard or suggested questions. |
+| Web rendering: streamed Server Components, lazy vega-embed, citation chips → fact inspector | 🟡 | Report page with citation chips linking to each fact (statement, columns, rows, method, evidence, check). |
 | HTML export (Jinja) and PDF (headless Chromium) | ⬜ |
 | Maps: TopoJSON by parent region, small areas hatched | ⬜ |
 | Drill-downs: `POST /v1/runs/{id}/drilldowns`, exploratory facts | ⬜ |
@@ -231,14 +237,19 @@ Decision record: ADR-031. Verified in iteration 8 (see "Last check run").
 | `procrastinate` schema (implied by the schema table) | Procrastinate's SQL vendored into migration 0003, functions' `search_path` pinned | ADR-030: Alembic owns migrations; Procrastinate names its tables without a schema |
 | TanStack Query polls when SSE is blocked | A fixed 3-second polling loop | ADR-030: one poll did not justify a provider and dependency |
 | The API is not reached by browsers (SETUP_MANUAL 6.5 before) | Browsers reach exactly one API path, the event stream, with CORS | ADR-030 and the baseline's own "Live progress" design; production routes only that path publicly |
-| Phase B: eleven stages | Phase B runs as a job with no stages yet | Phase A's four stages are built (Phase 3); Phase B's arrive in Phase 4 |
+| Phase B: eleven stages | Seven stages; narrate, verify, visualize and assemble are inside `report` | ADR-032: they split out with Phases 5 and 6 |
+| Miners in a process pool | Sequential | ADR-032: threads measured slower; a pool copies the table per process |
+| Reference data under `reference/geo/` in object storage, ABS ASGS + US Census | Natural Earth countries and states packaged with the code (0.55 MB), digest pinned in `ref.geo_reference_sets` | ADR-032: no setup step for 0.55 MB; small areas arrive with maps |
+| Facts saved after mining, then sensitivity flags them | Facts are immutable, so sensitivity outcomes are stored in `test_log` beside them | ADR-032 |
+| Sign-in links offered | Off by default (`EMAIL_LINK_SIGN_IN`) | ADR-033: no verified mail domain yet |
+| The run pauses only if the plan would lose data | Every plan pauses for review under `review_lossy` and `always_review`; `auto_safe` never pauses | Found in the uncommitted Phase 3 extras (iteration 9 audit) and kept: the review is where a person adds or removes questions. **To confirm** (no ADR yet). |
 | Claude for planning and narration | One gateway, four providers (Gemini default); rules when no key | ADR-031: development runs with whichever key is at hand; runs never depend on a model |
 | Sign-in by link or Google | Also email + password | ADR-028: lets people in without a mail provider |
 
 ## Open questions
 
 - Should `INITIAL_DOCS/` (the baseline) be committed so collaborators and CI see it? Today it is git-ignored.
-- Where do the ADRs 001–024 referenced by the baseline live? Only 025–030 are in `docs/adr/`.
+- Where do the ADRs 001–024 referenced by the baseline live? Only 025–033 are in `docs/adr/`.
 - Review reminders are events on the run page only; emailing them needs a verified mail domain (ADR-028/029).
 
 ## Iteration log
@@ -354,7 +365,44 @@ Not changed (noted for later): the dedup path ignores `dataset_id` when the same
 
 **Not changed (noted):** type detection runs one DuckDB query per text column (~0.15 s each); fine for the 250 MB limit, worth batching later. Integration tests take ~10 minutes (each Phase A run is real).
 
+### Iteration 9 · 2026-10-10 · Phase 4: Analysis Phase B; audit of uncommitted work; sign-in page
+
+**Why:** compare what is built with this file up to Phase 3, build Phase 4 to the baseline, check everything for a tagged release, and change the sign-in page (links disabled but explained, marketing copy).
+
+**Audit (uncommitted work found at the start, checked against this file).** It held Phase 3 extras not recorded here (plan revision from the person's own requests, `POST …/plan:revise`, a recipe page, every plan reviewed) and a first, descriptive Phase B (`clean_apply` → `analyze` → `report`: miners without tests, facts with a content hash, a narrated report page). Its 353 unit tests passed. Recorded above; Phase 5 and 6 rows marked partial where that work reaches them.
+
+**Built (ADR-032):** `geo`, `features`, `mine` (replacing `analyze`), `sensitivity`, `rank` stages; `engine/analysis/stats.py` (tests, intervals, Benjamini-Hochberg, Miller-Madow MI), miners rewritten to return tests and word facts after BH, data-keyed hypotheses, driver skill check, signal gate, places (`engine/geo/`, packaged Natural Earth set, `scripts/build_geo_reference.py`), sensitivity, ranking with diverse highlights; migration 0007 (`test_log`, fact evidence columns and full-text search, `ref.geo_reference_sets`); repository `save_findings` / `save_rechecks`; report API and page show each fact's evidence; stage summaries for Phase B; narration prompt v2 (tiers and checks), verifier checks wording strength and rejects links; upkeep creates `test_log` partitions. Planted-effect evaluation added. Version 0.4.0.
+
+**Sign-in page (ADR-033):** "Email me a sign-in link" is inert (`aria-disabled`, focusable) with its hover/focus/info note ("Not available yet"), after "or", below "Continue with Google"; the server offers no link endpoint while `EMAIL_LINK_SIGN_IN=off` (default). Panel copy: brand, "Your one stop solution for data analysis.", one supporting line, and a one-line footer "We respect your data privacy. Raw rows never reach an AI model." (checked one line at 1024, 1280 and 1440 px; the panel is hidden on phones, where the tagline sits under the brand). e2e journeys now sign in with passwords.
+
+| Found while testing | Fix |
+|---|---|
+| **The API image could not import the app:** `uv sync` installed the project editable and the runtime stage copies only `.venv` (pre-existing since Phase 1; CI builds the image but never ran it) | `--no-editable` in `backend/Dockerfile`; CI now imports the engine and the reference data inside the built image. Verified by reproducing the build steps (no buildx on this machine). |
+| A segment and a benchmark of the same columns ran the same test twice in the false-discovery family | Hypotheses keyed by the data they read; one test per hypothesis; bootstrap seeded by hypothesis |
+| "Average X ranges from 1,460 for High Street to 1,460 for High Street" when only one group has 10 rows | Compare that group with the pooled other groups |
+| Summary of a run with no reliable finding was four outlier counts | Highlights: reliable first, at most two per kind; outliers and missing shares weigh less |
+| DuckDB `DESCRIBE` column is `column_type`; `Result.tuples()` deprecated in SQLAlchemy 2.1 (tests treat warnings as errors) | Fixed (both caught by the new tests) |
+| e2e expected the old plan page (masked model input moved to the recipe page) and a run without a review step | Journeys updated |
+| A label from the data could get a link into a narrated sentence | Verifier rejects sentences with a URL or email address |
+
+**For your local setup:** pull, `make migrate` (0006 → 0007), restart `make api`, `make worker` and `make web`. Your running dev servers serve the new code but the database is still at 0006 until you migrate.
+
+**Not changed (noted):** suburbs/LGAs, US ZIP codes, rates per resident and spatial clustering (Phase 6 maps); the narrator is one call with number checks, not slots (Phase 5).
+
 ## Last check run
+
+**Iteration 9 (2026-10-10), PostgreSQL 18 + RustFS running. Release candidate v0.4.0.**
+
+| Step | Result |
+|---|---|
+| Backend ruff, mypy strict (171 files), import-linter (6 contracts) | pass |
+| Backend pytest unit + integration (final code) | pass: 545 tests, 91.81% coverage (minimum 85%) |
+| Migrations up / down / up (0007); OpenAPI contract; pip-audit | pass (previous full gate, before the last wording-only changes) |
+| Frontend prettier, eslint, tsc strict, vitest + axe (342 tests), `next build`, pnpm audit | pass in the previous full gate; after the final wording changes, prettier, eslint, tsc and the report tests were re-run and pass. Full vitest and `next build` were not re-run after that |
+| `scripts/e2e.sh` on 8100/3100 | pass: 4/4 journeys (three runs); not re-run after the final wording change to the report's Evidence text |
+| Secret scan | pass (built-in patterns) |
+| Docker image | not built locally (no buildx); build steps reproduced with `uv sync --no-editable`: the engine and reference data import without `src/` |
+| GitHub CI | not run: nothing pushed |
 
 **Iteration 8 (2026-10-10), PostgreSQL 18 + RustFS running. Release candidate v0.3.0.**
 
