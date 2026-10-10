@@ -25,7 +25,7 @@ The single place that says what exists, what is half-built and what is next. Upd
 | 0 | Foundation and local environment | Environments and delivery, Technology choices | ✅ local stack runs; CI not yet run on GitHub |
 | 1 | Sign-in, tenancy, API, upload, ingestion engine | Web app, Identity, API service, Upload path, Ingest | ✅ built scope green locally; remaining gaps listed below |
 | 2 | Runs, job queue, worker, live progress | Job queue and runs, Live progress | ✅ **done** (iteration 6): all 11 tasks built and tested locally |
-| 3 | Analysis Phase A: ingest + profile in the worker, LLM gateway, understand, clean_plan, review gate | Ingest and profile, Understand, Cleaning, LLM gateway | ⬜ |
+| 3 | Analysis Phase A: ingest + profile in the worker, LLM gateway, understand, clean_plan, review gate | Ingest and profile, Understand, Cleaning, LLM gateway | ✅ **done** (iterations 7 and 8) |
 | 4 | Analysis Phase B: clean_apply, geo, features, mine, facts, sensitivity, rank | Cleaning, Places and maps, Features and mining, Fact store | ⬜ |
 | 5 | Narration and verification | Narration and verification, Guardrail layers | ⬜ |
 | 6 | Charts, dashboard, report, exports, drill-downs | Charts, dashboard, report | ⬜ |
@@ -114,8 +114,8 @@ The single place that says what exists, what is half-built and what is next. Upd
 | Error messages never echo cell values | ✅ | |
 | Library + CLI, no HTTP/DB/S3 dependency | ✅ | `python -m insightfulcell.ingestion` |
 | Called by the worker on real uploads | ✅ | `pipeline/ingest.py` (iteration 6) |
-| Personal-data detection (emails, phones, names, national ids) | ⬜ | Phase 3. Required before any LLM call. |
-| Column meanings (continuous, nominal, datetime, currency, percentage, identifier, text, geography) | ⬜ | Phase 3. The engine gives physical types only. |
+| Personal-data detection (emails, phones, names, national ids) | ✅ | Phase 3: `engine/semantics.py`, before any model call |
+| Column meanings (continuous, nominal, datetime, currency, percentage, identifier, text, geography) | ✅ | Phase 3: `engine/semantics.py` |
 
 ### Phase 1 exit criteria
 
@@ -144,18 +144,21 @@ Decision record: ADR-030. Verified locally in iteration 6 (see "Last check run")
 
 UI delivered with Phase 2: run page (live steps, ingest summary, cancel with confirmation, retry, failure reasons), runs list, dataset page, "Analyse this file" after upload, redesign per `INITIAL_DOCS/design-taste-frontend/SKILL.md` (iteration 6).
 
-## Phase 3 · Analysis Phase A
+## Phase 3 · Analysis Phase A · done
 
-| Task | Status |
-|---|---|
-| Engine package layout (domain, stages, planning, ports) with ports: ArtifactStore, FactRepository, ReferenceStore, LLMTransport | ⬜ |
-| Silver/gold object layout (`silver/{org}/{version}/{plan_hash}.parquet`, `gold/{org}/{run}/{artifact}`) | ⬜ |
-| ingest stage in the worker: re-hash, parse, assign meanings, flag personal data, `run_columns` | ⬜ |
-| profile stage: per-column statistics, missing patterns, duplicates, outliers | ⬜ |
-| LLM gateway: purpose → model, budgets (120k input tokens per run, monthly per org), PII payload block, prompt registry, retries, circuit breaker, `llm_calls` accounting | ⬜ |
-| understand stage: masked schema card → typed plan (Sonnet 5), plan cache by schema fingerprint, validator, rule-based planner fallback, `analysis_plans` append-only | ⬜ |
-| clean_plan: typed operation catalogue, lossless/lossy, policies always_review / review_lossy / auto_safe | ⬜ |
-| Review gate UI + `GET /v1/runs/{id}/plan` + `POST …/cleaning-plan:decide` (If-Match) | ⬜ |
+Decision record: ADR-031. Verified in iteration 8 (see "Last check run").
+
+| Task | Status | Evidence / notes |
+|---|---|---|
+| Engine package with ports: ArtifactStore, FactRepository (plans), ReferenceStore, LLMTransport | ✅ ↔ | `engine/` (semantics, profiling, schema card, planning, cleaning, recipe), `engine/ports.py`. Import-linter keeps the engine free of frameworks. Fact and reference stores arrive with Phase 4. |
+| Object layout | 🟡 ↔ | `gold/{org}/{run}/{stage}/{checkpoint}-{artifact}` (keyed by inputs). `silver/{org}/{version}/{plan_hash}.parquet` is written by `clean_apply` (Phase 4). |
+| ingest stage in the worker: re-hash, parse, meanings, personal-data flags, `run_columns` | ✅ | `pipeline/ingest.py`, `engine/semantics.py`; `test_engine_semantics.py`, `test_run_execution.py` |
+| profile stage: per-column statistics, missing patterns, duplicates, outliers | ✅ | `engine/profiling.py` (DuckDB); `test_phase_a_stages.py` |
+| LLM gateway: purpose → model, budgets (120k input tokens per run, monthly per org), PII payload block, prompt registry, retries, breaker, `llm_calls` | ✅ ↔ | `llm/gateway.py`; providers Gemini (default), OpenAI, Anthropic, DeepSeek (ADR-031; the baseline names Claude only). `test_llm_gateway.py`, ledger in `test_plans_api.py`. Model default ids must be re-checked before release. |
+| understand stage: masked schema card → typed plan, plan cache by schema fingerprint, validator, rule planner fallback, `analysis_plans` append-only | ✅ | `pipeline/understand.py`, `engine/schema_card.py`, `engine/planning/`; append-only triggers tested |
+| clean_plan: typed operation catalogue, lossless/lossy, policies always_review / review_lossy / auto_safe | ✅ | `engine/cleaning/`; `test_engine_cleaning.py` (policies, previews, the cleaned SELECT, the recipe rebuilds the table) |
+| Review gate UI + `GET /v1/runs/{id}/plan` + `POST …/cleaning-plan:decide` (If-Match) + `GET …/recipe` | ✅ | Plan page, review page, run-page callout; `test_plans_api.py`, `plans.test.tsx`, e2e "a messy file pauses for review" |
+| Saved choices per dataset (names, units, outcome, exclusions) reused by the next run | ✅ | `dataset_preferences`; `test_plans_api.py` |
 
 ## Phase 4 · Analysis Phase B
 
@@ -228,7 +231,8 @@ UI delivered with Phase 2: run page (live steps, ingest summary, cancel with con
 | `procrastinate` schema (implied by the schema table) | Procrastinate's SQL vendored into migration 0003, functions' `search_path` pinned | ADR-030: Alembic owns migrations; Procrastinate names its tables without a schema |
 | TanStack Query polls when SSE is blocked | A fixed 3-second polling loop | ADR-030: one poll did not justify a provider and dependency |
 | The API is not reached by browsers (SETUP_MANUAL 6.5 before) | Browsers reach exactly one API path, the event stream, with CORS | ADR-030 and the baseline's own "Live progress" design; production routes only that path publicly |
-| Phase B: eleven stages | Phase B runs as a job with no stages yet | Stages arrive in Phases 3 and 4; the plumbing is complete and tested |
+| Phase B: eleven stages | Phase B runs as a job with no stages yet | Phase A's four stages are built (Phase 3); Phase B's arrive in Phase 4 |
+| Claude for planning and narration | One gateway, four providers (Gemini default); rules when no key | ADR-031: development runs with whichever key is at hand; runs never depend on a model |
 | Sign-in by link or Google | Also email + password | ADR-028: lets people in without a mail provider |
 
 ## Open questions
@@ -320,7 +324,52 @@ Not changed (noted for later): the dedup path ignores `dataset_id` when the same
 - **Found and fixed while testing:** Procrastinate's triggers failed from any non-queue connection (pinned `search_path`); a stalled SSE body could hang a reader whose `fetch` ignores abort (reader now cancelled, stall counted as a failure); runs planned by a different pipeline would have written nowhere (now `pipeline-changed`); copy that promised a version picker the UI lacks was removed.
 - **For your local setup:** pull, then `make migrate` (database goes 0002 → 0004), restart `make api`, and start `make worker`.
 
+### Iteration 7 · 2026-10-10 · Phase 3: Analysis Phase A (stopped at the usage limit)
+
+**Built:** `engine/` (semantics + personal-data flags, DuckDB profiling, the masked schema card with token-budget tiers, plan language v1, validator, rule planner, merge, cleaning catalogue + proposals with measured previews, feature and chart catalogues, deterministic Python recipe), `llm/` (gateway: budgets, payload guard, retries, breaker, accounting; providers Gemini (default), OpenAI, Anthropic, DeepSeek via official SDKs), stages `profile`, `understand`, `clean_plan` (ingest v2), migration 0005 (`run_columns`, append-only `analysis_plans` / `cleaning_plans` / `cleaning_ops`, `dataset_preferences`, partitioned `llm_calls`, `usage_counters`, `runs.inputs`), `GET /v1/runs/{id}/plan`, `POST …/cleaning-plan:decide` (If-Match, revision check), `GET …/recipe`. UI: plan page, review page, review callout, stage summaries, column cards with validated chart colour, design fixes (dark sign-in panel, no en dashes, no list spinners, off-white surfaces).
+
+**Verified:** backend ruff, mypy strict, import-linter (6 contracts), unit 322+ pass, integration suite pass (incl. 8 new plan API tests); frontend typecheck, eslint, the four changed test files and the new plan tests (10) pass.
+
+**Not run / left:** full `make check` and `next build`; full frontend vitest run after the last edits; `make e2e` (journey needs a review step for messy files); ADR-031 (multi-provider gateway), CHANGELOG, `.env.example` LLM keys; tracker task rows for Phase 3; performance (~0.15 s per text column in detection).
+
+### Iteration 8 · 2026-10-10 · Phase 3 QA pass, release v0.3.0
+
+**Why:** finish Phase 3 to a taggable state with every check green, fix all bugs, update the README, and apply the design skill to the new screens.
+
+| Finding | Fix |
+|---|---|
+| **`backend/migrations/` was git-ignored** (the `.gitignore` "extras" block), so CI, the Docker image and any fresh clone could not create the database | `migrations/` removed from `.gitignore` (your choice: CHANGELOG, CLAUDE.md, SETUP_MANUAL and `docs/` stay local) |
+| **Wrong merge proposals:** labels that differ only by a number or a one-letter code (`Store 1`/`Store 2`, `item0`/`item1`, `Group A`/`Group B`) were proposed as spellings of one category, so such tables paused for review with a wrong merge. 3 event-stream tests failed on it | `_enumerated()` in `engine/cleaning/proposals.py`; unit test. All sample files re-checked: only real variants remain (`N.T.`/`NT`, `Mt Gambier`/`Mount Gambier`, `Electrician`/`Electrical`, `S. Brooks`/`Sam Brooks`) |
+| **Code injection through the recipe:** a file name containing `"""` closed the recipe's docstring, and a column name with a line break escaped a comment, so the downloaded script could run code. A column named `a"` made the download fail (500). Data values could break out of the recipe's chart page (`</script>`) | `_text()` sanitises names in comments and the docstring; SQL with `"""` falls back to a plain literal; `<` escaped in the chart page. Test proves names stay data (and fails without the fix) |
+| **Times in the server's zone and locale:** server-rendered dates showed the server clock ("11:27 AM" next to "2:12 pm" on one page), and a client component re-rendering them caused a hydration mismatch | `LocalTime`: UTC on the server and during hydration, the viewer's local time after (`useSyncExternalStore`); used for every date |
+| **Accessibility:** scrollable regions (the "exactly as sent" description, wide tables on phones) could not be reached by keyboard (axe `scrollable-region-focusable`, found by the new e2e test) | Focusable, labelled `region`s; jsx-a11y allows `tabIndex` on `region` |
+| e2e expected the Phase 2 success text, and "300,000" now appears twice | Assertions updated; new journey **a messy file pauses for review, and approving continues the analysis** (masked model input, approval refused until every change is decided) |
+| `make e2e` would call a real model if `backend/.env` had a key | `scripts/e2e.sh` sets `LLM_PROVIDER=none` |
+| Review-form component tests timed out at 5 s under the full parallel run (pass alone) | 30 s budget for those interaction-heavy tests |
+| LLM settings missing from `backend/.env.example`; ADR-031 referenced but missing | Both added |
+| Anthropic fast-tier default `claude-haiku-4-5` (a generation behind) | `claude-haiku-5-5`; prices in `llm/pricing.py` checked against Anthropic's current table. `claude-sonnet-5` kept: the baseline names Sonnet 5 |
+| Lint/type errors in `test_plans_api.py` (line length, unused `noqa`, untyped JSON index) | Fixed |
+
+**Design (taste skill, redesign-preserve, B2B trust-first; dials VARIANCE 4, MOTION 3, DENSITY 5 as in iteration 6).** Reviewed in light, dark and at 390 px from e2e screenshots. Long lists now use the skill's alternatives to a flat list: automatic cleaning changes are grouped by kind in folding groups ("3 of 4 on"); the 50-row column editor folds behind "Rename columns, set units or leave columns out"; follow-up questions fold behind "Then N more questions". Mono is for numbers only (column names and formats in the text face). Wider before/after previews (dates no longer cut off). Plainer copy for the features note. No em or en dashes in UI strings; icons are Phosphor only; one accent.
+
+**Not changed (noted):** type detection runs one DuckDB query per text column (~0.15 s each); fine for the 250 MB limit, worth batching later. Integration tests take ~10 minutes (each Phase A run is real).
+
 ## Last check run
+
+**Iteration 8 (2026-10-10), PostgreSQL 18 + RustFS running. Release candidate v0.3.0.**
+
+| Step | Result |
+|---|---|
+| `scripts/check.sh` (everything CI runs, nothing skipped) | pass, except two formatting findings fixed straight after: ruff now also checks `backend/migrations/` (tracked for the first time; reformatted, ASTs proven identical) and a temporary screenshot spec (deleted) |
+| Backend ruff, mypy strict (143 files), import-linter (6 contracts) | pass |
+| Backend pytest unit + integration | pass: 483 tests, 93.31% coverage (minimum 85%) |
+| Migrations up / down / up; OpenAPI contract; pip-audit | pass |
+| Frontend prettier, eslint (jsx-a11y), tsc strict, `next build`, pnpm audit | pass |
+| Frontend vitest + axe | pass: 324 tests |
+| `scripts/e2e.sh` on ports 8100/3100 (real worker, RustFS, `LLM_PROVIDER=none`) | pass: 4/4 journeys, including the new review-gate journey |
+| Secret scan | pass (built-in patterns; gitleaks not installed) |
+| After the version bump to 0.3.0 | ruff, mypy, import-linter, migrations up/down/up, contract, prettier, eslint, tsc, secret scan and 328 backend unit tests re-run: pass. Integration, vitest and e2e not re-run (only the version string changed for them) |
+| GitHub CI | not run: nothing pushed yet |
 
 **Iteration 6 (2026-10-10), PostgreSQL 18 + RustFS running.**
 
