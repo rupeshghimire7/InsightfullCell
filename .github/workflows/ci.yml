@@ -152,8 +152,17 @@ jobs:
         with:
           context: backend
           push: false
+          load: true
+          tags: insightfulcell-api:ci
           cache-from: type=gha,scope=api
           cache-to: type=gha,scope=api,mode=max
+      # The runtime stage holds only the virtualenv: prove the package and its data files are in it.
+      - name: API image imports the engine and its reference data
+        run: >-
+          docker run --rm --entrypoint python insightfulcell-api:ci -c
+          "from insightfulcell.pipeline.definition import default_pipeline;
+          from insightfulcell.engine.geo.reference import load;
+          print(default_pipeline().code_version, len(load().regions))"
       - uses: docker/build-push-action@v6
         with:
           context: frontend
