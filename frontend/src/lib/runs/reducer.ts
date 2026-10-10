@@ -92,6 +92,12 @@ export function applyEvent(view: RunView, event: RunEvent): RunView {
       run.phase = "B";
       note = null;
       break;
+    case "review.revision_requested":
+      run.status = "queued";
+      run.phase = "A";
+      run.stage = null;
+      note = "Planning again with your changes. The plan comes back to you for review.";
+      break;
     case "run.succeeded":
       run.status = "succeeded";
       run.finished_at = event.at;
@@ -144,6 +150,7 @@ export const REFRESH_AFTER: ReadonlySet<RunEvent["type"]> = new Set([
   "stage.completed",
   "review.required",
   "review.approved",
+  "review.revision_requested",
   "run.succeeded",
   "run.failed",
   "run.cancelled",

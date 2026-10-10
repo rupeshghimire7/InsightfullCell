@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import type { Pool } from "pg";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { userResendKey } from "@/lib/auth-options";
 
 const KEY = "re_test_0123456789abcdef";
@@ -15,12 +16,14 @@ describe("userResendKey", () => {
     expect(userResendKey({ resendApiKey: KEY }, "resend-test")).toBe(KEY);
   });
 
-  it("is refused once a verified domain sends email for real", () => {
-    expect(() => userResendKey({ resendApiKey: KEY }, "email")).toThrow(
-      expect.objectContaining({
-        body: expect.objectContaining({ code: "RESEND_KEY_NOT_ACCEPTED" }),
-      }),
-    );
+  it("is refused once a verified domain sends email for real, or links are off", () => {
+    for (const delivery of ["email", "off"] as const) {
+      expect(() => userResendKey({ resendApiKey: KEY }, delivery)).toThrow(
+        expect.objectContaining({
+          body: expect.objectContaining({ code: "RESEND_KEY_NOT_ACCEPTED" }),
+        }),
+      );
+    }
   });
 
   it("is refused when it is not shaped like a Resend key, without echoing it", () => {
@@ -34,5 +37,35 @@ describe("userResendKey", () => {
       expect(caught).toMatchObject({ body: { code: "RESEND_KEY_INVALID" } });
       expect(String((caught as Error).message)).not.toContain("Injected");
     }
+  });
+});
+
+describe("buildAuthOptions", () => {
+  const base = {
+    BETTER_AUTH_URL: "http://localhost:3000",
+    BETTER_AUTH_SECRET: "x".repeat(32),
+    AUTH_DATABASE_URL: "postgres://u:p@localhost/db",
+    API_BASE_URL: "http://localhost:8000",
+    S3_PUBLIC_ORIGIN: "http://localhost:9000",
+  };
+
+  async function pluginIds(env: Record<string, string>): Promise<string[]> {
+    vi.resetModules();
+    for (const [key, value] of Object.entries({ ...base, ...env })) vi.stubEnv(key, value);
+    const { buildAuthOptions } = await import("@/lib/auth-options");
+    return buildAuthOptions({} as Pool).plugins.map((plugin) => plugin.id);
+  }
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("offers no sign-in link endpoint while links are off (the default)", async () => {
+    expect(await pluginIds({})).not.toContain("magic-link");
+  });
+
+  it("offers it once switched on", async () => {
+    expect(await pluginIds({ EMAIL_LINK_SIGN_IN: "on" })).toContain("magic-link");
   });
 });

@@ -18,12 +18,14 @@ import {
   Check,
   EyeSlash,
   Info,
+  Plus,
   WarningCircle,
+  X,
 } from "@/components/ui/icons";
 import { ProblemAlert } from "@/components/ui/problem-alert";
 import { formatCount } from "@/lib/format";
 import { plansApi, type PlansApi } from "@/lib/plans/api";
-import { featureLabel, personalLabel } from "@/lib/plans/labels";
+import { featureLabel, minerLabel, personalLabel } from "@/lib/plans/labels";
 import type { CleaningOperation, DecideRequest, Plan } from "@/lib/plans/types";
 import { describeError, type Problem } from "@/lib/problem";
 
@@ -42,10 +44,19 @@ interface ColumnDraft {
   excluded: boolean;
 }
 
+/** Most requests a person can leave at once (the API's limit). */
+export const MAX_REQUESTS = 5;
+const MAX_REQUEST_CHARS = 500;
+
 /**
  * The review gate. Changes that could remove data wait for an explicit choice; everything
- * else is shown with its current state and can be switched. Approving records one new,
- * immutable cleaning plan revision and continues the analysis.
+ * else is shown with its current state and can be switched. The person can also keep or
+ * remove planned questions and ask for more in their own words.
+ *
+ * - No change to the questions: **Approve and continue** records one new, immutable cleaning
+ *   plan revision and the analysis goes on to the report.
+ * - Questions removed, brought back or asked for: **Update the plan** plans again (the engine
+ *   first, then the planning model) and the plan comes back here.
  */
 export function ReviewForm({ plan, orgId, api = plansApi }: ReviewFormProps) {
   const router = useRouter();
@@ -75,6 +86,26 @@ export function ReviewForm({ plan, orgId, api = plansApi }: ReviewFormProps) {
   const [features, setFeatures] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(plan.features.map((f) => [f.id, f.enabled])),
   );
+  const savedRequests = useMemo(() => plan.requests.map((r) => r.request), [plan.requests]);
+  const savedRemoved = useMemo(
+    () => new Set(plan.removed_analyses.map((a) => a.id)),
+    [plan.removed_analyses],
+  );
+  const [kept, setKept] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries([
+      ...plan.analyses.map((a) => [a.id, true] as const),
+      ...plan.removed_analyses.map((a) => [a.id, false] as const),
+    ]),
+  );
+  const [requests, setRequests] = useState<string[]>(savedRequests);
+  const removedNow = Object.entries(kept)
+    .filter(([, keep]) => !keep)
+    .map(([id]) => id);
+  const questionsChanged =
+    removedNow.length !== savedRemoved.size || removedNow.some((id) => !savedRemoved.has(id));
+  const requestsChanged =
+    requests.length !== savedRequests.length || requests.some((r, i) => r !== savedRequests[i]);
+  const revising = questionsChanged || requestsChanged;
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [nudge, setNudge] = useState(false);
@@ -96,9 +127,19 @@ export function ReviewForm({ plan, orgId, api = plansApi }: ReviewFormProps) {
     setNudge(false);
   }
 
+  function undoQuestionChanges() {
+    setKept(
+      Object.fromEntries([
+        ...plan.analyses.map((a) => [a.id, true] as const),
+        ...plan.removed_analyses.map((a) => [a.id, false] as const),
+      ]),
+    );
+    setRequests(savedRequests);
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!complete) {
+    if (!revising && !complete) {
       setNudge(true);
       firstUndecided.current?.querySelector<HTMLInputElement>("input")?.focus();
       return;
@@ -129,7 +170,19 @@ export function ReviewForm({ plan, orgId, api = plansApi }: ReviewFormProps) {
       disabled_features: plan.features.filter((f) => !features[f.id]).map((f) => f.id),
     };
     try {
-      await api.decide(plan.run.id, plan.run.row_version, body);
+      if (revising) {
+        await api.revise(plan.run.id, plan.run.row_version, {
+          ...body,
+          // Only what the person decided so far is kept; the rest waits for the new plan.
+          decisions: operations
+            .filter((o) => choices[o.id] !== undefined && o.decision === "pending")
+            .map((o) => ({ operation_id: o.id, accept: choices[o.id] === true })),
+          removed_analyses: removedNow,
+          requests,
+        });
+      } else {
+        await api.decide(plan.run.id, plan.run.row_version, body);
+      }
       router.push(`/o/${orgId}/runs/${plan.run.id}`);
       router.refresh();
     } catch (error) {
@@ -181,6 +234,15 @@ export function ReviewForm({ plan, orgId, api = plansApi }: ReviewFormProps) {
           </ol>
         )}
       </section>
+
+      <Questions
+        plan={plan}
+        kept={kept}
+        onKeep={(id, keep) => setKept((current) => ({ ...current, [id]: keep }))}
+        names={(column) => columns[column]?.display_name || column}
+      />
+
+      <Requests requests={requests} outcomes={plan.requests} onChange={setRequests} />
 
       {automatic.length > 0 ? (
         <section aria-labelledby="auto-title" className="space-y-3">
@@ -379,7 +441,18 @@ export function ReviewForm({ plan, orgId, api = plansApi }: ReviewFormProps) {
       >
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 text-sm" aria-live="polite">
-            {pending.length === 0 ? (
+            {revising ? (
+              <span className="text-text">
+                Your changes to the questions are planned again, then come back here for review.{" "}
+                <button
+                  type="button"
+                  onClick={undoQuestionChanges}
+                  className="inline-flex min-h-9 items-center font-medium text-accent underline underline-offset-2 pointer-coarse:min-h-11"
+                >
+                  Undo changes
+                </button>
+              </span>
+            ) : pending.length === 0 ? (
               <span className="text-muted">Nothing needs a decision. Approve to continue.</span>
             ) : (
               <span className={complete ? "text-text" : "text-muted"}>
@@ -391,13 +464,20 @@ export function ReviewForm({ plan, orgId, api = plansApi }: ReviewFormProps) {
               </span>
             )}
           </div>
-          <Button
-            type="submit"
-            loading={busy}
-            aria-describedby={complete ? undefined : `${formId}-why`}
-          >
-            {busy ? "Approving…" : "Approve and continue"}
-          </Button>
+          {revising ? (
+            <Button type="submit" loading={busy}>
+              <ArrowClockwise aria-hidden="true" className="size-4" />
+              {busy ? "Updating…" : "Update the plan"}
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              loading={busy}
+              aria-describedby={complete ? undefined : `${formId}-why`}
+            >
+              {busy ? "Approving…" : "Approve and continue"}
+            </Button>
+          )}
           <span id={`${formId}-why`} className="sr-only">
             Every change marked as needing your decision must be applied or skipped first.
           </span>
@@ -633,5 +713,210 @@ function Toggles({
         );
       })}
     </div>
+  );
+}
+
+type Analysis = Plan["analyses"][number];
+
+/** The planned questions, grouped by kind, each kept or removed with a checkbox. Removed ones
+ * stay listed (unticked) so they can be brought back. */
+function Questions({
+  plan,
+  kept,
+  onKeep,
+  names,
+}: {
+  plan: Plan;
+  kept: Record<string, boolean>;
+  onKeep: (id: string, keep: boolean) => void;
+  names: (column: string) => string;
+}) {
+  const prefix = useId();
+  const all: Analysis[] = [...plan.analyses, ...plan.removed_analyses];
+  const groups = new Map<string, Analysis[]>();
+  for (const a of all) groups.set(a.kind, [...(groups.get(a.kind) ?? []), a]);
+  const keptCount = all.filter((a) => kept[a.id]).length;
+  if (all.length === 0) return null;
+  return (
+    <section aria-labelledby="questions-title" className="space-y-3">
+      <div className="space-y-1">
+        <h2 id="questions-title" className="text-lg font-semibold">
+          Questions to answer
+        </h2>
+        <p className="max-w-[65ch] text-sm text-muted">
+          Each question gets an answer with numbers, a chart and its sources in the report. Untick
+          any you do not need.
+        </p>
+      </div>
+      <p className="text-xs text-muted" aria-live="polite">
+        <span className="tabular font-mono text-text">{keptCount}</span> of{" "}
+        <span className="tabular font-mono">{all.length}</span> kept
+      </p>
+      <div className="divide-y divide-border rounded-panel border border-border bg-surface">
+        {[...groups.entries()].map(([kind, items], g) => {
+          const on = items.filter((a) => kept[a.id]).length;
+          const notable = items.some((a) => a.source === "person" || !kept[a.id]);
+          return (
+            <details key={kind} className="group" open={notable}>
+              <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-4 text-sm select-none">
+                <span className="flex min-w-0 items-center gap-2">
+                  <CaretDown
+                    aria-hidden="true"
+                    className="size-4 shrink-0 text-muted transition-transform group-open:rotate-180 motion-reduce:transition-none"
+                  />
+                  <span className="truncate font-medium">{minerLabel(kind)}</span>
+                </span>
+                <span className="shrink-0 text-xs text-muted">
+                  <span className="tabular font-mono text-text">{on}</span> of{" "}
+                  <span className="tabular font-mono">{items.length}</span> kept
+                </span>
+              </summary>
+              <ul className="space-y-0.5 border-t border-border px-4 py-2">
+                {items.map((a, i) => {
+                  const id = `${prefix}-${g}-${i}`;
+                  return (
+                    <li key={a.id} className="flex items-start gap-3 py-1.5">
+                      <input
+                        id={id}
+                        type="checkbox"
+                        checked={kept[a.id] ?? true}
+                        onChange={(e) => onKeep(a.id, e.target.checked)}
+                        className="mt-1 size-4 accent-[var(--accent)]"
+                      />
+                      <label htmlFor={id} className="min-w-0 flex-1 text-sm">
+                        <span className={kept[a.id] ? "" : "text-muted line-through"}>
+                          {a.question}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-muted">
+                          {a.columns.map(names).join(", ")}
+                          {a.source === "person" ? (
+                            <span className="ml-2 font-medium text-accent">You asked for this</span>
+                          ) : null}
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            </details>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+const OUTCOME: Record<string, { label: string; className: string }> = {
+  added: { label: "Added", className: "text-accent" },
+  removed: { label: "Removed", className: "text-accent" },
+  already_planned: { label: "Already planned", className: "text-text" },
+  not_understood: { label: "Not used", className: "text-warning" },
+};
+
+/** Requests in the person's own words. Each shows what the last planning made of it; a new
+ * one is planned when the person updates the plan. */
+function Requests({
+  requests,
+  outcomes,
+  onChange,
+}: {
+  requests: string[];
+  outcomes: Plan["requests"];
+  onChange: (next: string[]) => void;
+}) {
+  const inputId = useId();
+  const helpId = useId();
+  const [draft, setDraft] = useState("");
+  const full = requests.length >= MAX_REQUESTS;
+  const text = draft.trim();
+  const duplicate = requests.some((r) => r.toLowerCase() === text.toLowerCase());
+
+  function add() {
+    if (!text || full || duplicate) return;
+    onChange([...requests, text]);
+    setDraft("");
+  }
+
+  return (
+    <section aria-labelledby="requests-title" className="space-y-3">
+      <div className="space-y-1">
+        <h2 id="requests-title" className="text-lg font-semibold">
+          Ask for something else
+        </h2>
+        <p className="max-w-[65ch] text-sm text-muted">
+          Describe what else to look at, or what to leave out, in your own words. Use the column
+          names shown on this page.
+        </p>
+      </div>
+      <div className="max-w-2xl space-y-1.5">
+        <label htmlFor={inputId} className="block text-sm font-medium">
+          Your request
+        </label>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            id={inputId}
+            value={draft}
+            maxLength={MAX_REQUEST_CHARS}
+            disabled={full}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault(); // Enter adds the request; it never submits the review
+                add();
+              }
+            }}
+            aria-describedby={helpId}
+            className="block min-h-10 w-full min-w-0 flex-1 rounded-control border border-border bg-surface px-3 text-sm disabled:opacity-60 pointer-coarse:min-h-11"
+          />
+          <Button variant="secondary" onClick={add} disabled={!text || full || duplicate}>
+            <Plus aria-hidden="true" className="size-4" />
+            Add request
+          </Button>
+        </div>
+        <p id={helpId} className="text-xs text-muted">
+          {full
+            ? "That is the most at once. Remove one to add another."
+            : duplicate
+              ? "You already asked for this."
+              : "For example: “Compare sales across regions”, “Is age related to spend?” or “Skip the postcode questions”. Up to five."}
+        </p>
+      </div>
+      {requests.length > 0 ? (
+        <ul className="space-y-2" aria-label="Your requests">
+          {requests.map((request) => {
+            const outcome = outcomes.find((o) => o.request === request);
+            const shown = outcome ? (OUTCOME[outcome.status] ?? OUTCOME.not_understood!) : null;
+            return (
+              <li
+                key={request}
+                className="flex items-start justify-between gap-3 rounded-panel border border-border bg-surface py-2 pr-2 pl-4"
+              >
+                <div className="min-w-0 pt-1 text-sm">
+                  <p className="break-words">&ldquo;{request}&rdquo;</p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    {outcome && shown ? (
+                      <>
+                        <span className={`font-medium ${shown.className}`}>{shown.label}.</span>{" "}
+                        {outcome.note}
+                      </>
+                    ) : (
+                      "New: it is planned when you update the plan."
+                    )}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  className="shrink-0 px-2.5"
+                  aria-label={`Remove request: ${request}`}
+                  onClick={() => onChange(requests.filter((r) => r !== request))}
+                >
+                  <X aria-hidden="true" className="size-4" />
+                </Button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </section>
   );
 }

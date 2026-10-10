@@ -3,25 +3,22 @@ import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 
 /**
- * The Phase 1 journey in a real browser: sign in with a magic link, upload a multi-part file
- * (Web Worker SHA-256, CORS, presigned PUTs), see it listed, upload it again, sign out.
- * The sign-in link is read from the web server's log (EMAIL_TRANSPORT=console).
+ * The journeys in a real browser: register and sign in with a password (sign-in links are
+ * switched off until a mail domain is verified), upload a multi-part file (Web Worker SHA-256,
+ * CORS, presigned PUTs), see it listed, upload it again, sign out; then a messy file through the
+ * review gate to the report and its evidence.
  */
 
-const WEB_LOG = process.env.E2E_WEB_LOG;
 const EMAIL = `e2e-${Date.now()}@example.com`;
+const PASSWORD = "a long enough passphrase";
 
-async function signInLink(email: string): Promise<string> {
-  if (!WEB_LOG) throw new Error("Set E2E_WEB_LOG to the web server's log file");
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    const log = await readFile(WEB_LOG, "utf8").catch(() => "");
-    const lines = log.split("\n");
-    const index = lines.findLastIndex((line) => line.includes(`Sign-in link for ${email}`));
-    const url = index >= 0 ? lines[index + 1]?.trim() : undefined;
-    if (url?.startsWith("http")) return url;
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  throw new Error(`No sign-in link for ${email} appeared in ${WEB_LOG}`);
+async function register(page: Page, email: string, name = "E2E Person") {
+  await page.goto("/sign-in?mode=register");
+  await page.getByLabel("Name").fill(name);
+  await page.getByLabel("Email address").fill(email);
+  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page).toHaveURL(/\/o\/[0-9a-f-]{36}$/);
 }
 
 function csv(rows: number, tag: string): Buffer {
@@ -45,7 +42,7 @@ async function expectNoAxeViolations(page: Page) {
   expect(results.violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);
 }
 
-test("sign in, upload, deduplicate, sign out", async ({ page, browser }) => {
+test("sign in, upload, deduplicate, sign out", async ({ page }) => {
   const policyViolations: string[] = [];
   page.on("console", (message) => {
     if (/Content Security Policy|Refused to/i.test(message.text()))
@@ -70,37 +67,33 @@ test("sign in, upload, deduplicate, sign out", async ({ page, browser }) => {
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   await expectNoAxeViolations(page);
 
+  await expect(
+    page.getByRole("heading", { name: "Your one stop solution for data analysis." }),
+  ).toBeVisible();
+  await expect(page.getByText("We respect your data privacy.", { exact: false })).toBeVisible();
+
   await page.getByLabel("Email address").fill("not-an-email");
-  await page.getByRole("button", { name: "Email me a sign-in link" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByText("Enter your email address")).toBeVisible();
   await expect(page.getByLabel("Email address")).toBeFocused();
 
-  // --- magic link
-  await page.getByLabel("Email address").fill(EMAIL);
-  await page.getByRole("button", { name: "Email me a sign-in link" }).click();
-  // Testing mode asks for the tester's own Resend key, with the testing notice. Left empty, the
-  // link goes to the server log (EMAIL_TRANSPORT=console).
-  await expect(page.getByText("Notice: this is just for the testing version.")).toBeVisible();
-  await expect(page.getByText(/A registered domain is needed for sending email/)).toBeVisible();
-  await expect(page.getByLabel("Your Resend API key")).toBeFocused();
+  // --- sign-in links are switched off: the button stays, inert, and says why on hover
+  const linkButton = page.getByRole("button", { name: "Email me a sign-in link" });
+  await expect(linkButton).toHaveAttribute("aria-disabled", "true");
+  await linkButton.hover();
+  await expect(page.getByRole("tooltip")).toContainText("Not available yet");
   await expectNoAxeViolations(page);
-  await page.getByRole("button", { name: "Send sign-in link" }).click();
-  // EMAIL_TRANSPORT=console: the page says the link is in the server log, not an inbox.
-  await expect(page.getByRole("heading", { name: "Check the server terminal" })).toBeVisible();
-  await page.goto(await signInLink(EMAIL));
+  // ... and the server offers no endpoint to call directly.
+  const direct = await page.request.post("/api/auth/sign-in/magic-link", {
+    data: { email: EMAIL },
+  });
+  expect(direct.status()).toBe(404);
 
-  await expect(page).toHaveURL(/\/o\/[0-9a-f-]{36}$/);
+  // --- register with a password
+  await register(page, EMAIL);
   await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
   await expect(page.getByText("No datasets yet")).toBeVisible();
   await expectNoAxeViolations(page);
-
-  // --- a link is single-use
-  const stranger = await browser.newContext(); // no session cookie
-  const reuse = await stranger.newPage();
-  await reuse.goto(await signInLink(EMAIL));
-  await expect(reuse).toHaveURL(/\/sign-in/);
-  await expect(problemAlert(reuse)).toContainText(/already used|isn.t valid|expired/);
-  await stranger.close();
 
   // --- upload: 9 MB of CSV is two parts at the default 8 MiB part size
   const upload = csv(300_000, "first");
@@ -147,14 +140,21 @@ test("sign in, upload, deduplicate, sign out", async ({ page, browser }) => {
   await page.getByRole("button", { name: "Analyse newest version" }).click();
   await expect(page).toHaveURL(/\/o\/[0-9a-f-]{36}\/runs\/[0-9a-f-]{36}$/);
   await expect(page.getByRole("heading", { name: "Analysis of Home sales 2026" })).toBeVisible();
-  await expect(page.getByText("Your data is profiled, planned and ready to clean")).toBeVisible({
+  // Every plan is reviewed (review_lossy): nothing here needs a decision, so approve it as is.
+  await expect(page.getByRole("heading", { name: "Your review is needed" })).toBeVisible({
+    timeout: 90_000,
+  });
+  await page.getByRole("link", { name: "Review changes" }).click();
+  await page.getByRole("button", { name: "Approve and continue" }).click();
+  await expect(page).toHaveURL(/\/runs\/[0-9a-f-]{36}$/);
+  await expect(page.getByText("Your report is ready")).toBeVisible({
     timeout: 90_000,
   });
   await expect(page.getByTestId("connection")).toHaveCount(0); // finished: nothing to follow
-  // Rows read (ingest) and complete rows (profile): both are every row of the file.
-  await expect(page.getByText("300,000")).toHaveCount(2);
+  // Every row of the file: read (ingest), complete (profile), before and after cleaning.
+  await expect(page.getByText("300,000")).toHaveCount(4);
   await page.getByText(/Show the 4 columns/).click();
-  await expect(page.getByText("suburb")).toBeVisible();
+  await expect(page.getByTitle("suburb")).toBeVisible(); // in the column list
   await expectNoAxeViolations(page);
 
   // --- the live stream itself, from the page: ticket from the web app, then the API directly
@@ -211,13 +211,7 @@ test("sign in, upload, deduplicate, sign out", async ({ page, browser }) => {
 });
 
 test("another user cannot see the first user's datasets", async ({ page }) => {
-  const other = `e2e-other-${Date.now()}@example.com`;
-  await page.goto("/sign-in");
-  await page.getByLabel("Email address").fill(other);
-  await page.getByRole("button", { name: "Email me a sign-in link" }).click();
-  await page.getByRole("button", { name: "Send sign-in link" }).click();
-  await expect(page.getByRole("heading", { name: "Check the server terminal" })).toBeVisible();
-  await page.goto(await signInLink(other));
+  await register(page, `e2e-other-${Date.now()}@example.com`, "E2E Other");
   await expect(page.getByText("No datasets yet")).toBeVisible();
 
   const response = await page.request.get("/api/backend/v1/datasets");
@@ -256,12 +250,7 @@ test("register with a password, sign out, sign back in", async ({ page }) => {
 
 test("a messy file pauses for review, and approving continues the analysis", async ({ page }) => {
   test.setTimeout(240_000);
-  const email = `e2e-review-${Date.now()}@example.com`;
-  await page.goto("/sign-in?mode=register");
-  await page.getByLabel("Name").fill("E2E Reviewer");
-  await page.getByLabel("Email address").fill(email);
-  await page.getByLabel("Password").fill("a long enough passphrase");
-  await page.getByRole("button", { name: "Create account" }).click();
+  await register(page, `e2e-review-${Date.now()}@example.com`, "E2E Reviewer");
   await expect(page.getByText("No datasets yet")).toBeVisible();
 
   // Duplicates, placeholder codes, mixed date orders, personal data: see sample_data/README.
@@ -283,12 +272,20 @@ test("a messy file pauses for review, and approving continues the analysis", asy
   });
   await expectNoAxeViolations(page);
 
-  // --- the plan: what the model would see is masked (no email address appears)
+  // --- the plan, and on the recipe page what the model would see: masked (no email address)
   await page.getByRole("link", { name: "See the plan" }).click();
-  await expect(page.getByRole("heading", { name: "What the model saw" })).toBeVisible();
-  await page.getByText("Show the description exactly as it was sent").click();
-  await expect(page.locator("pre")).not.toContainText("@");
+  await expect(page.getByRole("heading", { name: /^Plan for / })).toBeVisible();
   await expectNoAxeViolations(page);
+  await page.getByRole("link", { name: "Show recipe" }).first().click();
+  await expect(
+    page.getByRole("heading", { name: "What the planning model was shown" }),
+  ).toBeVisible();
+  await page.getByText("Show the description exactly as it was sent").click();
+  await expect(
+    page.getByRole("region", { name: "The description sent to the model" }),
+  ).not.toContainText("@");
+  await expectNoAxeViolations(page);
+  await page.goBack();
   await page.goBack();
 
   // --- approving is refused until every change is decided, then continues the run
@@ -307,8 +304,22 @@ test("a messy file pauses for review, and approving continues the analysis", asy
   await page.getByRole("button", { name: "Approve and continue" }).click();
 
   await expect(page).toHaveURL(/\/runs\/[0-9a-f-]{36}$/);
-  await expect(page.getByText("Your data is profiled, planned and ready to clean")).toBeVisible({
+  await expect(page.getByText("Your report is ready")).toBeVisible({
     timeout: 90_000,
   });
+  // Phase B's stages, each with its summary.
+  await expect(page.getByRole("heading", { name: "Check the findings hold" })).toBeVisible();
+  await expectNoAxeViolations(page);
+
+  // --- the report: every source says how sure it is; the evidence is summarised
+  await page.getByRole("link", { name: "Open the report" }).click();
+  await expect(page.getByRole("heading", { name: "In short" })).toBeVisible();
+  await expect(
+    page.getByText(/(comparisons and links were|comparison or link was) tested/),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/^(Strong evidence|Supported|Not reliable|Descriptive)$/).first(),
+  ).toBeVisible();
+  await expect(page.locator("main")).not.toContainText("@"); // personal data never shown
   await expectNoAxeViolations(page);
 });

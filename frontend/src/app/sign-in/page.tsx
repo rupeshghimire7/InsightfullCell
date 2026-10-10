@@ -9,6 +9,8 @@ import { getSessionOrUnavailable } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Sign in" };
 
+const TAGLINE = "Your one stop solution for data analysis.";
+
 const LINK_ERRORS: Record<string, string> = {
   EXPIRED_TOKEN: "That sign-in link has expired. Request a new one below.",
   INVALID_TOKEN: "That sign-in link was already used or isn’t valid. Request a new one below.",
@@ -33,10 +35,13 @@ export default async function SignInPage({
     <main id="main" className="grid min-h-dvh lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
       <div className="flex items-center justify-center px-4 py-12 sm:px-8">
         <div className="w-full max-w-[400px]">
-          <p className="flex items-center gap-2 text-sm font-semibold lg:hidden">
-            <span aria-hidden="true" className="size-3 rounded-[3px] bg-accent" />
-            InsightfulCell
-          </p>
+          <div className="lg:hidden">
+            <p className="flex items-center gap-2 text-sm font-semibold">
+              <span aria-hidden="true" className="size-3 rounded-[3px] bg-accent" />
+              InsightfulCell
+            </p>
+            <p className="mt-1 text-sm text-muted">{TAGLINE}</p>
+          </div>
           <h1 className="mt-6 text-2xl font-semibold lg:mt-0">
             {mode === "register" ? "Create an account" : "Sign in"}
           </h1>
@@ -72,18 +77,17 @@ export default async function SignInPage({
         <div className="max-w-lg space-y-5">
           <h2
             id="promise-title"
-            className="text-4xl leading-[1.1] font-semibold tracking-tight xl:text-5xl"
+            className="text-4xl leading-[1.1] font-semibold tracking-tight text-balance xl:text-5xl"
           >
-            Every number shows its work.
+            {TAGLINE}
           </h2>
-          <p className="max-w-[44ch] text-lg leading-relaxed opacity-90">
-            Upload a table. Each finding is computed by tested code, checked, and linked to the
-            evidence behind it.
+          <p className="max-w-[40ch] text-lg leading-relaxed text-pretty opacity-90">
+            Bring a spreadsheet. Leave with clear answers, charts and a report your team can check.
           </p>
         </div>
-        <p className="max-w-[48ch] text-sm opacity-85">
-          Raw rows stay in your workspace: language models only ever see column summaries and
-          finished results.
+        {/* One line, by design: short enough for the narrowest panel (1024 px wide screens). */}
+        <p className="text-xs whitespace-nowrap opacity-85 xl:text-sm">
+          We respect your data privacy. Raw rows never reach an AI model.
         </p>
       </section>
     </main>

@@ -6,15 +6,14 @@ import { RunStatusBadge } from "@/components/runs/run-status-badge";
 import { StageList } from "@/components/runs/stage-list";
 import { Button } from "@/components/ui/button";
 import {
+  ChartBar,
   Compass,
-  DownloadSimple,
   Hourglass,
   Info,
   Pulse,
   SealCheck,
   WifiSlash,
 } from "@/components/ui/icons";
-import { plansApi } from "@/lib/plans/api";
 import { ProblemAlert } from "@/components/ui/problem-alert";
 import { describeError, ProblemError, type Problem } from "@/lib/problem";
 import { runsApi, type RunsApi } from "@/lib/runs/api";
@@ -178,6 +177,7 @@ export function RunProgress({
   const cleanPlan = run.stages.find((s) => s.name === "clean_plan");
   const waiting = Number(cleanPlan?.output?.waiting_for_review ?? 0);
   const planHref = `/o/${orgId}/runs/${runId}/plan`;
+  const reportHref = `/o/${orgId}/runs/${runId}/report`;
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <div className="min-w-0 space-y-6">
@@ -251,14 +251,21 @@ export function RunProgress({
             />
             <div className="space-y-3">
               <div>
-                <p className="font-semibold">Your data is profiled, planned and ready to clean</p>
+                <p className="font-semibold">Your report is ready</p>
                 <p className="mt-1 max-w-[60ch] text-muted">
-                  Every column is described, the cleaning plan is approved, and the questions to
-                  answer are chosen. Findings, charts and the report arrive with the next release.
+                  Every question in the plan is answered with its figures, charts and the columns
+                  they come from.
                 </p>
               </div>
               {planned ? (
                 <div className="flex flex-wrap gap-x-5 gap-y-2">
+                  <Link
+                    href={reportHref}
+                    className="inline-flex items-center gap-1.5 font-medium text-accent underline underline-offset-2"
+                  >
+                    <ChartBar aria-hidden="true" className="size-4" />
+                    Open the report
+                  </Link>
                   <Link
                     href={planHref}
                     className="inline-flex items-center gap-1.5 font-medium text-accent underline underline-offset-2"
@@ -266,14 +273,6 @@ export function RunProgress({
                     <Compass aria-hidden="true" className="size-4" />
                     Open the plan
                   </Link>
-                  <a
-                    href={plansApi.recipeUrl(runId)}
-                    download
-                    className="inline-flex items-center gap-1.5 font-medium text-accent underline underline-offset-2"
-                  >
-                    <DownloadSimple aria-hidden="true" className="size-4" />
-                    Download recipe
-                  </a>
                 </div>
               ) : null}
             </div>

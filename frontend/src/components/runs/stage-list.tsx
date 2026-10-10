@@ -7,14 +7,19 @@ import {
   XCircle,
   type IconComponent,
 } from "@/components/ui/icons";
-import { formatBytes, formatCount } from "@/lib/format";
+import { formatBytes, formatCount, formatPercent } from "@/lib/format";
 import { formatDuration, isTerminal, STAGE_STATUS, stageLabel } from "@/lib/runs/status";
 import { fallbackLabel, meaningLabel, providerLabel } from "@/lib/plans/labels";
 import type {
+  CleanApplyOutput,
   CleanPlanOutput,
+  FeaturesOutput,
+  GeoOutput,
   IngestOutput,
+  MineOutput,
   ProfileOutput,
   RunStatus,
+  SensitivityOutput,
   Stage,
   UnderstandOutput,
 } from "@/lib/runs/types";
@@ -92,9 +97,112 @@ function Summary({ stage }: { stage: Stage }) {
       return <UnderstandSummary output={stage.output as UnderstandOutput} />;
     case "clean_plan":
       return <CleanPlanSummary output={stage.output as CleanPlanOutput} />;
+    case "clean_apply":
+      return <CleanApplySummary output={stage.output as CleanApplyOutput} />;
+    case "geo":
+      return <GeoSummary output={stage.output as GeoOutput} />;
+    case "features":
+      return <FeaturesSummary output={stage.output as FeaturesOutput} />;
+    case "mine":
+      return <MineSummary output={stage.output as MineOutput} />;
+    case "sensitivity":
+      return <SensitivitySummary output={stage.output as SensitivityOutput} />;
     default:
       return null;
   }
+}
+
+function CleanApplySummary({ output }: { output: CleanApplyOutput }) {
+  return (
+    <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+      <Fact label="Rows before" value={count(output.rows_before)} />
+      <Fact label="Rows after" value={count(output.rows_after)} />
+      <Fact label="Changes applied" value={count(output.operations_applied)} />
+      <Fact label="Removed or merged data" value={count(output.lossy_applied)} />
+    </dl>
+  );
+}
+
+const SCOPE: Record<string, string> = { country: "countries", "postcode:AU": "Australian states" };
+
+function scopeLabel(scope: string): string {
+  if (SCOPE[scope]) return SCOPE[scope];
+  const [, country] = scope.split(":");
+  return country ? `states of ${country}` : scope;
+}
+
+function GeoSummary({ output }: { output: GeoOutput }) {
+  const places = output.places ?? [];
+  if (places.length === 0) {
+    return <p className="mt-2 text-sm text-muted">No column holds places.</p>;
+  }
+  return (
+    <ul className="mt-2 space-y-1 text-sm">
+      {places.map((place) => (
+        <li key={place.columns.join("|")}>
+          <span className="font-medium">{place.columns.join(" and ")}</span>
+          {place.resolved
+            ? `: matched to ${scopeLabel(place.scope)} (${formatPercent(place.match_rate)} matched).`
+            : `: not placed on a map (${formatPercent(place.match_rate)} matched, 80% needed).`}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function FeaturesSummary({ output }: { output: FeaturesOutput }) {
+  if (!output.outcome) {
+    return (
+      <p className="mt-2 text-sm text-muted">
+        No outcome was chosen, so there was nothing to test extra measures against.
+      </p>
+    );
+  }
+  const kept = output.kept_features ?? [];
+  return (
+    <div className="mt-3 space-y-2">
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+        <Fact label="Tested" value={count(output.candidates)} />
+        <Fact label="Kept" value={count(output.kept)} />
+        <Fact label="No signal" value={count(output.no_signal)} />
+        <Fact label="Repeats" value={count(output.redundant)} />
+      </dl>
+      {kept.length > 0 ? <p className="text-sm">Kept: {kept.join(", ")}.</p> : null}
+    </div>
+  );
+}
+
+function MineSummary({ output }: { output: MineOutput }) {
+  return (
+    <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+      <Fact label="Questions answered" value={count(output.answered)} />
+      <Fact label="Facts" value={count(output.facts)} />
+      <Fact label="Tests" value={count(output.tests)} />
+      <Fact label="Reliable findings" value={count(output.reliable)} />
+    </dl>
+  );
+}
+
+function SensitivitySummary({ output }: { output: SensitivityOutput }) {
+  if (!output.rechecked) {
+    return <p className="mt-2 text-sm text-muted">No reliable finding to re-test.</p>;
+  }
+  if (output.same_data === output.rechecked) {
+    return (
+      <p className="mt-2 text-sm text-muted">
+        No approved change removed or merged data, so there was nothing to re-test.
+      </p>
+    );
+  }
+  const changed = (output.weakens ?? 0) + (output.flips ?? 0);
+  return (
+    <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+      <Fact label="Re-tested" value={count(output.rechecked)} />
+      <Fact label="Hold" value={count(output.holds)} />
+      <Fact label="Change" value={count(changed)} />
+      <Fact label="Not re-tested" value={count(output.not_retested)} />
+    </dl>
+  );
 }
 
 const count = (n: number | undefined) => (n === undefined ? "Unknown" : formatCount(n));

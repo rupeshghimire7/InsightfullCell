@@ -10,6 +10,8 @@ export type PlanFeature = components["schemas"]["FeatureOut"];
 export type PlanAnalysis = components["schemas"]["AnalysisItemOut"];
 export type PlanChart = components["schemas"]["ChartItemOut"];
 export type DecideRequest = components["schemas"]["DecideCleaningRequest"];
+export type ReviseRequest = components["schemas"]["RevisePlanRequest"];
+export type RequestOutcome = components["schemas"]["RequestOutcomeOut"];
 
 /** The profile stored for a column (`PlanColumnOut.profile`): counts for every column; the
  * rest only for columns without personal data. Values are the person's own data, shown back

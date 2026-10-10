@@ -187,6 +187,8 @@ export function plan(overrides: Partial<Plan> = {}): Plan {
         source: "rules",
       },
     ],
+    removed_analyses: [],
+    requests: [],
     relevance: { "Labour Hours": 0.7 },
     rejected: [{ section: "dictionary", item: "unit of Email", reason: "The unit is not shown." }],
     model_input: { card_version: "card-v1", columns: [{ name: "Email", personal_data: "email" }] },

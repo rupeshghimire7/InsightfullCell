@@ -59,7 +59,7 @@ const MINER: Record<string, string> = {
   trend: "Trend over time",
   segment: "Difference between groups",
   anomaly: "Unusual rows",
-  driver: "What drives the outcome",
+  driver: "What goes with the outcome",
   missing_as_signal: "Missing values as a signal",
   benchmark: "Groups against the overall",
   conditional: "Holds within groups?",
@@ -98,6 +98,7 @@ const FALLBACK_REASON: Record<string, string> = {
   provider_error: "the model provider returned an error",
   invalid_output: "the model's answer did not fit the plan language",
   refused: "the model declined the request",
+  no_facts: "there were no facts to write about",
 };
 
 const PROVIDER: Record<string, string> = {

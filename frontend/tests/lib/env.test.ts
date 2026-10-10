@@ -40,8 +40,18 @@ describe("parseEnv", () => {
       API_PUBLIC_URL: "https://api.example.com",
     };
 
-    it("rejects the console email transport (it prints sign-in links)", () => {
-      expect(() => parseEnv(production)).toThrow(/console transport/);
+    it("rejects the console email transport when sign-in links are on (it prints them)", () => {
+      expect(() => parseEnv({ ...production, EMAIL_LINK_SIGN_IN: "on" })).toThrow(
+        /console transport/,
+      );
+    });
+    it("allows it while sign-in links are off (the default): nothing is sent", () => {
+      expect(parseEnv(production).EMAIL_LINK_SIGN_IN).toBe("off");
+    });
+    it("accepts only on or off for sign-in links", () => {
+      expect(() => parseEnv({ ...production, EMAIL_LINK_SIGN_IN: "yes" })).toThrow(
+        /EMAIL_LINK_SIGN_IN/,
+      );
     });
     it("rejects a non-https public URL", () => {
       expect(() =>

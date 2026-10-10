@@ -51,12 +51,45 @@ const STAGE_LABEL: Record<string, { title: string; description: string }> = {
   understand: {
     title: "Plan the analysis",
     description:
-      "Describes the table without any rows or personal values, asks the planning model what is worth computing, and checks every suggestion.",
+      "Our engine plans first; a language model, if one is set up, refines the plan from a description of the table without any rows. Every suggestion is checked.",
   },
   clean_plan: {
     title: "Propose cleaning",
     description:
-      "Lists each change with the rows it affects. Changes that could remove data wait for you.",
+      "Lists each change with the rows it affects, then waits for you to check the plan.",
+  },
+  clean_apply: {
+    title: "Apply the cleaning",
+    description:
+      "Applies the changes you approved to a copy of your data. The upload is never changed.",
+  },
+  geo: {
+    title: "Find the places",
+    description: "Matches place names, postcodes and coordinates to standard countries and states.",
+  },
+  features: {
+    title: "Test the extra measures",
+    description:
+      "Keeps a derived measure, such as the weekday of a date, only if it tells you more about the outcome than chance does.",
+  },
+  mine: {
+    title: "Answer the questions",
+    description:
+      "Tests every question in the plan and keeps the share of false findings across the whole analysis at 5%.",
+  },
+  sensitivity: {
+    title: "Check the findings hold",
+    description:
+      "Re-tests the strongest findings without the cleaning that removed or merged data.",
+  },
+  rank: {
+    title: "Rank the findings",
+    description: "Puts the strongest and most relevant findings first and drops repeats.",
+  },
+  report: {
+    title: "Write the report",
+    description:
+      "Writes each answer from the facts and checks every number and source before it is kept.",
   },
 };
 

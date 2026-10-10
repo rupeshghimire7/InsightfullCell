@@ -1,14 +1,15 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ColumnCard } from "@/components/plans/column-card";
+import { PrivacyNote } from "@/components/plans/privacy-note";
 import {
   CaretDown,
   ChartBar,
   ChartLine,
   ChartScatter,
   Check,
+  Code,
   Compass,
-  DownloadSimple,
   GridFour,
   ShieldCheck,
   Target,
@@ -23,7 +24,6 @@ import {
   providerLabel,
   sourceLabel,
 } from "@/lib/plans/labels";
-import { plansApi } from "@/lib/plans/api";
 import type { CleaningOperation, Plan } from "@/lib/plans/types";
 
 const CHART_ICON: Record<string, IconComponent> = {
@@ -58,6 +58,7 @@ export function PlanOverview({ plan, orgId }: { plan: Plan; orgId: string }) {
   const later = plan.analyses.filter((a) => a.priority !== 1);
   const runId = plan.run.id;
   const pending = plan.cleaning?.operations.filter((o) => o.decision === "pending") ?? [];
+  const recipeHref = `/o/${orgId}/runs/${runId}/recipe`;
 
   return (
     <div className="space-y-12">
@@ -112,20 +113,23 @@ export function PlanOverview({ plan, orgId }: { plan: Plan; orgId: string }) {
               </span>
             </Fact>
           </dl>
-          <a
-            href={plansApi.recipeUrl(runId)}
-            download
+          <Link
+            href={recipeHref}
             className="press inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-control border border-border bg-surface px-4 text-sm font-medium hover:bg-bg pointer-coarse:min-h-11"
           >
-            <DownloadSimple aria-hidden="true" className="size-4" />
-            Download recipe
-          </a>
+            <Code aria-hidden="true" className="size-4" />
+            Show recipe
+          </Link>
           <p className="text-xs text-muted">
-            A Python script that rebuilds the cleaned table, the planned features and the charts
-            from your original file.
+            The steps as a Python script you can read, rerun and keep, and exactly what the planning
+            model was shown.
           </p>
         </aside>
       </section>
+
+      {plan.requests.length > 0 || plan.removed_analyses.length > 0 ? (
+        <RequestOutcomes plan={plan} />
+      ) : null}
 
       {plan.analyses.length > 0 ? (
         <section aria-labelledby="questions-title" className="space-y-4">
@@ -217,8 +221,55 @@ export function PlanOverview({ plan, orgId }: { plan: Plan; orgId: string }) {
         </div>
       </section>
 
-      <ModelInput plan={plan} />
+      <PrivacyNote recipeHref={recipeHref} />
     </div>
+  );
+}
+
+const OUTCOME: Record<string, { label: string; className: string }> = {
+  added: { label: "Added", className: "text-accent" },
+  removed: { label: "Removed", className: "text-accent" },
+  already_planned: { label: "Already planned", className: "text-muted" },
+  not_understood: { label: "Not used", className: "text-warning" },
+};
+
+/** The person's requests, each with what the planner did, so nothing is silently dropped. */
+export function RequestOutcomes({ plan }: { plan: Plan }) {
+  return (
+    <section aria-labelledby="requests-title" className="space-y-3">
+      <h2 id="requests-title" className="text-lg font-semibold">
+        Your requests
+      </h2>
+      {plan.requests.length > 0 ? (
+        <ul className="divide-y divide-border rounded-panel border border-border bg-surface">
+          {plan.requests.map((r) => {
+            const outcome = OUTCOME[r.status] ?? OUTCOME.not_understood!;
+            return (
+              <li
+                key={r.request}
+                className="grid grid-cols-1 gap-1 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] sm:gap-6"
+              >
+                <p className="min-w-0 text-sm">&ldquo;{r.request}&rdquo;</p>
+                <p className="min-w-0 text-sm">
+                  <span className={`font-medium ${outcome.className}`}>{outcome.label}.</span>{" "}
+                  <span className="text-muted">{r.note}</span>{" "}
+                  <span className="text-xs text-muted">
+                    ({r.source === "model" ? "read by the planning model" : "read by our engine"})
+                  </span>
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+      {plan.removed_analyses.length > 0 ? (
+        <p className="text-sm text-muted">
+          {plan.removed_analyses.length === 1
+            ? "You removed 1 question; it can be brought back on the review page."
+            : `You removed ${plan.removed_analyses.length} questions; they can be brought back on the review page.`}
+        </p>
+      ) : null}
+    </section>
   );
 }
 
@@ -239,6 +290,9 @@ function QuestionList({
         {items.map((a) => (
           <li key={a.id} className="rounded-panel border border-border bg-surface px-4 py-3">
             <p className="font-medium">{a.question}</p>
+            {a.source === "person" ? (
+              <p className="mt-1 text-xs font-medium text-accent">You asked for this</p>
+            ) : null}
             <p className="mt-1 text-xs text-muted">
               {minerLabel(a.kind)}: {a.columns.map(label).join(", ")}
               <span className="sr-only">. Suggested by {sourceLabel(a.source)}</span>
@@ -346,53 +400,6 @@ function CleaningTable({
         </tbody>
       </table>
     </div>
-  );
-}
-
-function ModelInput({ plan }: { plan: Plan }) {
-  return (
-    <section aria-labelledby="model-input-title" className="space-y-3">
-      <h2 id="model-input-title" className="text-lg font-semibold">
-        What the model saw
-      </h2>
-      <p className="max-w-[65ch] text-sm text-muted">
-        The planning model is shown a description of your table, never its rows. Personal-data
-        columns are reduced to their kind, numbers to rounded ranges without the lowest or highest
-        value, and a category label appears only when several rows share it.
-      </p>
-      {plan.model_input ? (
-        <details className="group rounded-panel border border-border bg-surface">
-          <summary className="flex min-h-11 cursor-pointer items-center gap-2 px-4 text-sm font-medium select-none">
-            Show the description exactly as it was sent
-          </summary>
-          <pre
-            role="region"
-            tabIndex={0}
-            aria-label="The description sent to the model"
-            className="max-h-[28rem] overflow-auto border-t border-border px-4 py-3 font-mono text-xs leading-relaxed"
-          >
-            {JSON.stringify(plan.model_input, null, 2)}
-          </pre>
-        </details>
-      ) : null}
-      {plan.rejected.length > 0 ? (
-        <details className="rounded-panel border border-border bg-surface">
-          <summary className="flex min-h-11 cursor-pointer items-center gap-2 px-4 text-sm font-medium select-none">
-            {plan.rejected.length === 1
-              ? "1 suggestion from the model was not used"
-              : `${plan.rejected.length} suggestions from the model were not used`}
-          </summary>
-          <ul className="space-y-1.5 border-t border-border px-4 py-3 text-sm">
-            {plan.rejected.map((r, i) => (
-              <li key={i}>
-                <span className="font-medium">{r.item}</span>
-                <span className="text-muted">: {r.reason}</span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
-    </section>
   );
 }
 

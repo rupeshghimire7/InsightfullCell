@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { axe } from "../axe";
 import { ColumnCard } from "@/components/plans/column-card";
 import { CategoryShares, Histogram } from "@/components/plans/distribution";
+import { RecipeView } from "@/components/plans/recipe-view";
 import { PlanOverview, plannedBy } from "@/components/plans/plan-overview";
 import { ReviewForm } from "@/components/plans/review-form";
 import type { PlansApi } from "@/lib/plans/api";
@@ -15,7 +16,11 @@ const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push, refresh }) }));
 
 function fakeApi(decide: PlansApi["decide"] = vi.fn().mockResolvedValue({})): PlansApi {
-  return { decide, recipeUrl: (id: string) => `/recipe/${id}` };
+  return {
+    decide,
+    revise: vi.fn().mockResolvedValue({}),
+    recipeUrl: (id: string) => `/recipe/${id}`,
+  };
 }
 
 describe("micro-charts", () => {
@@ -71,7 +76,6 @@ describe("ColumnCard", () => {
 
 describe("PlanOverview", { timeout: 30_000 }, () => {
   it("says who planned it, what it will answer, and what the model saw", async () => {
-    const user = userEvent.setup();
     const { container } = render(<PlanOverview plan={plan()} orgId="org-1" />);
     expect(screen.getByText(/Planned with Gemini \(gemini-3\.8-flash\)/)).toBeInTheDocument();
     expect(screen.getByText("Do complaints follow longer jobs?")).toBeInTheDocument();
@@ -79,10 +83,14 @@ describe("PlanOverview", { timeout: 30_000 }, () => {
       "href",
       expect.stringMatching(/\/o\/org-1\/runs\/.+\/review$/),
     );
-    expect(screen.getByRole("link", { name: /Download recipe/ })).toHaveAttribute("download");
-    await user.click(screen.getByText("Show the description exactly as it was sent"));
-    expect(screen.getByText(/"card_version": "card-v1"/)).toBeVisible();
-    expect(screen.getByText("1 suggestion from the model was not used")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Show recipe" })).toHaveAttribute(
+      "href",
+      expect.stringMatching(/\/o\/org-1\/runs\/.+\/recipe$/),
+    );
+    expect(screen.queryByRole("link", { name: /Download recipe/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/exactly as it was sent/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/suggestion from the model was not used/)).not.toBeInTheDocument();
+    expect(screen.getByText("Your data stays yours")).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -179,5 +187,16 @@ describe("ReviewForm", { timeout: 30_000 }, () => {
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Reload" }));
     expect(refresh).toHaveBeenCalled();
+  });
+});
+
+describe("RecipeView", () => {
+  it("keeps the download and the exact model input on the recipe page", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<RecipeView plan={plan()} source="print('hi')" />);
+    expect(screen.getByRole("link", { name: /Download recipe/ })).toHaveAttribute("download");
+    await user.click(screen.getByText("Show the description exactly as it was sent"));
+    expect(screen.getByText(/"card_version": "card-v1"/)).toBeVisible();
+    expect(await axe(container)).toHaveNoViolations();
   });
 });

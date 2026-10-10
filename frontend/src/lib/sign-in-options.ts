@@ -9,6 +9,7 @@ export function googleSignIn(env: Env): GoogleSignIn {
 
 /** Resend's shared `@resend.dev` sender only delivers to the Resend account owner. */
 export function linkDelivery(env: Env): LinkDelivery {
+  if (env.EMAIL_LINK_SIGN_IN !== "on") return "off";
   if (env.EMAIL_TRANSPORT === "console") return "log";
   return /@resend\.dev>?\s*$/i.test(env.EMAIL_FROM) ? "resend-test" : "email";
 }

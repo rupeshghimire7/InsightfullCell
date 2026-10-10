@@ -36,6 +36,11 @@ const schema = z
     GOOGLE_CLIENT_ID: z.string().min(1).optional(),
     GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
 
+    /**
+     * "Email me a sign-in link". Off until a verified mail domain is set up: the button is shown
+     * disabled with a note, and the server does not offer the endpoint at all.
+     */
+    EMAIL_LINK_SIGN_IN: z.enum(["on", "off"]).default("off"),
     EMAIL_TRANSPORT: z.enum(["console", "resend"]).default("console"),
     EMAIL_FROM: z.string().min(3).default("InsightfulCell <onboarding@resend.dev>"),
     RESEND_API_KEY: z.string().min(1).optional(),
@@ -77,7 +82,7 @@ const schema = z
           message: "Must be https in production",
         });
       }
-      if (env.EMAIL_TRANSPORT === "console") {
+      if (env.EMAIL_LINK_SIGN_IN === "on" && env.EMAIL_TRANSPORT === "console") {
         ctx.addIssue({
           code: "custom",
           path: ["EMAIL_TRANSPORT"],

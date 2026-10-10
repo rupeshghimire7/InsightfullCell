@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "../axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -228,26 +228,15 @@ describe("SignInForm: sign-in link", () => {
       expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
     });
 
-    it("opens on a press of the info button and closes with Escape", async () => {
+    it("opens only on hover: not on keyboard focus, and the info icon is no button", async () => {
       const user = userEvent.setup();
       form({ linkDelivery: "log" });
-      const info = screen.getByRole("button", { name: "About sign-in links" });
-      expect(info).toHaveAttribute("aria-expanded", "false");
-      await user.click(info);
-      expect(info).toHaveAttribute("aria-expanded", "true");
-      expect(screen.getByRole("tooltip")).toHaveTextContent("No email is sent yet");
-      await user.keyboard("{Escape}");
-      expect(info).toHaveAttribute("aria-expanded", "false");
-      expect(info).toHaveFocus();
-    });
-
-    it("opens on keyboard focus", async () => {
-      const user = userEvent.setup();
-      form({ linkDelivery: "log" });
+      expect(screen.queryByRole("button", { name: "About sign-in links" })).not.toBeInTheDocument();
       act(() => linkButton().focus());
-      expect(screen.getByRole("tooltip")).toBeVisible();
-      await user.tab();
-      await user.tab();
+      expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+      await user.hover(linkButton());
+      expect(screen.getByRole("tooltip")).toHaveTextContent("No email is sent yet");
+      await user.unhover(linkButton());
       expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
     });
 
@@ -361,6 +350,29 @@ describe("SignInForm: the tester's own Resend API key (testing mode)", () => {
   });
 });
 
+describe("SignInForm: sign-in links switched off", () => {
+  it("keeps the button visible but inert, and says why only on hover", async () => {
+    const user = userEvent.setup();
+    const { container } = form({ linkDelivery: "off" });
+    expect(linkButton()).toHaveAttribute("aria-disabled", "true");
+    expect(linkButton()).not.toBeDisabled(); // still focusable, so the reason can be read
+    await user.type(screen.getByLabelText("Email address"), "a@b.co");
+    await user.click(linkButton());
+    expect(magicLink).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Your Resend API key")).not.toBeInTheDocument();
+    await user.hover(linkButton());
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Not available yet");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("password or Google");
+    expect(await axe(container)).toHaveNoViolations();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    await user.unhover(linkButton());
+    act(() => linkButton().focus()); // focus alone never opens it
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    expect(linkButton()).toHaveAccessibleDescription(/Not available yet/);
+  });
+});
+
 describe("SignInForm: Google and link errors", () => {
   it("signs in with Google when it is configured", async () => {
     form({ google: "on" });
@@ -378,10 +390,23 @@ describe("SignInForm: Google and link errors", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
-  it("hides Google entirely when it is off", () => {
+  it("hides Google entirely when it is off, and the link option still follows 'or'", () => {
     form({ google: "off" });
     expect(screen.queryByRole("button", { name: "Continue with Google" })).not.toBeInTheDocument();
+    expect(screen.getByText("or")).toBeInTheDocument();
+    expect(linkButton()).toBeInTheDocument();
+    cleanup();
+    form({ google: "off", mode: "register" });
     expect(screen.queryByText("or")).not.toBeInTheDocument();
+  });
+
+  it("puts Google, then the sign-in link, after 'or', below the password sign-in", () => {
+    form({ google: "on" });
+    const order = screen
+      .getAllByRole("button")
+      .map((b) => b.textContent)
+      .filter((t) => t && /Sign in|Google|sign-in link/.test(t));
+    expect(order).toEqual(["Sign in", "Continue with Google", "Email me a sign-in link"]);
   });
 
   it("shows why a link failed", () => {

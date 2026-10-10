@@ -192,11 +192,16 @@ describe("sign-in options", () => {
       ...extra,
     });
   const resend = { EMAIL_TRANSPORT: "resend", RESEND_API_KEY: "k" };
+  const on = { EMAIL_LINK_SIGN_IN: "on" };
 
-  it("says where sign-in links go", () => {
-    expect(linkDelivery(env())).toBe("log");
-    expect(linkDelivery(env(resend))).toBe("resend-test"); // default sender is onboarding@resend.dev
-    expect(linkDelivery(env({ ...resend, EMAIL_FROM: "Cell <login@cell.example>" }))).toBe("email");
+  it("says where sign-in links go, and that they are off by default", () => {
+    expect(linkDelivery(env())).toBe("off");
+    expect(linkDelivery(env(resend))).toBe("off");
+    expect(linkDelivery(env(on))).toBe("log");
+    expect(linkDelivery(env({ ...on, ...resend }))).toBe("resend-test"); // onboarding@resend.dev
+    expect(linkDelivery(env({ ...on, ...resend, EMAIL_FROM: "Cell <login@cell.example>" }))).toBe(
+      "email",
+    );
   });
 
   it("offers Google when configured, explains setup in development, hides it in production", () => {

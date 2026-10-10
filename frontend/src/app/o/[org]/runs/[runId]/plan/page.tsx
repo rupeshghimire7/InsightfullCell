@@ -41,7 +41,7 @@ export default async function PlanPage({
       <PageHeader
         title={`Plan for ${plan.run.dataset_name || "dataset"}`}
         back={back}
-        description="What the analysis will look at, how the data will be cleaned, and exactly what the planning model was shown."
+        description="What the analysis will look at, the questions it will answer, and how the data will be cleaned."
       />
       <PlanOverview plan={plan} orgId={org} />
     </>

@@ -114,9 +114,7 @@ describe("RunProgress", () => {
       />,
     );
     stream.emit(event(2, "run.succeeded"));
-    expect(
-      screen.getByText("Your data is profiled, planned and ready to clean"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Your report is ready")).toBeInTheDocument();
     expect(screen.queryByTestId("connection")).not.toBeInTheDocument();
     expect(screen.getByTestId("run-announcer")).toHaveTextContent("The analysis finished.");
     expect(stream.options()?.signal.aborted).toBe(true);
@@ -158,9 +156,7 @@ describe("RunProgress", () => {
     expect(await screen.findByText(/refreshing every few seconds/)).toBeInTheDocument();
     await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
     finished = true;
-    expect(
-      await screen.findByText("Your data is profiled, planned and ready to clean"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Your report is ready")).toBeInTheDocument();
     const reads = vi.mocked(api.get).mock.calls.length;
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(vi.mocked(api.get).mock.calls.length).toBe(reads); // polling stops once finished

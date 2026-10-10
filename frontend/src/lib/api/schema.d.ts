@@ -192,6 +192,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/runs/{run_id}/plan:revise": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Plan again with your changes; the run comes back for review
+         * @description Saves your cleaning decisions so far, column edits, removed questions and requests in
+         *     your own words, then plans again: the engine first, then the planning model if one is
+         *     configured. Finished steps whose inputs did not change are reused. The run returns to
+         *     review with an outcome for every request. ``412`` when the run or its cleaning plan
+         *     changed since you loaded them.
+         */
+        post: operations["revise_plan_v1_runs__run_id__plan_revise_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/runs/{run_id}/recipe": {
         parameters: {
             query?: never;
@@ -205,6 +229,28 @@ export interface paths {
          *     charts. Generated from the stored plan; nothing in it was written by a model.
          */
         get: operations["get_recipe_v1_runs__run_id__recipe_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs/{run_id}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The finished run's report: answers, charts and the facts they cite
+         * @description Available once the analysis has finished (409 ``report-not-ready`` before). Every
+         *     sentence lists the ids of the facts it rests on; ``facts`` holds each fact's statement,
+         *     columns, the rows it rests on and how it was computed.
+         */
+        get: operations["get_report_v1_runs__run_id__report_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -387,6 +433,44 @@ export interface components {
             /** Y */
             y: string | null;
         };
+        /** ChartOut */
+        ChartOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "bar" | "line" | "scatter" | "histogram";
+            /** Note */
+            note: string | null;
+            /** Points */
+            points: components["schemas"]["ChartPointOut"][];
+            /** Title */
+            title: string;
+            /** Unit */
+            unit: string | null;
+            /**
+             * Value Format
+             * @enum {string}
+             */
+            value_format: "number" | "percent" | "count" | "strength" | "signed_percent";
+            /** X Label */
+            x_label: string;
+            /** Y Label */
+            y_label: string;
+        };
+        /** ChartPointOut */
+        ChartPointOut: {
+            /** Label */
+            label: string;
+            /** N */
+            n: number | null;
+            /** Value */
+            value: number;
+            /** X */
+            x: number | null;
+            /** X2 */
+            x2: number | null;
+        };
         /** CleaningDecisionIn */
         CleaningDecisionIn: {
             /** Accept */
@@ -478,6 +562,15 @@ export interface components {
              */
             status: "proposed" | "approved";
         };
+        /** CleaningStepOut */
+        CleaningStepOut: {
+            /** Column */
+            column: string | null;
+            /** Label */
+            label: string;
+            /** Rows */
+            rows: number;
+        };
         /** ColumnEditIn */
         ColumnEditIn: {
             /** Display Name */
@@ -494,6 +587,13 @@ export interface components {
              * @description Empty string clears it.
              */
             unit?: string | null;
+        };
+        /** ColumnRefOut */
+        ColumnRefOut: {
+            /** Display Name */
+            display_name: string;
+            /** Name */
+            name: string;
         };
         /** CompleteUploadRequest */
         CompleteUploadRequest: {
@@ -638,7 +738,125 @@ export interface components {
          * @description What the browser is told. Payloads never carry cell values.
          * @enum {string}
          */
-        EventType: "run.queued" | "run.started" | "run.waiting" | "stage.started" | "stage.completed" | "stage.reused" | "stage.failed" | "stage.retrying" | "run.moved_to_large_queue" | "phase.completed" | "review.required" | "review.reminder" | "review.approved" | "run.succeeded" | "run.failed" | "run.cancelled" | "run.expired" | "run.retried";
+        EventType: "run.queued" | "run.started" | "run.waiting" | "stage.started" | "stage.completed" | "stage.reused" | "stage.failed" | "stage.retrying" | "run.moved_to_large_queue" | "phase.completed" | "review.required" | "review.reminder" | "review.approved" | "review.revision_requested" | "run.succeeded" | "run.failed" | "run.cancelled" | "run.expired" | "run.retried";
+        /** EvidenceOut */
+        EvidenceOut: {
+            /** Alpha */
+            alpha: number;
+            /**
+             * Rechecked
+             * @description Top findings re-tested on minimally cleaned data.
+             */
+            rechecked: number;
+            /**
+             * Reliable
+             * @description Tests that passed at the run's false-discovery rate.
+             */
+            reliable: number;
+            /**
+             * Tests
+             * @description Hypothesis tests in the run's false-discovery control.
+             */
+            tests: number;
+        };
+        /**
+         * FactCheckOut
+         * @description The sensitivity check: the fact re-tested on minimally cleaned data.
+         */
+        FactCheckOut: {
+            /**
+             * Effect
+             * @description The effect on minimally cleaned data.
+             */
+            effect: number | null;
+            /** Note */
+            note: string;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "holds" | "weakens" | "flips" | "not_retested" | "same_data";
+            /** P Value */
+            p_value: number | null;
+        };
+        /** FactOut */
+        FactOut: {
+            /** Analysis Id */
+            analysis_id: string;
+            check: components["schemas"]["FactCheckOut"] | null;
+            /** Columns */
+            columns: components["schemas"]["ColumnRefOut"][];
+            /**
+             * Content Hash
+             * @description SHA-256 of the fact's content, fixed when stored.
+             */
+            content_hash: string;
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Method */
+            method: string;
+            /**
+             * Rows
+             * @description Rows the numbers rest on.
+             */
+            rows: number;
+            /** Statement */
+            statement: string;
+            test: components["schemas"]["FactTestOut"] | null;
+            /**
+             * Tier
+             * @description strong: q at most 0.01; supported: q at most 0.05; inconclusive: did not pass; descriptive: no test (a count, share or summary).
+             * @enum {string}
+             */
+            tier: "descriptive" | "strong" | "supported" | "inconclusive";
+            /** Values */
+            values: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * FactTestOut
+         * @description The hypothesis test a fact rests on, after the run's false-discovery control.
+         */
+        FactTestOut: {
+            /** Ci High */
+            ci_high: number | null;
+            /**
+             * Ci Low
+             * @description Lower end of the 95% interval.
+             */
+            ci_low: number | null;
+            /** Effect */
+            effect: number;
+            /**
+             * Effect Name
+             * @description spearman, eta, cramers_v, kendall_tau, ...
+             */
+            effect_name: string;
+            /** Method */
+            method: string;
+            /** P Value */
+            p_value: number;
+            /**
+             * Q Value
+             * @description After Benjamini-Hochberg across the run's tests.
+             */
+            q_value: number;
+        };
+        /** FeatureNoteOut */
+        FeatureNoteOut: {
+            /** Label */
+            label: string;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "kept" | "no_signal" | "redundant" | "not_computed" | "no_target";
+            /** Redundant With */
+            redundant_with?: string | null;
+        };
         /** FeatureOut */
         FeatureOut: {
             /** Bins */
@@ -706,6 +924,24 @@ export interface components {
              * Format: uuid
              */
             user_id: string;
+        };
+        /** NarrationOut */
+        NarrationOut: {
+            /** Fallback Reason */
+            fallback_reason: string | null;
+            /** Model */
+            model: string | null;
+            /** Provider */
+            provider: string | null;
+            /** Sentences Dropped */
+            sentences_dropped: number;
+            /** Sentences Kept */
+            sentences_kept: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "model" | "engine" | "mixed";
         };
         /** PartTargetOut */
         PartTargetOut: {
@@ -817,6 +1053,16 @@ export interface components {
             relevance: {
                 [key: string]: number;
             };
+            /**
+             * Removed Analyses
+             * @description Planned questions the person removed (they can be brought back).
+             */
+            removed_analyses: components["schemas"]["AnalysisItemOut"][];
+            /**
+             * Requests
+             * @description The person's requests and what the planner did with each.
+             */
+            requests: components["schemas"]["RequestOutcomeOut"][];
             /** Revision */
             revision: number;
             run: components["schemas"]["RunOut"];
@@ -827,6 +1073,19 @@ export interface components {
              */
             source: "model" | "cache" | "rules" | "person";
             target: components["schemas"]["TargetOut"] | null;
+        };
+        /** PreparationOut */
+        PreparationOut: {
+            /** Applied */
+            applied: components["schemas"]["CleaningStepOut"][];
+            /** Not Applied */
+            not_applied: number;
+            /** Reviewed By Person */
+            reviewed_by_person: boolean;
+            /** Rows After */
+            rows_after: number;
+            /** Rows Before */
+            rows_before: number;
         };
         /** PresignPartsRequest */
         PresignPartsRequest: {
@@ -888,6 +1147,135 @@ export interface components {
             reason: string;
             /** Section */
             section: string;
+        };
+        /**
+         * ReportOut
+         * @description A finished run's report: every sentence cites the facts it rests on.
+         */
+        ReportOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Dataset Name */
+            dataset_name: string;
+            evidence?: components["schemas"]["EvidenceOut"] | null;
+            /** Facts */
+            facts: components["schemas"]["FactOut"][];
+            /** Features */
+            features?: components["schemas"]["FeatureNoteOut"][];
+            /**
+             * Highlights
+             * @description Fact ids of the best findings, best first.
+             */
+            highlights?: string[];
+            /** Method Notes */
+            method_notes: string[];
+            narration: components["schemas"]["NarrationOut"];
+            preparation: components["schemas"]["PreparationOut"];
+            /** Removed Questions */
+            removed_questions: number;
+            /** Requests */
+            requests: components["schemas"]["RequestOutcomeOut"][];
+            /** Revision */
+            revision: number;
+            run: components["schemas"]["RunOut"];
+            /** Sections */
+            sections: components["schemas"]["ReportSectionOut"][];
+            /** Summary */
+            summary: components["schemas"]["SentenceOut"][];
+            /** Title */
+            title: string;
+            understanding: components["schemas"]["UnderstandingOut"];
+        };
+        /** ReportSectionOut */
+        ReportSectionOut: {
+            /** Analysis Id */
+            analysis_id: string;
+            /** Answer */
+            answer: components["schemas"]["SentenceOut"][];
+            chart: components["schemas"]["ChartOut"] | null;
+            /** Columns */
+            columns: components["schemas"]["ColumnRefOut"][];
+            /** Facts */
+            facts: string[];
+            /** Kind */
+            kind: string;
+            /** Kind Label */
+            kind_label: string;
+            /** Question */
+            question: string;
+            /** Requested By Person */
+            requested_by_person: boolean;
+            /**
+             * Skipped
+             * @description Why the question could not be answered, if not.
+             */
+            skipped: string | null;
+            /** Written By */
+            written_by: ("model" | "engine") | null;
+        };
+        /** RequestOutcomeOut */
+        RequestOutcomeOut: {
+            /**
+             * Note
+             * @description What was done with it, in plain words.
+             */
+            note: string;
+            /**
+             * Request
+             * @description The request in the person's own words.
+             */
+            request: string;
+            /**
+             * Source
+             * @description Who read the request: the planning model or the engine's own reading.
+             * @enum {string}
+             */
+            source: "model" | "rules";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "added" | "removed" | "already_planned" | "not_understood";
+        };
+        /**
+         * RevisePlanRequest
+         * @description Ask for the plan to be made again with your changes; the run comes back for review.
+         */
+        RevisePlanRequest: {
+            /**
+             * Cleaning Revision
+             * @description The cleaning plan revision you reviewed.
+             */
+            cleaning_revision: number;
+            /** Columns */
+            columns?: components["schemas"]["ColumnEditIn"][];
+            /**
+             * Decisions
+             * @description Cleaning decisions made so far (any subset); they are kept.
+             */
+            decisions?: components["schemas"]["CleaningDecisionIn"][];
+            /** Disabled Features */
+            disabled_features?: string[] | null;
+            /**
+             * No Target
+             * @default false
+             */
+            no_target: boolean;
+            /**
+             * Removed Analyses
+             * @description Ids of planned questions you do not want. Leave one out to bring it back.
+             */
+            removed_analyses?: string[];
+            /**
+             * Requests
+             * @description What else to analyse or drop, in your own words (up to five).
+             */
+            requests?: string[];
+            /** Target */
+            target?: string | null;
         };
         /**
          * Role
@@ -1062,6 +1450,16 @@ export interface components {
              */
             updated_at: string;
         };
+        /** SentenceOut */
+        SentenceOut: {
+            /**
+             * Citations
+             * @description Ids of the facts the sentence rests on.
+             */
+            citations: string[];
+            /** Text */
+            text: string;
+        };
         /** StageOut */
         StageOut: {
             /** Attempts */
@@ -1110,6 +1508,28 @@ export interface components {
              * @enum {string}
              */
             source: "rules" | "model" | "person";
+        };
+        /** UnderstandingOut */
+        UnderstandingOut: {
+            /** Columns */
+            columns: number;
+            /** Domain */
+            domain: string;
+            /** Grain */
+            grain: string;
+            /** Masked Columns */
+            masked_columns: number;
+            /**
+             * Planned By
+             * @enum {string}
+             */
+            planned_by: "model" | "cache" | "rules";
+            /** Rows */
+            rows: number;
+            /** Summary */
+            summary: string;
+            /** Target */
+            target: string | null;
         };
         /** UploadOut */
         UploadOut: {
@@ -1968,6 +2388,105 @@ export interface operations {
             };
         };
     };
+    revise_plan_v1_runs__run_id__plan_revise_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The run's row_version (ETag) you last saw; 412 if it changed since. */
+                "If-Match"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevisePlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     get_recipe_v1_runs__run_id__recipe_get: {
         parameters: {
             query?: never;
@@ -2047,6 +2566,88 @@ export interface operations {
                 content: {
                     "application/problem+json": components["schemas"]["Problem"];
                     "text/plain": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_report_v1_runs__run_id__report_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

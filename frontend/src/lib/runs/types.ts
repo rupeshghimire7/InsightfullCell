@@ -51,6 +51,9 @@ export interface UnderstandOutput {
   features?: number;
   rejected?: number;
   summary?: string;
+  requests?: number;
+  requests_applied?: number;
+  removed_analyses?: number;
 }
 
 /** What the clean_plan stage reports. */
@@ -59,4 +62,70 @@ export interface CleanPlanOutput {
   applied_automatically?: number;
   waiting_for_review?: number;
   not_applied?: number;
+}
+
+/** What the clean_apply stage reports. */
+export interface CleanApplyOutput {
+  rows_before?: number;
+  rows_after?: number;
+  operations_applied?: number;
+  operations_not_applied?: number;
+  /** Accepted changes that remove or merge data (the sensitivity check re-tests without them). */
+  lossy_applied?: number;
+}
+
+/** What the geo stage reports: one entry per place column (no values). */
+export interface GeoOutput {
+  reference_set?: string;
+  places?: {
+    columns: string[];
+    kind: "names" | "postcodes" | "points";
+    scope: string;
+    resolved: boolean;
+    match_rate: number;
+  }[];
+}
+
+/** What the features stage reports. */
+export interface FeaturesOutput {
+  candidates?: number;
+  kept?: number;
+  no_signal?: number;
+  redundant?: number;
+  not_computed?: number;
+  outcome?: string | null;
+  kept_features?: string[];
+}
+
+/** What the mine stage reports. */
+export interface MineOutput {
+  questions?: number;
+  answered?: number;
+  skipped?: number;
+  facts?: number;
+  charts?: number;
+  tests?: number;
+  reliable?: number;
+}
+
+/** What the sensitivity stage reports. */
+export interface SensitivityOutput {
+  rechecked?: number;
+  holds?: number;
+  weakens?: number;
+  flips?: number;
+  not_retested?: number;
+  same_data?: number;
+}
+
+/** What the report stage reports. */
+export interface ReportOutput {
+  sections?: number;
+  answered?: number;
+  narration?: "model" | "engine" | "mixed";
+  provider?: string | null;
+  fallback_reason?: string | null;
+  sentences_kept?: number;
+  sentences_dropped?: number;
+  written_by_engine?: number;
 }

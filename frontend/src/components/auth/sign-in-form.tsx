@@ -35,9 +35,10 @@ const TEST_SENDER_LIMIT =
 /**
  * Where sign-in links go. `log`: printed in the web server's terminal, never emailed.
  * `resend-test`: emailed from Resend's shared test sender, which only delivers to the Resend
- * account owner. `email`: emailed from a verified domain, to anyone.
+ * account owner. `email`: emailed from a verified domain, to anyone. `off`: sign-in links are
+ * switched off (the button is shown disabled, with a note saying so).
  */
-export type LinkDelivery = "log" | "resend-test" | "email";
+export type LinkDelivery = "log" | "resend-test" | "email" | "off";
 /** `setup-needed`: shown disabled with setup steps (development only). */
 export type GoogleSignIn = "on" | "setup-needed" | "off";
 
@@ -122,6 +123,7 @@ export function SignInForm({
   const [askingForKey, setAskingForKey] = useState(false);
   const registering = mode === "register";
   const testingEmail = linkDelivery !== "email";
+  const linksOff = linkDelivery === "off";
 
   // Opening the key step moves focus into it; closing it returns focus to the button that opened
   // it. Skipped on the first render so the page does not grab focus on load.
@@ -177,7 +179,7 @@ export function SignInForm({
   /** "Email me a sign-in link": sends right away with real email; in testing mode it first asks
    * for the tester's own Resend API key. */
   async function onMagicLink() {
-    if (status.kind === "busy") return;
+    if (status.kind === "busy" || linksOff) return;
     const values = readValid("link");
     if (!values) return;
     if (testingEmail) {
@@ -226,7 +228,12 @@ export function SignInForm({
     setStatus({
       kind: "sent",
       email: address,
-      via: resendApiKey || linkDelivery === "resend-test" ? "test-sender" : linkDelivery,
+      via:
+        resendApiKey || linkDelivery === "resend-test"
+          ? "test-sender"
+          : linkDelivery === "log"
+            ? "log"
+            : "email",
     });
   }
 
@@ -338,43 +345,47 @@ export function SignInForm({
               ? "Signing in…"
               : "Sign in"}
         </Button>
-        {registering ? null : askingForKey ? (
-          <ResendKeyStep
-            delivery={linkDelivery}
-            error={fieldErrors.resendApiKey}
-            busy={busy === "link"}
-            disabled={busy !== null && busy !== "link"}
-            onSend={onSendWithKey}
-            onCancel={() => {
-              setFieldErrors({});
-              setAskingForKey(false);
-            }}
-          />
-        ) : (
-          <MagicLinkButton
-            busy={busy === "link"}
-            disabled={busy !== null && busy !== "link"}
-            delivery={linkDelivery}
-            onClick={onMagicLink}
-          />
-        )}
-      </form>
 
-      {google !== "off" ? (
-        <>
-          <div className="flex items-center gap-3 text-xs text-muted" aria-hidden="true">
-            <span className="h-px flex-1 bg-border" />
-            or
-            <span className="h-px flex-1 bg-border" />
+        {/* The other ways in, after "or": Google, then the sign-in link. They stay inside the
+            form (as plain buttons) because the link reads the email field above. */}
+        {google !== "off" || !registering ? (
+          <div className="space-y-4 pt-1">
+            <div className="flex items-center gap-3 text-xs text-muted" aria-hidden="true">
+              <span className="h-px flex-1 bg-border" />
+              or
+              <span className="h-px flex-1 bg-border" />
+            </div>
+            {google !== "off" ? (
+              <GoogleButton
+                setupNeeded={google === "setup-needed"}
+                busy={busy === "google"}
+                disabled={busy !== null && busy !== "google"}
+                onClick={onGoogle}
+              />
+            ) : null}
+            {registering ? null : askingForKey ? (
+              <ResendKeyStep
+                delivery={linkDelivery}
+                error={fieldErrors.resendApiKey}
+                busy={busy === "link"}
+                disabled={busy !== null && busy !== "link"}
+                onSend={onSendWithKey}
+                onCancel={() => {
+                  setFieldErrors({});
+                  setAskingForKey(false);
+                }}
+              />
+            ) : (
+              <MagicLinkButton
+                busy={busy === "link"}
+                disabled={busy !== null && busy !== "link"}
+                delivery={linkDelivery}
+                onClick={onMagicLink}
+              />
+            )}
           </div>
-          <GoogleButton
-            setupNeeded={google === "setup-needed"}
-            busy={busy === "google"}
-            disabled={busy !== null && busy !== "google"}
-            onClick={onGoogle}
-          />
-        </>
-      ) : null}
+        ) : null}
+      </form>
 
       <p className="text-center text-sm text-muted">
         {registering ? "Already have an account? " : "New to InsightfulCell? "}
@@ -440,8 +451,9 @@ function Field({
 
 /**
  * "Email me a sign-in link". While links cannot reach everyone (printed to the server log, or sent
- * from Resend's test sender), a "Testing only" note says so on hover, on keyboard focus, or when
- * the info button is pressed (touch); Escape dismisses it (WCAG 1.4.13).
+ * from Resend's test sender), a "Testing only" note says so. Shown only on hover of the button or its info icon; Escape dismisses it (WCAG 1.4.13); screen
+ * readers read it through `aria-describedby`. Switched off, the button stays visible but inert
+ * (`aria-disabled`), and the same note says links are not available yet.
  */
 function MagicLinkButton({
   busy,
@@ -456,19 +468,19 @@ function MagicLinkButton({
 }) {
   const noteId = useId();
   const testing = delivery !== "email";
+  const off = delivery === "off";
   const [hovered, setHovered] = useState(false);
-  const [focused, setFocused] = useState(false);
-  const [pinned, setPinned] = useState(false);
   const [dismissed, setDismissed] = useState(false);
-  const open = testing && !dismissed && (hovered || focused || pinned);
+  // Shown only while the pointer is over the button or its info icon (screen readers get the
+  // same text through aria-describedby).
+  const open = testing && !dismissed && hovered;
 
-  // Escape closes the note wherever focus is, including when only the pointer opened it.
+  // Escape closes the note while it is open (WCAG 1.4.13).
   useEffect(() => {
     if (!open) return;
     function onKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
       setDismissed(true);
-      setPinned(false);
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -479,9 +491,10 @@ function MagicLinkButton({
       variant="secondary"
       className="w-full"
       data-link-button=""
-      onClick={onClick}
+      onClick={off ? undefined : onClick}
       loading={busy}
-      disabled={disabled}
+      disabled={off ? undefined : disabled}
+      aria-disabled={off ? true : undefined}
       aria-describedby={testing ? noteId : undefined}
     >
       {busy ? "Sending…" : "Email me a sign-in link"}
@@ -497,32 +510,15 @@ function MagicLinkButton({
         setDismissed(false);
       }}
       onMouseLeave={() => setHovered(false)}
-      onFocus={() => {
-        setFocused(true);
-        setDismissed(false);
-      }}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) {
-          setFocused(false);
-          setPinned(false);
-        }
-      }}
     >
       <div className="flex gap-2">
         {button}
-        <button
-          type="button"
-          aria-label="About sign-in links"
-          aria-expanded={open}
-          aria-controls={noteId}
-          onClick={() => {
-            setPinned(true);
-            setDismissed(false);
-          }}
-          className="inline-flex size-9 shrink-0 items-center justify-center rounded-control border border-border bg-surface text-muted hover:bg-bg hover:text-text pointer-coarse:size-11"
+        <span
+          aria-hidden="true"
+          className="inline-flex size-9 shrink-0 cursor-help items-center justify-center rounded-control border border-border bg-surface text-muted hover:bg-bg hover:text-text pointer-coarse:size-11"
         >
-          <Info aria-hidden="true" weight="fill" className="size-4" />
-        </button>
+          <Info weight="fill" className="size-4" />
+        </span>
       </div>
       {/* Padding, not margin, so the pointer can move onto the note without it closing. */}
       <div
@@ -532,8 +528,13 @@ function MagicLinkButton({
         className="absolute inset-x-0 top-full z-10 pt-2"
       >
         <div className="rounded-panel border border-warning/50 bg-raised p-3 text-sm shadow-lg">
-          <p className="font-semibold text-warning">Testing only</p>
-          {delivery === "log" ? (
+          <p className="font-semibold text-warning">{off ? "Not available yet" : "Testing only"}</p>
+          {off ? (
+            <p className="mt-1">
+              Sign-in links arrive once email delivery is set up. For now, sign in with your
+              password or Google.
+            </p>
+          ) : delivery === "log" ? (
             <p className="mt-1">
               No email is sent yet: the link is printed in the terminal running the web app. To get
               it by email, paste your own Resend API key in the next step.

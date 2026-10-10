@@ -33,7 +33,8 @@ export function buildAuthOptions(pool: Pool, getApi: () => OrganizationApi = unb
     secret: env.BETTER_AUTH_SECRET,
     database: pool,
     // Registration with a password needs no mail provider: no verification email or code is sent
-    // (ADR-028). Sign-in links and Google remain for people who prefer not to keep a password.
+    // (ADR-028). Google, and sign-in links when switched on, are there for people who prefer not
+    // to keep a password.
     emailAndPassword: {
       enabled: true,
       autoSignIn: true,
@@ -68,20 +69,28 @@ export function buildAuthOptions(pool: Pool, getApi: () => OrganizationApi = unb
       },
     },
     plugins: [
-      magicLink({
-        expiresIn: MAGIC_LINK_TTL_SECONDS,
-        storeToken: "hashed",
-        rateLimit: { window: 60, max: env.AUTH_MAGIC_LINK_RATE_MAX },
-        sendMagicLink: async ({ email, url, metadata }) => {
-          const apiKey = userResendKey(metadata, linkDelivery(env));
-          try {
-            await sendSignInEmail({ to: email, url }, { apiKey });
-          } catch (error) {
-            if (error instanceof EmailDeliveryError) throw emailProblem(error, Boolean(apiKey));
-            throw error;
-          }
-        },
-      }),
+      // Switched off (EMAIL_LINK_SIGN_IN=off), the endpoint does not exist: a hidden button is not
+      // a disabled feature. It uses only Better Auth's core tables, so the schema is the same.
+      ...(env.EMAIL_LINK_SIGN_IN === "on"
+        ? [
+            magicLink({
+              expiresIn: MAGIC_LINK_TTL_SECONDS,
+              storeToken: "hashed",
+              rateLimit: { window: 60, max: env.AUTH_MAGIC_LINK_RATE_MAX },
+              sendMagicLink: async ({ email, url, metadata }) => {
+                const apiKey = userResendKey(metadata, linkDelivery(env));
+                try {
+                  await sendSignInEmail({ to: email, url }, { apiKey });
+                } catch (error) {
+                  if (error instanceof EmailDeliveryError) {
+                    throw emailProblem(error, Boolean(apiKey));
+                  }
+                  throw error;
+                }
+              },
+            }),
+          ]
+        : []),
       organization({
         ac,
         roles,
@@ -123,7 +132,7 @@ export function userResendKey(metadata: unknown, delivery: LinkDelivery): string
       ? (metadata as { resendApiKey?: unknown }).resendApiKey
       : undefined;
   if (supplied === undefined || supplied === "") return undefined;
-  if (delivery === "email") {
+  if (delivery === "email" || delivery === "off") {
     throw new APIError("BAD_REQUEST", {
       code: "RESEND_KEY_NOT_ACCEPTED",
       message: "This server sends sign-in email itself; leave the Resend API key out.",
