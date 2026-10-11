@@ -26,9 +26,9 @@ The single place that says what exists, what is half-built and what is next. Upd
 | 1 | Sign-in, tenancy, API, upload, ingestion engine | Web app, Identity, API service, Upload path, Ingest | ✅ built scope green locally; remaining gaps listed below |
 | 2 | Runs, job queue, worker, live progress | Job queue and runs, Live progress | ✅ **done** (iteration 6): all 11 tasks built and tested locally |
 | 3 | Analysis Phase A: ingest + profile in the worker, LLM gateway, understand, clean_plan, review gate | Ingest and profile, Understand, Cleaning, LLM gateway | ✅ **done** (iterations 7 and 8), plus plan revision with the person's requests (iteration 9 audit) |
-| 4 | Analysis Phase B: clean_apply, geo, features, mine, facts, sensitivity, rank | Cleaning, Places and maps, Features and mining, Fact store | ✅ **done** (iteration 9); rates per resident and spatial clustering move to Phase 6 (maps) |
-| 5 | Narration and verification | Narration and verification, Guardrail layers | 🟡 verified narration with an engine fallback exists; slots, repair, judge, corrupted-narrator suite not started |
-| 6 | Charts, dashboard, report, exports, drill-downs | Charts, dashboard, report | 🟡 report page with cited facts, evidence and charts; Vega-Lite, dashboard, exports, maps, drill-downs not started |
+| 4 | Analysis Phase B: clean_apply, geo, features, mine, facts, sensitivity, rank | Cleaning, Places and maps, Features and mining, Fact store | ✅ **done** (iteration 9); maps arrived in Phase 6 (rates per resident and spatial clustering not in v1, ADR-035) |
+| 5 | Narration and verification | Narration and verification, Guardrail layers | ✅ **done** (iteration 10): slots, verifier, repair, fallbacks, judge (off by default), re-narration, corrupted-narrator suite |
+| 6 | Charts, dashboard, report, exports, drill-downs | Charts, dashboard, report | ✅ **done** (iteration 11): checked charts and maps, dashboard, fact inspector, HTML export (PDF by printing), drill-downs; deviations in ADR-035 |
 | 7 | Question data (tiered Q&A) | Question data | ⬜ |
 | 8 | Running it: staging, observability, hardening | Security, When things fail, Observability, Caching | ⬜ |
 | R2 | Release 2 additions: embeddings (pgvector + HNSW), fused word/meaning search | Fact store and search | ⬜ |
@@ -47,7 +47,7 @@ The single place that says what exists, what is half-built and what is next. Upd
 | Local services: PostgreSQL 18 + S3-compatible storage in Compose | ✅ ↔ | PostgreSQL 18 + RustFS 1.0.0 (ADR-027). Both containers healthy; migrations, integration tests and e2e pass on them (iteration 3). |
 | Dev machine tooling | ✅ | uv, Node 22.23.3 + pnpm 10.28.0 (`~/.local`), Docker 29.1.3 + Compose 2.40.3, Playwright Chromium build 1194. |
 | Migration lint for dangerous operations | ⬜ | Baseline: "linted for dangerous operations". Today `check-migrations.sh` checks up/down/up only. |
-| Evaluation suites in CI (planted-effect, corrupted-narrator) | 🟡 | Planted-effect: `test_engine_evidence.py` (planted effects found, pure noise yields no finding) runs with every unit suite in CI. Corrupted-narrator: Phase 5. |
+| Evaluation suites in CI (planted-effect, corrupted-narrator) | ✅ | Planted-effect: `test_engine_evidence.py`. Corrupted-narrator: `test_narration.py` (31 planted errors across every check must all be rejected, 11 clean sentences all kept); both run with every unit suite in CI. |
 | Vercel preview per PR | ⬜ | Phase 8. |
 
 ## Phase 1 · Sign-in, tenancy, API, upload, ingestion engine
@@ -178,27 +178,34 @@ Decision record: ADR-032. Verified in iteration 9 (see "Last check run"). Phase 
 | test_log: every test with effect size, interval, p and q | ✅ | `app.test_log`, monthly partitions (`ensure_test_log_partitions`, run by upkeep), append-only, forced RLS. |
 | Report shows the evidence | ✅ | API `GET /v1/runs/{id}/report`: each fact's tier, test, check and content hash; evidence and feature summaries. UI: evidence badge (icon and words), test line, check line, "Evidence" block. |
 
-## Phase 5 · Narration and verification
+## Phase 5 · Narration and verification · done
 
-| Task | Status |
-|---|---|
-| Section-scoped narration with numeric slots (Sonnet 5) | 🟡 ↔ | One call for all sections (prompt `narrate-v2`); numbers are checked against cited facts instead of slots. |
-| Verifier: citations, stray digits, direction, wording strength, causal language, conditions | 🟡 | `engine/analysis/narrate.py`: citations, numbers, direction, causal and significance words, and (iteration 9) wording strength for inconclusive facts. Conditions not checked. |
-| Repair once, then template; section falls back at 30% failure; "narration simplified" marker | 🟡 | No repair call; a section that loses more than a third of its sentences is written by the engine, and the report says which sections were. |
-| Haiku judge (can only reject), off until its spike passes | ⬜ | |
-| Summary last, built only from verified body facts | 🟡 | The summary may cite only ranked highlights candidates (reliable or descriptive, iteration 9); it is not yet re-verified as a separate step. |
-| Template narrator as a complete fallback | ✅ | `engine_narration`: every answer from the facts' own statements when the model is off or fails. |
+Decision record: ADR-034. Verified in iteration 10 (see "Last check run").
 
-## Phase 6 · Charts, dashboard, report
+| Task | Status | Evidence / notes |
+|---|---|---|
+| Section-scoped narration with numeric slots | ✅ ↔ | `engine/analysis/narrate.py` + `prompt.py` (`narrate-v3`): one call per question, concurrently (`LLM_NARRATION_CONCURRENCY`, default 4), with only that question's facts; numbers as positional slots `{F3.1}` filled from the facts. The baseline names Sonnet; the strong tier of the configured provider is used (ADR-031). |
+| Verifier: citations, stray digits, direction, wording strength, causal language, conditions | ✅ | `engine/analysis/verifier.py`: also form (length, braces, links, emails) and numbers in words; wording lexicon tied to effect-size bands; conditions from the labels in each slot's clause and "within". |
+| Repair once, then template; 30% section fallback, prompt flagged; "narration simplified" | ✅ | One repair call with each failure; a sentence failing again becomes its fact's statement; over 30%: the part from templates, flagged in the log and the report. An outage (or a repair lost to one) marks the report "Narration simplified" with a "Write the answers again" button. |
+| Judge (can only reject), off until its spike passes | ✅ | Purpose `judge` (fast tier, `judge-v1`), one sentence and its facts; skipped when unavailable; `LLM_JUDGE=false` by default. The spike itself is not run. |
+| Summary last, from verified body facts, verified again | ✅ | Built from the ranked highlights that the verified answers cite, with the same checks and repair. |
+| Template narrator as a complete fallback | ✅ | `engine_narration`, and per sentence and per part. |
+| `verification_results` table; rejection rate measured | ✅ | Migration 0008: every verdict per sentence and attempt, with report revision and prompt version; append-only, monthly partitions, forced RLS. Rejections per check also in the report document and the stage output. A metrics dashboard is Phase 8. |
+| Re-narrate after an outage | ✅ ↔ | `POST /v1/runs/{id}/report:renarrate` (202): only when the latest report is simplified for a reason that can pass; new edge succeeded → queued; only `report` re-runs, every other stage reuses its checkpoint; a new report revision. `test_plans_api.py::TestRenarrate`. |
+| Corrupted-narrator evaluation in CI | ✅ | `test_narration.py`. |
 
-| Task | Status |
-|---|---|
-| Catalogue chart builders → Vega-Lite spec + checkable claims; recomputed against cleaned data | 🟡 ↔ | Charts are data computed by the miners (`ChartData`) and drawn by our own accessible SVG components with a table view; no Vega-Lite, no checkable claims yet. |
-| Report and dashboard documents (versioned JSON), suggested questions pre-answered | 🟡 | Report document v2 (`run_reports`, append-only); no dashboard or suggested questions. |
-| Web rendering: streamed Server Components, lazy vega-embed, citation chips → fact inspector | 🟡 | Report page with citation chips linking to each fact (statement, columns, rows, method, evidence, check). |
-| HTML export (Jinja) and PDF (headless Chromium) | ⬜ |
-| Maps: TopoJSON by parent region, small areas hatched | ⬜ |
-| Drill-downs: `POST /v1/runs/{id}/drilldowns`, exploratory facts | ⬜ |
+## Phase 6 · Charts, dashboard, report · done
+
+Decision record: ADR-035. Verified in iteration 11 (see "Last check run"). Phase B gains `visualize` between `rank` and `report`.
+
+| Task | Status | Evidence / notes |
+|---|---|---|
+| Catalogue chart builders → spec + checkable claims; every claimed value recomputed from the cleaned data, a mismatch rejects the chart | ✅ ↔ | Every chart point carries a claim (`engine/analysis/claims.py`, ten kinds: group mean or gap with the miners' pooling, eta, rank correlation, share, histogram bin, period, scatter point, outliers, missing-value average, small-region rows). `visualize` (`engine/analysis/charts.py`) recomputes each with its own query; counts exactly, others within 1e-7; a failure withholds the chart (logged by claim type only). `test_charts.py`: every miner's chart verifies; five kinds of tampering are caught. Charts are drawn by our components; Vega-Lite is a per-chart download built when read (ADR-035). |
+| Report and dashboard documents (versioned JSON), suggested questions pre-answered and verified | ✅ ↔ | Report v4 and dashboard v1 in one append-only `run_reports` row (migration 0009 `dashboard`). Dashboard: headline tiles (one of a highlighted fact's own numbers), top findings (reliable tests only), maps, gallery, up to six suggested questions answered with the report's verified sentences. `GET /v1/runs/{id}/dashboard`. |
+| Web rendering: citation chips → fact inspector | ✅ | Chips are buttons opening one native dialog per page (statement, tier, columns, rows, method, test, check, hash; focus returns). Dashboard page and Dashboard/Report tabs; run page links to the dashboard. Streaming/`vega-embed` not used (ADR-035). |
+| HTML export (Jinja) and PDF | ✅ ↔ | `GET /v1/runs/{id}/report.html`: autoescaped Jinja, inline SVG charts and maps, every fact with its hash, no script or external resource, `Content-Security-Policy: default-src 'none'`, attachment. PDF = print (stylesheets for the export and the pages; collapsed tables open before printing); no headless Chromium in the worker (ADR-035). |
+| Maps: regions by parent, small areas hatched | ✅ ↔ | `engine/geo/maps.py` projects and simplifies the packaged Natural Earth outlines into SVG paths (Equal Earth cropped to the data; states with US insets and Russia on one side of the antimeridian). Share of rows per region, and the outcome's average when numeric; under ten rows hatched with no number; checked like charts. No rates per resident, smoothing or clustering test (no population or neighbour data; ADR-035). |
+| Drill-downs: `POST /v1/runs/{id}/drilldowns`, exploratory facts | ✅ | A sub-run (`runs.parent_run_id`) of the same version starting at Phase B with the parent's Phase A checkpoints, plan and approved cleaning (no review, no planning call); subset kept in `clean_apply` (place columns by standard region name), keys every later stage and its own silver key; facts' provenance `exploratory`; report scope and method note; ≤ 20 groups, ≥ 30 rows, ≤ 25 per run, not nested; analysts and above; `Idempotency-Key`. UI: Explore from table rows and map regions with a confirmation, explorations listed on the parent. `test_phase6_api.py`, e2e "explore one group". |
 
 ## Phase 7 · Question data
 
@@ -218,7 +225,7 @@ Decision record: ADR-032. Verified in iteration 9 (see "Last check run"). Phase 
 |---|---|
 | Staging on AWS (ECS Fargate, RDS single-AZ, S3) + Vercel, from Sprint 4 | ⬜ |
 | OpenTelemetry traces across web, API, queue and worker; Sentry | 🟡 structured JSON logs only |
-| Metrics: endpoint RED, queue depth/age, stage durations, model cost, verifier rejection rate | ⬜ |
+| Metrics: endpoint RED, queue depth/age, stage durations, model cost, verifier rejection rate | ⬜ (rejections are stored per sentence in `verification_results`; no metrics pipeline yet) |
 | Retention: bronze 90 days, lifecycle rules, partition dropping | ⬜ |
 | Audit log (append-only) | ⬜ |
 | Release flow: tagged release with manual approval | ⬜ |
@@ -237,8 +244,14 @@ Decision record: ADR-032. Verified in iteration 9 (see "Last check run"). Phase 
 | `procrastinate` schema (implied by the schema table) | Procrastinate's SQL vendored into migration 0003, functions' `search_path` pinned | ADR-030: Alembic owns migrations; Procrastinate names its tables without a schema |
 | TanStack Query polls when SSE is blocked | A fixed 3-second polling loop | ADR-030: one poll did not justify a provider and dependency |
 | The API is not reached by browsers (SETUP_MANUAL 6.5 before) | Browsers reach exactly one API path, the event stream, with CORS | ADR-030 and the baseline's own "Live progress" design; production routes only that path publicly |
-| Phase B: eleven stages | Seven stages; narrate, verify, visualize and assemble are inside `report` | ADR-032: they split out with Phases 5 and 6 |
+| Phase B: eleven stages | Seven stages; narrate, verify, visualize and assemble are inside `report` | ADR-032; narration and verification are their own modules (ADR-034) but one stage, so a re-narration reruns one checkpoint |
+| Named numeric slots (`{f_0107.diff}`) | Positional slots (`{F107.2}`, the fact's n-th number) | ADR-034: works for every miner without naming each number |
+| A succeeded run is final | succeeded → queued only for `report:renarrate` | ADR-034: re-narration reuses the worker and every other checkpoint |
 | Miners in a process pool | Sequential | ADR-032: threads measured slower; a pool copies the table per process |
+| Charts rendered with Vega-Lite (`vega-embed`) | Our own accessible chart components; Vega-Lite spec offered as a download | ADR-035: `vega-embed` needs `unsafe-eval` under our CSP |
+| PDF by headless Chromium in the worker | The self-contained HTML export (and the pages) print to PDF | ADR-035: no browser in the worker image; revisit for unattended PDFs |
+| Map rates per resident, smoothing, spatial clustering | Shares of rows and outcome averages per region | ADR-035: no population or neighbour data in the reference set |
+| `charts` / `chart_facts` tables; `reports` with two document kinds | Charts live in the report document and cite their answer's facts; report and dashboard are one row | ADR-035 |
 | Reference data under `reference/geo/` in object storage, ABS ASGS + US Census | Natural Earth countries and states packaged with the code (0.55 MB), digest pinned in `ref.geo_reference_sets` | ADR-032: no setup step for 0.55 MB; small areas arrive with maps |
 | Facts saved after mining, then sensitivity flags them | Facts are immutable, so sensitivity outcomes are stored in `test_log` beside them | ADR-032 |
 | Sign-in links offered | Off by default (`EMAIL_LINK_SIGN_IN`) | ADR-033: no verified mail domain yet |
@@ -389,7 +402,72 @@ Not changed (noted for later): the dedup path ignores `dataset_id` when the same
 
 **Not changed (noted):** suburbs/LGAs, US ZIP codes, rates per resident and spatial clustering (Phase 6 maps); the narrator is one call with number checks, not slots (Phase 5).
 
+### Iteration 10 · 2026-10-11 · Phase 5: Narration and verification
+
+**Why:** build Phase 5 to the baseline for a stable release, and try the narrator on a real model (two sample runs with a free Gemini key, then the key is not used again).
+
+**Built (ADR-034):** `engine/analysis/verifier.py` (positional numeric slots, six checks plus form, wording lexicon by effect-size band, conditions per slot); `narrate.py` rewritten (one call per question, concurrent; one repair with feedback; template sentence; 30% part fallback with a flagged prompt; judge, off by default; summary last from verified answers; every verdict recorded); prompts `narrate-v3` and `judge-v1`; report document v3; migration 0008 `verification_results`; `POST /v1/runs/{id}/report:renarrate` (succeeded → queued, only `report` re-runs); report page "Narration simplified" notice with "Write the answers again"; `LLM_NARRATION_CONCURRENCY`, `LLM_JUDGE`. Corrupted-narrator evaluation in CI. Version 0.5.0.
+
+**Live runs (Gemini, `gemini-3.8-flash`, exactly two sample runs: `store_performance_2025.csv` and `field_service_jobs.csv`; the key was read from `backend/.env`, never printed, and not used again).** The key works: 15 calls answered. The free tier also returned timeouts, provider errors and rate limits; every one fell back as designed (plans by rules, parts from templates, report marked simplified), no run failed. Of 32 model sentences, 17 were accepted on first draft, with numbers filled from the facts ("Floor area m2 and Part time staff tend to rise together, showing a strong association."). The rejections found the bug below.
+
+| Found while testing | Fix |
+|---|---|
+| **Live run:** 7 of 28 sentences were wrongly rejected: restating an inconclusive fact's exact values ("Average Floor area m2 went from 1,524 m² in Jan 2025 to 1,520 m² in Oct 2025") counted as stating an unreliable finding | The rule now rejects only a claimed difference, trend or link (comparison, direction, association or strength words) without "not reliable"; regression tests with the live statement |
+| **Live run:** a repair call lost to a rate limit flagged the prompt as failing | A repair lost to an outage simplifies the part instead of flagging it |
+| A trend whose ends fall while its Kendall trend rises would reject either direction word | Direction is not judged when the two disagree |
+| e2e: axe measured colour contrast on review cards still fading in (the 11th card starts 440 ms late); reproducible | The e2e helper waits for running animations; the entrance stagger is capped at 8 items (320 ms) |
+
+**For your local setup:** `make migrate` (0007 → 0008), restart `make api`, `make worker` and `make web`. On a provider's free tier set `LLM_NARRATION_CONCURRENCY=1` or `2` in `backend/.env`.
+
+**Not changed (noted):** the judge's spike (it stays off); a metrics pipeline for the rejection rate (Phase 8; the data is in `verification_results`); in the second live run the planner's answer failed validation once (`invalid`, then rate-limited), so that run planned by rules. This was not investigated further because it would mean using the key again. Planning is Phase 3, and the rules fallback worked. `graphify update` was not run (`backend/.venv/bin/graphify` is missing).
+
+### Iteration 11 · 2026-10-11 · Phase 6: checked charts and maps, dashboard, exports, drill-downs
+
+**Why:** complete Phase 6 for a release (v0.6.0): the whole flow up to (not including) questions about the data.
+
+**Built (ADR-035):** chart claims on every miner chart (`engine/analysis/claims.py`) and the independent check (`charts.py`); stage `visualize`; region maps (`engine/geo/maps.py` outlines, `engine/analysis/regions.py` values and claims); report document v4 (verified charts, maps, withheld flags, drill-down scope, visuals summary) and dashboard document v1 (`dashboard.py`), saved as one revision (migration 0009); `GET /v1/runs/{id}/dashboard`, `GET /v1/runs/{id}/report.html` (`exports/`: Jinja + static SVG, strict CSP, attachment), Vega-Lite spec per chart in the API; drill-downs (`engine/subset.py`, `services/drilldowns.py`, `POST /v1/runs/{id}/drilldowns`, `runs.parent_run_id`, `GET /v1/runs?parent_run_id=`); `report:renarrate` and drill-downs refuse runs of another pipeline version (`409 report-outdated`). UI: dashboard page, Dashboard/Report tabs, fact inspector dialog, region maps (keyboard read-out, hatched small areas, table), Explore confirmation from tables and maps, explorations list, exploration notices (run, report, dashboard, runs table), Download HTML and Print or save as PDF, print stylesheet, "Check the charts and maps" stage summary. Version 0.6.0.
+
+| Found while building and testing | Fix |
+|---|---|
+| `stats.eta` computed the between-group sum of squares as "sum of squares minus n times the mean squared", which cancels for large values with little spread | Deviations from the grand mean (exact same value otherwise; all evidence tests unchanged) |
+| A scatter or trend over a column holding `inf` could put a non-finite value in a chart | Scatter points and trend averages use finite values only |
+| Live run: "Top findings" showed trend charts whose tests were not reliable | Top findings need a strong or supported test; others go to the gallery |
+| Live run (phone, 390 px): bar value labels ran past the chart, so the page scrolled sideways by 31 to 48 px (also on the report page, before this phase) | Bars leave room for their longest label; checked at 390 px on both pages |
+| An exploration's dashboard repeated the parent's title | It says what it explores |
+| A finished run's dataset would have shown its exploration as its latest analysis | A dataset's latest analysis is a full run |
+| The planner's answer was "invalid" twice in the live run (as once in Phase 5), but the reason is not logged (answers are never logged) | The gateway now logs why without content: truncated, empty, not JSON or schema mismatch, with token counts. The cause shows on the next live run |
+
+**Live run (Gemini, `gemini-3.8-flash`, one run plus one exploration, in a throwaway stack: fresh database, ports 8200/3200, `LLM_NARRATION_CONCURRENCY=2`; your dev database was not touched).** The free tier answered 429 (rate limit) and 503, and the planner's two 200 answers failed validation: planning fell back to the rules, narration to templates, the report and dashboard were marked "Narration simplified" with "Write the answers again". No run failed. 9 model calls in all. The rest of the flow worked in a real browser: review, dashboard (light, dark, phone), report, fact inspector, HTML download, PDF (15 pages from the export, 18 from the report page), exploration of one state (44 rows) and its dashboard; no console or page errors. Model-written narration was **not** seen in this iteration.
+
+**For your local setup:** `make migrate` (0008 → 0009), then restart `make api`, `make worker` and `make web`. Your two runs queued under 0.5.0 (field_service_jobs, customer_subscriptions) will fail with "pipeline-changed" when a worker picks them up: start new analyses of those datasets.
+
+**Not changed (noted):** rates per resident, small-area smoothing and spatial clustering (no population data); unattended PDFs; the judge's spike; question data (Phase 7). `graphify update` not run (graphify is not installed).
+
 ## Last check run
+
+**Iteration 11 (2026-10-11), PostgreSQL 18 + RustFS running. Release candidate v0.6.0. Run on the final code.**
+
+| Step | Result |
+|---|---|
+| `scripts/check.sh` backend: ruff, mypy strict (190 files), import-linter (6 contracts), pytest unit + integration, migrations up/down/up (0009), OpenAPI contract, pip-audit | pass: 619 tests, 93.21% coverage (minimum 85%) |
+| `scripts/check.sh` frontend: prettier, eslint (jsx-a11y), tsc strict, vitest + axe, API types match the contract, `next build`, pnpm audit | pass: 358 tests |
+| Secret scan | pass (built-in patterns; gitleaks not installed); `backend/.env` is git-ignored |
+| `scripts/e2e.sh` on 8100/3100 (`LLM_PROVIDER=none`) | pass: 5/5 journeys, including the new "explore one group" and the inspector, dashboard map and HTML download checks in the review journey |
+| Live Gemini check (isolated stack, see iteration 11) | flow complete; the model was rate-limited, so narration fell back to templates as designed |
+| Phone layout at 390 px (dashboard and report) | no sideways scroll after the fix |
+| GitHub CI | not run: nothing pushed |
+
+**Iteration 10 (2026-10-11), PostgreSQL 18 + RustFS running. Release candidate v0.5.0.**
+
+| Step | Result |
+|---|---|
+| `scripts/check.sh --backend` (final backend code): ruff, mypy strict (174 files), import-linter (6 contracts), pytest unit + integration, migrations up/down/up (0008), OpenAPI contract, pip-audit | pass: 582 tests, 91.98% coverage (minimum 85%) |
+| `scripts/check.sh --frontend`: prettier, eslint, tsc strict, vitest + axe, API types match the contract, `next build`, pnpm audit | pass: 344 tests. After it, only `globals.css` (stagger cap) and the e2e helper changed; prettier, eslint and tsc re-run: pass |
+| `scripts/e2e.sh` on 8100/3100 (`LLM_PROVIDER=none`) | pass: 4/4 journeys, twice, after the fix above |
+| Echo check: every engine statement of the three sample datasets sent back as a model sentence | 99 sentences, 0 rejected |
+| Live Gemini sample runs | 2 runs (see iteration 10); the key is not used again |
+| Secret scan | pass (built-in patterns); `backend/.env` is git-ignored |
+| GitHub CI | not run: nothing pushed |
 
 **Iteration 9 (2026-10-10), PostgreSQL 18 + RustFS running. Release candidate v0.4.0.**
 
