@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from decimal import Decimal
 from pathlib import Path
@@ -16,7 +17,14 @@ from insightfulcell.api.container import Services
 from insightfulcell.config import Settings
 from insightfulcell.db.tenant import TenantDatabase
 from insightfulcell.domain.runs import Phase
-from insightfulcell.engine.ports import TestRecord
+from insightfulcell.engine.analysis.narrate import DraftProposal
+from insightfulcell.engine.ports import (
+    ModelReply,
+    ModelRequest,
+    ModelUnavailable,
+    Purpose,
+    TestRecord,
+)
 from insightfulcell.llm.gateway import CallRecord
 from insightfulcell.pipeline.definition import default_pipeline
 from insightfulcell.services.analysis_store import FactsChanged, RunAnalysisStore
@@ -438,6 +446,85 @@ class TestReport:
 
         other = await client.get(f"/v1/runs/{run_id}/report", headers=auth(bob))
         assert other.status_code == 404
+
+
+class _Narrator:
+    """Narrates by repeating each section's first statement with its slots; or is down."""
+
+    def __init__(self, *, down: bool) -> None:
+        self.down = down
+
+    @property
+    def identity(self) -> tuple[str, str] | None:
+        return ("gemini", "gemini-3.8-flash")
+
+    async def complete(self, request: ModelRequest) -> ModelReply:
+        if self.down or request.purpose is not Purpose.NARRATE:
+            raise ModelUnavailable("timeout")
+        facts = json.loads(request.user.split("<facts>\n", 1)[1].split("\n</facts>", 1)[0])
+        draft = DraftProposal.model_validate(
+            {"sentences": [{"text": facts[0]["statement"], "citations": [facts[0]["id"]]}]}
+        )
+        return ModelReply(data=draft, provider="gemini", model="gemini-3.8-flash",
+                          input_tokens=10, output_tokens=10, attempts=1)  # fmt: skip
+
+
+class TestRenarrate:
+    async def test_a_report_simplified_by_an_outage_is_narrated_again(
+        self,
+        client: httpx.AsyncClient,
+        alice: Identity,
+        bob: Identity,
+        auth: AuthHeaders,
+        services: Services,
+        settings: Settings,
+        executor: RunExecutor,
+        owner_sql: OwnerSql,
+    ) -> None:
+        def with_model(down: bool) -> RunExecutor:
+            return RunExecutor(
+                TenantDatabase(services.engine), S3ObjectStore(settings), RecordingQueue(),
+                default_pipeline(), settings, model=_Narrator(down=down),
+            )  # fmt: skip
+
+        run_id, _ = await reviewed_run(client, auth(alice), executor, alice.org_id)
+        assert (await approve(client, auth(alice), run_id)).status_code == 200
+        outcome = await with_model(down=True).execute(UUID(run_id), alice.org_id, Phase.B)
+        assert outcome is Outcome.SUCCEEDED
+        first = (await client.get(f"/v1/runs/{run_id}/report", headers=auth(alice))).json()
+        narration = first["narration"]
+        assert (narration["source"], narration["fallback_reason"]) == ("engine", "timeout")
+        assert narration["simplified"] is True
+        assert narration["retryable"] is True
+        assert all(s["written_by"] == "engine" for s in first["sections"][0]["answer"])
+
+        assert (await client.post(f"/v1/runs/{run_id}/report:renarrate",
+                                  headers=auth(bob))).status_code == 404  # fmt: skip
+        response = await client.post(f"/v1/runs/{run_id}/report:renarrate", headers=auth(alice))
+        assert response.status_code == 202, response.text
+        assert response.json()["status"] == "queued"
+        stages = {s["name"]: s["status"] for s in response.json()["stages"]}
+        assert stages["report"] == "pending"
+        assert stages["mine"] == "succeeded"
+        outcome = await with_model(down=False).execute(UUID(run_id), alice.org_id, Phase.B)
+        assert outcome is Outcome.SUCCEEDED
+
+        second = (await client.get(f"/v1/runs/{run_id}/report", headers=auth(alice))).json()
+        assert second["revision"] == first["revision"] + 1
+        assert second["narration"]["simplified"] is False
+        assert second["narration"]["prompt_version"] == "narrate-v3"
+        assert second["sections"][0]["written_by"] == "model"
+        assert [f["content_hash"] for f in second["facts"]] == [
+            f["content_hash"] for f in first["facts"]
+        ]  # the facts were reused, not computed again
+        verdicts = owner_sql(
+            "SELECT report_revision, count(*), bool_and(accepted) "
+            "FROM app.verification_results WHERE run_id = :id GROUP BY report_revision",
+            id=run_id,
+        )
+        assert verdicts == [(second["revision"], second["narration"]["sentences_kept"], True)]
+        again = await client.post(f"/v1/runs/{run_id}/report:renarrate", headers=auth(alice))
+        assert (again.status_code, again.json()["code"]) == (409, "narration-not-retryable")
 
 
 class TestFactStore:

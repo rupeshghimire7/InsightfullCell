@@ -1,30 +1,34 @@
-"""Narration: the answers written in words, every sentence checked against the facts it cites.
+"""Narration: the answers written in words, every sentence verified against its facts.
 
-The model (prompt ``narrate-v1``) sees the plan's questions and the computed facts (statements
-of numbers about the cleaned data, never rows) and writes a short answer per question plus a
-summary, citing fact ids. The verifier then keeps a sentence only if:
+One model call per part of the report, sections concurrently, the summary last:
 
-- it cites at least one fact, and only facts of its own question (the summary may cite any);
-- every number in it appears in a cited fact, as computed;
-- it makes no causal or significance claim ("causes", "because", "due to", "significant", ...);
-- it holds no link or email address (labels from the data can carry text that looks like an
-  instruction; a sentence can repeat a label, never send the reader somewhere);
-- a sentence resting only on inconclusive facts says so ("no reliable", "not", "unclear"): an
-  unreliable difference is never stated as a finding;
-- a summary sentence cites only the run's highlights candidates (reliable or descriptive
-  findings), so the summary never leads with something the analysis could not support.
+1. **Section.** The model (prompt ``narrate-v3``) gets one question and that question's facts,
+   with every number as a slot (``{F3.1}``), plus the run's context (what the table is, how it
+   was prepared; never rows). It answers in sentences that write numbers only as slots and
+   list the facts they rest on.
+2. **Verify.** Each sentence goes through ``engine.analysis.verifier`` (citations, stray
+   numbers, direction, strength words, causal language, conditions) and, when switched on,
+   the judge, a second model that can only reject. Accepted sentences get their slots filled
+   from the facts, so a wrong number cannot be written.
+3. **Repair.** Failed sentences are asked for once more, with each failure as feedback. One
+   that fails again is replaced by the template sentence: its fact's own statement.
+4. **Fallback.** A part where more than 30% of the sentences still fail is written from
+   templates altogether, and the prompt is flagged in the log. If the model is unavailable
+   (an outage, an open breaker, a spent budget), the part is written from templates and the
+   report is marked "narration simplified"; it can be narrated again later.
+5. **Summary.** Last, from the ranked highlights that the verified answers rest on, and
+   verified the same way.
 
-A question whose answer loses more than a third of its sentences, or all of them, is written
-by the engine instead, from the facts' own statements. If the model is off or fails, the whole
-report is written by the engine. Either way every sentence carries its citations.
+Every verdict, accepted or not, is kept (``records``) for the run's verification results.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import re
+from collections import Counter
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Final, Literal
 from uuid import UUID
 
@@ -32,44 +36,40 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from insightfulcell.engine.analysis.facts import Fact
 from insightfulcell.engine.analysis.prompt import (
+    JUDGE_PROMPT_ID,
+    JUDGE_PROMPT_VERSION,
+    JUDGE_SYSTEM_PROMPT,
     PROMPT_ID,
     PROMPT_VERSION,
     SYSTEM_PROMPT,
     SectionInput,
-    user_prompt,
+    judge_prompt,
+    repair_prompt,
+    section_prompt,
+    summary_prompt,
 )
+from insightfulcell.engine.analysis.verifier import SlottedFact, Verdict, check, slotted
+from insightfulcell.engine.planning.schema import response_schema
 from insightfulcell.engine.ports import (
     LanguageModel,
     ModelRequest,
     ModelUnavailable,
     Purpose,
+    VerificationRecord,
 )
 
 logger = logging.getLogger(__name__)
 
-MAX_SENTENCE_CHARS: Final = 500
-MAX_DROPPED_SHARE: Final = 1 / 3
+SUMMARY: Final = "summary"
+MAX_FAILED_SHARE: Final = 0.3
+MAX_SECTION_SENTENCES: Final = 5
+MAX_SUMMARY_SENTENCES: Final = 6
 ENGINE_SENTENCES_PER_SECTION: Final = 3
 SUMMARY_SECTIONS: Final = 4
-
-_NUMBER: Final = re.compile(r"(?<![\w.])[-+]?[$€£]?\d[\d,]*(?:\.\d+)?%?")
-_BANNED: Final = re.compile(
-    r"\b(caus\w*|because|due to|leads? to|led to|result(?:s|ed)? in|proves?|proven|proof|"
-    r"significan\w*|guarantee\w*|definitely|certainly)\b",
-    re.IGNORECASE,
-)
-
-
-_LINK: Final = re.compile(r"https?://|\bwww\.|\b[\w.+-]+@[\w-]+\.\w", re.IGNORECASE)
-_NEGATED: Final = re.compile(
-    r"\b(no|not|neither|nor|unclear|inconclusive|unreliable|without)\b|n't\b", re.IGNORECASE
-)
-_UP: Final = re.compile(
-    r"\b(rose|rise[sn]?|rising|increas\w*|grew|grow\w*|went up|climb\w*)\b", re.I
-)
-_DOWN: Final = re.compile(
-    r"\b(fell|falls?|falling|decreas\w*|declin\w*|dropp?\w*|went down|shr[ae]nk\w*)\b", re.I
-)
+SUMMARY_FACTS: Final = 8
+DEFAULT_CONCURRENCY: Final = 4
+#: Model failures that narrating again later cannot fix.
+FINAL_REASONS: Final = frozenset({"disabled", "no_facts", "payload_blocked", "budget_run"})
 
 
 class Sentence(BaseModel):
@@ -77,6 +77,8 @@ class Sentence(BaseModel):
 
     text: str
     citations: tuple[str, ...]
+    #: Who wrote it: the model (verified) or the engine (a fact's own statement).
+    written_by: Literal["model", "engine"] | None = None
 
 
 class _Proposal(BaseModel):
@@ -84,20 +86,17 @@ class _Proposal(BaseModel):
 
 
 class SentenceProposal(_Proposal):
-    text: str = Field(description="One plain sentence. Numbers only as written in the facts.")
+    text: str = Field(description="One plain sentence. Numbers only as slots, like {F3.1}.")
     citations: list[str] = Field(description="Ids of the facts this sentence rests on (F1, F2).")
 
 
-class SectionProposal(_Proposal):
-    analysis_id: str = Field(description="The question's id, exactly as given.")
+class DraftProposal(_Proposal):
     sentences: list[SentenceProposal]
 
 
-class NarrationProposal(_Proposal):
-    summary: list[SentenceProposal] = Field(
-        description="Three to five sentences on the most important findings, each cited."
-    )
-    sections: list[SectionProposal]
+class JudgeVerdict(_Proposal):
+    accept: bool = Field(description="True if the facts support everything the sentence says.")
+    reason: str = Field(description="If rejected, what the facts do not support, in a phrase.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,8 +108,23 @@ class Narration:
     provider: str | None = None
     model: str | None = None
     fallback_reason: str | None = None
-    kept: int = 0
-    dropped: int = 0
+    kept: int = 0  # model sentences accepted (first draft or repair)
+    dropped: int = 0  # model sentences that failed for good
+    repaired: int = 0  # accepted on the second attempt
+    #: Parts where more than 30% failed: written from templates, their prompt flagged.
+    flagged: tuple[str, ...] = ()
+    #: The model was unavailable for some part: written from templates instead.
+    simplified: bool = False
+    #: Narrating again later may succeed (the model was out, not off or refused).
+    retryable: bool = False
+    judge: Literal["off", "on"] = "off"
+    records: tuple[VerificationRecord, ...] = ()
+    prompt_version: str | None = None
+
+    @property
+    def rejected(self) -> dict[str, int]:
+        """Rejections per check, first drafts and repairs."""
+        return dict(Counter(r.check for r in self.records if r.check is not None))
 
 
 async def narrate(  # noqa: PLR0913  (keyword-only)
@@ -120,102 +134,90 @@ async def narrate(  # noqa: PLR0913  (keyword-only)
     run_id: UUID,
     sections: Sequence[SectionInput],
     context: Mapping[str, Any],
-    response_schema: Mapping[str, Any],
     sensitive_values: frozenset[str],
     summary_facts: Sequence[str] | None = None,
     checks: Mapping[str, str] | None = None,
+    judge: bool = False,
+    concurrency: int = DEFAULT_CONCURRENCY,
 ) -> Narration:
     """The report's words: the model's, verified sentence by sentence, else the engine's.
     ``summary_facts`` are the facts the summary may cite, best first (by default the first
-    fact of each question)."""
+    fact of each question); it cites only those the verified answers rest on."""
     answered = [s for s in sections if s.facts]
     if not answered:
         return engine_narration(sections, reason="no_facts", summary_facts=summary_facts)
     if model.identity is None:
         return engine_narration(sections, reason="disabled", summary_facts=summary_facts)
-    try:
-        reply = await model.complete(
-            ModelRequest(
-                purpose=Purpose.NARRATE,
-                org_id=org_id,
-                run_id=run_id,
-                prompt_id=PROMPT_ID,
-                prompt_version=PROMPT_VERSION,
-                system=SYSTEM_PROMPT,
-                user=user_prompt(
-                    answered, context, summary_facts=summary_facts or (), checks=checks
-                ),
-                response_model=NarrationProposal,
-                response_schema=response_schema,
-                sensitive_values=sensitive_values,
+    writer = _Writer(
+        model,
+        org_id=org_id,
+        run_id=run_id,
+        context=context,
+        sensitive_values=sensitive_values,
+        checks=checks or {},
+        judge=judge,
+        concurrency=concurrency,
+    )
+    slots = {f.id: slotted(f) for s in answered for f in s.facts}
+    parts = await asyncio.gather(
+        *(
+            writer.part(
+                s.analysis_id,
+                {f.id: slots[f.id] for f in s.facts},
+                section_prompt(s.question, [slots[f.id] for f in s.facts], context, checks),
+                templates=s.facts[:ENGINE_SENTENCES_PER_SECTION],
+                limit=MAX_SECTION_SENTENCES,
             )
+            for s in answered
         )
-    except ModelUnavailable as exc:
-        logger.info("narration fell back to the engine", extra={"reason": exc.reason})
-        return engine_narration(sections, reason=exc.reason, summary_facts=summary_facts)
-    assert isinstance(reply.data, NarrationProposal)  # noqa: S101  (the request's model)
-    return verify(
-        reply.data,
-        sections,
-        provider=reply.provider,
-        model=reply.model,
-        summary_facts=summary_facts,
     )
+    by_section = {s.analysis_id: p for s, p in zip(answered, parts, strict=True)}
 
-
-def verify(
-    proposal: NarrationProposal,
-    sections: Sequence[SectionInput],
-    *,
-    provider: str | None = None,
-    model: str | None = None,
-    summary_facts: Sequence[str] | None = None,
-) -> Narration:
-    by_id = {s.analysis_id: s for s in sections}
-    every = {f.id: f for s in sections for f in s.facts}
-    facts = (
-        {k: every[k] for k in summary_facts if k in every} if summary_facts is not None else every
-    )
-    proposed = {p.analysis_id: p for p in proposal.sections if p.analysis_id in by_id}
-    texts: dict[str, tuple[Sentence, ...]] = {}
-    written: dict[str, Literal["model", "engine"]] = {}
-    kept = dropped = 0
-    for section in sections:
-        if not section.facts:
-            continue
-        own = {f.id: f for f in section.facts}
-        candidates = (
-            proposed[section.analysis_id].sentences if section.analysis_id in proposed else []
+    # The summary, last: only highlights the verified answers rest on.
+    verified = {c for p in parts for sentence in p.sentences for c in sentence.citations}
+    order = list(summary_facts) if summary_facts is not None else [s.facts[0].id for s in answered]
+    allowed = [k for k in dict.fromkeys(order) if k in verified and k in slots][:SUMMARY_FACTS]
+    if allowed:
+        summary = await writer.part(
+            SUMMARY,
+            {k: slots[k] for k in allowed},
+            summary_prompt([slots[k] for k in allowed], context, checks),
+            templates=[slots[k].fact for k in allowed[:SUMMARY_SECTIONS]],
+            limit=MAX_SUMMARY_SENTENCES,
         )
-        good = [s for s in (_checked(c, own) for c in candidates) if s is not None]
-        lost = len(candidates) - len(good)
-        if good and lost / len(candidates) <= MAX_DROPPED_SHARE:
-            texts[section.analysis_id] = tuple(good)
-            written[section.analysis_id] = "model"
-            kept += len(good)
-            dropped += lost
-        else:
-            texts[section.analysis_id] = _engine_section(section)
-            written[section.analysis_id] = "engine"
-            dropped += len(candidates)
-    summary = tuple(s for s in (_checked(c, facts) for c in proposal.summary) if s is not None)
-    kept += len(summary)
-    dropped += len(proposal.summary) - len(summary)
-    if not summary:
-        summary = _engine_summary(sections, summary_facts)
-    by_model = sum(1 for w in written.values() if w == "model")
+    else:
+        summary = _Part(_engine_summary(sections, summary_facts), by_model=False)
+
+    every = [*parts, summary]
+    outages = [p.outage for p in every if p.outage is not None]
+    flagged = tuple(name for name, p in [*by_section.items(), (SUMMARY, summary)] if p.flagged)
+    if flagged:
+        logger.warning(
+            "narration prompt flagged: a part failed verification",
+            extra={"prompt_version": PROMPT_VERSION, "parts": len(flagged)},
+        )
+    by_model = [p.by_model for p in every]
     source: Literal["model", "engine", "mixed"] = (
-        "model" if by_model == len(written) else ("engine" if by_model == 0 else "mixed")
+        "model" if all(by_model) else ("engine" if not any(by_model) else "mixed")
     )
+    reason = outages[0] if outages else None
     return Narration(
-        summary=summary,
-        sections=texts,
-        written_by=written,
+        summary=summary.sentences,
+        sections={k: p.sentences for k, p in by_section.items()},
+        written_by={k: "model" if p.by_model else "engine" for k, p in by_section.items()},
         source=source,
-        provider=provider,
-        model=model,
-        kept=kept,
-        dropped=dropped,
+        provider=writer.provider,
+        model=writer.model_name,
+        fallback_reason=reason,
+        kept=sum(p.kept for p in every),
+        dropped=sum(p.dropped for p in every),
+        repaired=sum(p.repaired for p in every),
+        flagged=flagged,
+        simplified=bool(outages),
+        retryable=reason is not None and reason not in FINAL_REASONS,
+        judge="on" if judge else "off",
+        records=tuple(writer.records),
+        prompt_version=PROMPT_VERSION if writer.records else None,
     )
 
 
@@ -226,21 +228,22 @@ def engine_narration(
     summary_facts: Sequence[str] | None = None,
 ) -> Narration:
     """Every answer from the facts' own statements: plainer, and exact by construction."""
-    texts = {s.analysis_id: _engine_section(s) for s in sections if s.facts}
+    texts = {s.analysis_id: _template(s.facts[:ENGINE_SENTENCES_PER_SECTION])
+             for s in sections if s.facts}  # fmt: skip
+    simplified = reason not in {"disabled", "no_facts"}
     return Narration(
         summary=_engine_summary(sections, summary_facts),
         sections=texts,
         written_by=dict.fromkeys(texts, "engine"),
         source="engine",
         fallback_reason=reason,
+        simplified=simplified,
+        retryable=simplified and reason not in FINAL_REASONS,
     )
 
 
-def _engine_section(section: SectionInput) -> tuple[Sentence, ...]:
-    return tuple(
-        Sentence(text=f.statement, citations=(f.id,))
-        for f in section.facts[:ENGINE_SENTENCES_PER_SECTION]
-    )
+def _template(facts: Sequence[Fact]) -> tuple[Sentence, ...]:
+    return tuple(Sentence(text=f.statement, citations=(f.id,), written_by="engine") for f in facts)
 
 
 def _engine_summary(
@@ -251,83 +254,176 @@ def _engine_summary(
         leads = [every[k] for k in summary_facts if k in every][:SUMMARY_SECTIONS]
     else:
         leads = [s.facts[0] for s in sections if s.facts][:SUMMARY_SECTIONS]
-    return tuple(Sentence(text=f.statement, citations=(f.id,)) for f in leads)
+    return _template(leads)
 
 
-# --------------------------------------------------------------------------- checks
+# --------------------------------------------------------------------------- one part
 
 
-def _checked(proposal: SentenceProposal, allowed: Mapping[str, Fact]) -> Sentence | None:
-    text = " ".join(proposal.text.split())
-    citations = tuple(dict.fromkeys(c.strip() for c in proposal.citations if c.strip()))
-    if not text or len(text) > MAX_SENTENCE_CHARS or not citations:
-        return None
-    if any(c not in allowed for c in citations):
-        return None
-    if _BANNED.search(text) or _LINK.search(text):
-        return None
-    cited = [allowed[c] for c in citations]
-    if not numbers_supported(text, cited) or not direction_supported(text, cited):
-        return None
-    if not strength_supported(text, cited):
-        return None
-    return Sentence(text=text, citations=citations)
+@dataclass(frozen=True, slots=True)
+class _Part:
+    sentences: tuple[Sentence, ...]
+    by_model: bool
+    outage: str | None = None  # why the model could not write this part
+    kept: int = 0
+    dropped: int = 0
+    repaired: int = 0
+    flagged: bool = False
 
 
-def strength_supported(text: str, cited: Sequence[Fact]) -> bool:
-    """A sentence that rests only on inconclusive facts must say the result is not reliable:
-    it may not present a difference the analysis could not support."""
-    if cited and all(f.tier == "inconclusive" for f in cited):
-        return bool(_NEGATED.search(text))
-    return True
+@dataclass
+class _Writer:
+    model: LanguageModel
+    org_id: UUID
+    run_id: UUID
+    context: Mapping[str, Any]
+    sensitive_values: frozenset[str]
+    checks: Mapping[str, str]
+    judge: bool
+    concurrency: int
+    records: list[VerificationRecord] = field(default_factory=list)
+    provider: str | None = None
+    model_name: str | None = None
 
+    def __post_init__(self) -> None:
+        self._limit = asyncio.Semaphore(max(1, self.concurrency))
 
-def numbers_supported(text: str, cited: Sequence[Fact]) -> bool:
-    """Every number in ``text`` appears, at the precision written, in a cited fact."""
-    pool = [_parse(m.group(0)) for f in cited for m in _NUMBER.finditer(_fact_text(f))]
-    known = [p for p in pool if p is not None]
-    for match in _NUMBER.finditer(text):
-        token = _parse(match.group(0))
-        if token is None:
-            continue
-        value, percent, decimals = token
-        tolerance = 0.5 * 10 ** (-decimals) + 1e-9
-        if not any(
-            percent == p and abs(value - v) <= max(tolerance, 0.5 * 10 ** (-d) + 1e-9)
-            for v, p, d in known
-        ):
-            return False
-    return True
+    async def part(
+        self,
+        name: str,
+        allowed: Mapping[str, SlottedFact],
+        user: str,
+        *,
+        templates: Sequence[Fact],
+        limit: int,
+    ) -> _Part:
+        try:
+            draft = await self._draft(user)
+        except ModelUnavailable as exc:
+            logger.info("narration part fell back to templates", extra={"reason": exc.reason})
+            return _Part(_template(templates), by_model=False, outage=exc.reason)
+        proposals = draft.sentences[:limit]
+        if not proposals:
+            return _Part(_template(templates), by_model=False, flagged=True)
+        verdicts = [await self._verify(name, i, 1, p, allowed) for i, p in enumerate(proposals)]
+        failed = [i for i, v in enumerate(verdicts) if not v.accepted]
+        repaired, outage = 0, None
+        if failed:
+            try:
+                fixes = (
+                    await self._draft(
+                        repair_prompt(
+                            list(allowed.values()),
+                            self.context,
+                            [(verdicts[i].text, verdicts[i].detail or "") for i in failed],
+                            self.checks,
+                        )
+                    )
+                ).sentences
+            except ModelUnavailable as exc:
+                fixes, outage = [], exc.reason
+            for i, fix in zip(failed, fixes, strict=False):
+                verdict = await self._verify(name, i, 2, fix, allowed)
+                if verdict.accepted:
+                    verdicts[i], repaired = verdict, repaired + 1
+        lost = [i for i in failed if not verdicts[i].accepted]
+        if len(lost) / len(proposals) > MAX_FAILED_SHARE:
+            # Flag the prompt only when the repair was tried; a repair lost to an outage
+            # simplifies the part instead.
+            return _Part(
+                _template(templates),
+                by_model=False,
+                outage=outage,
+                dropped=len(proposals),
+                flagged=outage is None,
+            )
+        sentences: list[Sentence] = []
+        for verdict in verdicts:
+            if verdict.accepted:
+                sentences.append(Sentence(text=verdict.text, citations=verdict.citations,
+                                          written_by="model"))  # fmt: skip
+                continue
+            # The template sentence: the first fact it cited that this part was given.
+            fact = next((allowed[c].fact for c in verdict.citations if c in allowed), None)
+            if fact is not None and all(s.text != fact.statement for s in sentences):
+                sentences.extend(_template([fact]))
+        kept = len(proposals) - len(lost)
+        return _Part(
+            tuple(sentences), by_model=True, kept=kept, dropped=len(lost), repaired=repaired
+        )
 
+    async def _draft(self, user: str) -> DraftProposal:
+        async with self._limit:
+            reply = await self.model.complete(
+                ModelRequest(
+                    purpose=Purpose.NARRATE,
+                    org_id=self.org_id,
+                    run_id=self.run_id,
+                    prompt_id=PROMPT_ID,
+                    prompt_version=PROMPT_VERSION,
+                    system=SYSTEM_PROMPT,
+                    user=user,
+                    response_model=DraftProposal,
+                    response_schema=response_schema(DraftProposal),
+                    sensitive_values=self.sensitive_values,
+                )
+            )
+        self.provider, self.model_name = reply.provider, reply.model
+        assert isinstance(reply.data, DraftProposal)  # noqa: S101  (the request's model)
+        return reply.data
 
-def direction_supported(text: str, cited: Sequence[Fact]) -> bool:
-    """A sentence that says a trend went up (or down) must cite trends that did."""
-    up, down = bool(_UP.search(text)), bool(_DOWN.search(text))
-    if up == down:
-        return True
-    for fact in cited:
-        if fact.kind != "trend":
-            continue
-        first, last = fact.values.get("first"), fact.values.get("last")
-        if not isinstance(first, int | float) or not isinstance(last, int | float):
-            continue
-        if (up and last < first) or (down and last > first):
-            return False
-    return True
+    async def _verify(
+        self,
+        name: str,
+        position: int,
+        attempt: int,
+        proposal: SentenceProposal,
+        allowed: Mapping[str, SlottedFact],
+    ) -> Verdict:
+        verdict = check(proposal.text, proposal.citations, allowed)
+        if verdict.accepted and self.judge:
+            rejected = await self._judged(verdict, allowed)
+            if rejected is not None:
+                raw = " ".join(proposal.text.split())
+                verdict = Verdict(raw, verdict.citations, "judge", rejected)
+        self.records.append(
+            VerificationRecord(
+                part=name,
+                position=position,
+                attempt=attempt,
+                accepted=verdict.accepted,
+                check=verdict.check,
+                detail=verdict.detail,
+                citations=verdict.citations,
+                text=verdict.text,
+            )
+        )
+        return verdict
 
-
-def _fact_text(fact: Fact) -> str:
-    return " ".join([fact.statement, *fact.numbers, *fact.labels])
-
-
-def _parse(token: str) -> tuple[float, bool, int] | None:
-    percent = token.endswith("%")
-    raw = token.rstrip("%").replace(",", "").lstrip("+")
-    raw = raw.replace("$", "").replace("€", "").replace("£", "")
-    try:
-        value = float(raw)
-    except ValueError:
-        return None
-    decimals = len(raw.split(".", 1)[1]) if "." in raw else 0
-    # Signs are compared in words ("fell by 24%"), by ``direction_supported``.
-    return abs(value), percent, decimals
+    async def _judged(self, verdict: Verdict, allowed: Mapping[str, SlottedFact]) -> str | None:
+        """The judge's reason to reject, or ``None``. It can only reject; if it is
+        unavailable, the sentence stands on the verifier's checks (the judge is skipped)."""
+        try:
+            async with self._limit:
+                reply = await self.model.complete(
+                    ModelRequest(
+                        purpose=Purpose.JUDGE,
+                        org_id=self.org_id,
+                        run_id=self.run_id,
+                        prompt_id=JUDGE_PROMPT_ID,
+                        prompt_version=JUDGE_PROMPT_VERSION,
+                        system=JUDGE_SYSTEM_PROMPT,
+                        user=judge_prompt(
+                            verdict.text, [allowed[c].fact for c in verdict.citations]
+                        ),
+                        response_model=JudgeVerdict,
+                        response_schema=response_schema(JudgeVerdict),
+                        sensitive_values=self.sensitive_values,
+                    )
+                )
+        except ModelUnavailable:
+            return None
+        assert isinstance(reply.data, JudgeVerdict)  # noqa: S101  (the request's model)
+        if reply.data.accept:
+            return None
+        return " ".join(reply.data.reason.split())[:200] or "The judge rejected it."

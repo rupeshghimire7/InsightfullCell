@@ -118,14 +118,14 @@ class TestReplay:
         assert response.headers["cache-control"] == "no-store"
         assert response.text.startswith("retry: 3000\n\n")
         messages, _ = parse_stream(response.text)
-        assert [m.id for m in messages] == list(range(1, 28))
+        assert [m.id for m in messages] == list(range(1, 30))
         assert [m.event for m in messages] == [
             "run.queued",
             "run.started",
             *["stage.started", "stage.completed"] * 4,  # ingest, profile, understand, clean_plan
             "phase.completed",
-            # clean_apply, geo, features, mine, sensitivity, rank, report
-            *["stage.started", "stage.completed"] * 7,
+            # clean_apply, geo, features, mine, sensitivity, rank, visualize, report
+            *["stage.started", "stage.completed"] * 8,
             "phase.completed",
             "run.succeeded",
         ]
@@ -155,10 +155,10 @@ class TestReplay:
         run_id = await finished_run(client, auth(alice), executor, alice.org_id, owner_sql)
         response = await client.get(
             f"/v1/runs/{run_id}/events",
-            headers={**bearer(make_ticket(alice, run_id)), "Last-Event-ID": "25"},
+            headers={**bearer(make_ticket(alice, run_id)), "Last-Event-ID": "27"},
         )
         messages, _ = parse_stream(response.text)
-        assert [m.id for m in messages] == [26, 27]
+        assert [m.id for m in messages] == [28, 29]
 
 
 class TestTickets:
@@ -332,8 +332,8 @@ async def test_a_live_stream_receives_events_as_the_worker_writes_them(
         "review.required",
         "review.approved",
         "run.started",
-        # clean_apply, geo, features, mine, sensitivity, rank, report
-        *["stage.started", "stage.completed"] * 7,
+        # clean_apply, geo, features, mine, sensitivity, rank, visualize, report
+        *["stage.started", "stage.completed"] * 8,
         "phase.completed",
         "run.succeeded",
     ]

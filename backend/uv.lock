@@ -1201,7 +1201,7 @@ wheels = [
 
 [[package]]
 name = "insightfulcell-backend"
-version = "0.4.0"
+version = "0.6.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
@@ -1211,6 +1211,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "google-genai" },
     { name = "httpx" },
+    { name = "jinja2" },
     { name = "numpy" },
     { name = "openai" },
     { name = "openpyxl" },
@@ -1252,6 +1253,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "google-genai", specifier = ">=2.29.0" },
     { name = "httpx", specifier = ">=0.28" },
+    { name = "jinja2", specifier = ">=3.1.6" },
     { name = "numpy", specifier = ">=2.2" },
     { name = "openai", specifier = ">=3.27.0" },
     { name = "openpyxl", specifier = ">=3.1" },

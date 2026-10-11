@@ -1,6 +1,6 @@
 [project]
 name = "insightfulcell-backend"
-version = "0.4.0"
+version = "0.6.0"
 description = "InsightfulCell API: identity verification, tenancy, uploads and file ingestion."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -26,6 +26,7 @@ dependencies = [
   "scikit-learn>=1.6",
   "rapidfuzz>=3.12",
   "shapely>=2.0",
+  "jinja2>=3.1.6",
 ]
 
 [dependency-groups]
@@ -160,6 +161,7 @@ source_modules = [
   "insightfulcell.ingestion",
   "insightfulcell.engine",
   "insightfulcell.pipeline",
+  "insightfulcell.exports",
 ]
 forbidden_modules = [
   "insightfulcell.api",

@@ -76,7 +76,12 @@ async def load_dataset_infos(
         for row in (
             await session.execute(
                 select(Run)
-                .where(Run.org_id == principal.org_id, Run.dataset_id.in_(ids))
+                # A dataset's latest analysis is a full one, not an exploration of a subset.
+                .where(
+                    Run.org_id == principal.org_id,
+                    Run.dataset_id.in_(ids),
+                    Run.parent_run_id.is_(None),
+                )
                 .ext(distinct_on(Run.dataset_id))
                 .order_by(Run.dataset_id, Run.created_at.desc(), Run.id.desc())
             )

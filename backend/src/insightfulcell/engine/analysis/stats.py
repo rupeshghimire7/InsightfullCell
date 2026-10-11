@@ -171,7 +171,10 @@ def eta(groups: IntArray, values: FloatArray) -> float:
     sums = np.bincount(groups, weights=values)
     present = counts > 0
     grand = values.mean()
-    ssb = float(np.sum(sums[present] ** 2 / counts[present]) - len(values) * grand * grand)
+    # Deviations from the grand mean, not "sum of squares minus n times the mean squared":
+    # that difference cancels catastrophically for large values with little spread.
+    means = sums[present] / counts[present]
+    ssb = float(np.sum(counts[present] * (means - grand) ** 2))
     sst = float(np.sum((values - grand) ** 2))
     if sst <= 0:
         return 0.0

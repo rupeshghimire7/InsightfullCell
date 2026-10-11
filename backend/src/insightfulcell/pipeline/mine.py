@@ -34,7 +34,7 @@ from insightfulcell.pipeline.stage import SourceFile, StageContext, StageResult
 
 class MineStage:
     name = "mine"
-    version = "1"
+    version = "2"
 
     def fingerprint(self, source: SourceFile) -> Mapping[str, Any]:
         return {"alpha": stats.ALPHA, "reference_set": REFERENCE_SET}
@@ -52,6 +52,15 @@ class MineStage:
             "reference_set": REFERENCE_SET,
             "alpha": stats.ALPHA,
         }
+        subset = ctx.inputs.drilldown
+        if subset is not None:
+            # Facts of a drill-down are exploratory: tested at the same level, on a subset
+            # chosen after seeing the full report.
+            provenance |= {
+                "exploratory": True,
+                "parent_run_id": subset.parent_run_id,
+                "subset": {"column": subset.column, "values": list(subset.values)},
+            }
         out = ctx.workdir / "analysis.parquet"
 
         def compute() -> tuple[Mined, list[Derived], int]:

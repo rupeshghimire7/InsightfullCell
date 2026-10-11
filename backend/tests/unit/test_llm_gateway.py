@@ -136,13 +136,36 @@ class TestGateway:
         assert 1.0 <= slept[0] <= 1.5
         assert 2.0 <= slept[1] <= 3.0
 
-    async def test_an_invalid_answer_is_another_attempt_then_a_fallback(self) -> None:
-        transport = FakeTransport([ok("not json"), ok('{"wrong": 1}'), ok("```json\n{}\n```")])
+    async def test_an_invalid_answer_is_another_attempt_then_a_fallback(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        transport = FakeTransport(
+            [ok("not json"), ok('{"wrong": "secret"}'), ok("```json\n{}\n```")]
+        )
         gw, ledger, _ = gateway(transport)
-        with pytest.raises(ModelUnavailable) as caught:
+        with (
+            caplog.at_level("WARNING", logger="insightfulcell.llm.gateway"),
+            pytest.raises(ModelUnavailable) as caught,
+        ):
             await gw.complete(request())
         assert caught.value.reason == "invalid_output"
         assert [c.outcome for c in ledger.calls] == ["invalid"] * 3
+        # Each unusable answer says why, never what it said.
+        causes = [r.cause for r in caplog.records if r.getMessage() == "model answer unusable"]  # type: ignore[attr-defined]
+        assert causes == ["not_json", "schema", "schema"]
+        assert "secret" not in caplog.text
+
+    async def test_a_truncated_or_empty_answer_is_named(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        truncated = RawReply(text='{"answer": "ye', input_tokens=1, output_tokens=16_000,
+                             request_id="r", truncated=True)  # fmt: skip
+        transport = FakeTransport([truncated, ok(""), ok()])
+        gw, _, _ = gateway(transport)
+        with caplog.at_level("WARNING", logger="insightfulcell.llm.gateway"):
+            await gw.complete(request())
+        causes = [r.cause for r in caplog.records if r.getMessage() == "model answer unusable"]  # type: ignore[attr-defined]
+        assert causes == ["truncated", "empty"]
 
     async def test_a_fenced_answer_is_accepted(self) -> None:
         gw, _, _ = gateway(FakeTransport([ok('```json\n{"answer": "fenced"}\n```')]))

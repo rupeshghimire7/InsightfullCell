@@ -36,13 +36,26 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from functools import partial
-from typing import Any, Final
+from typing import Any, Final, Literal
 
 import duckdb
 import numpy as np
 
 from insightfulcell.engine.analysis import facts as fmt
 from insightfulcell.engine.analysis import stats
+from insightfulcell.engine.analysis.claims import (
+    BinClaim,
+    Claim,
+    CorrelationClaim,
+    EtaClaim,
+    GroupClaim,
+    MissingClaim,
+    OutlierClaim,
+    PeriodClaim,
+    PointClaim,
+    ShareClaim,
+    Value,
+)
 from insightfulcell.engine.analysis.facts import (
     MIN_ROWS,
     STRONG_Q,
@@ -116,14 +129,25 @@ class Column:
     unit: str | None
     kind: str  # numeric, categorical, datetime, text
     read: str = ""  # the column holding its groups (a standardised region), if not itself
+    derived: bool = False  # added by the analysis (a feature, a region from coordinates)
 
     @property
     def sql(self) -> str:
         return ident(self.name)
 
     @property
+    def groups(self) -> str:
+        """The analysis-table column holding its groups."""
+        return self.read or self.name
+
+    @property
     def groups_sql(self) -> str:
-        return ident(self.read or self.name)
+        return ident(self.groups)
+
+    @property
+    def drill(self) -> str | None:
+        """The plan column a drill-down filters on (none for derived columns)."""
+        return None if self.derived else self.name
 
 
 @dataclass(slots=True)
@@ -407,6 +431,7 @@ def _columns(
             meaning=d.meaning,
             unit=d.unit,
             kind=_kind(con, d.name, d.meaning),
+            derived=True,
         )
     return out
 
@@ -603,7 +628,16 @@ def _bar(  # noqa: PLR0913, PLR0917  (chart fields)
     unit: str | None = None,
     *,
     note: str | None = None,
+    claims: Sequence[Claim] | None = None,
+    keys: Sequence[str | None] | None = None,
+    drill: str | None = None,
 ) -> ChartData:
+    """A bar chart; ``claims`` (one per point) say what each bar measures, ``keys`` which group
+    each bar is, for a drill-down on ``drill``."""
+    claimed = list(claims) if claims is not None else [None] * len(points)
+    keyed = list(keys) if keys is not None and drill else [None] * len(points)
+    if len(claimed) != len(points) or len(keyed) != len(points):
+        raise ValueError("one claim and one key per bar")
     return ChartData(
         kind="bar",
         title=title,
@@ -611,9 +645,25 @@ def _bar(  # noqa: PLR0913, PLR0917  (chart fields)
         y_label=y_label,
         value_format=value_format,
         unit=unit,
-        points=tuple(ChartPoint(label=label, value=value, n=n) for label, value, n in points),
+        points=tuple(
+            ChartPoint(label=label, value=value, n=n, claim=claim, key=key)
+            for (label, value, n), claim, key in zip(points, claimed, keyed, strict=True)
+        ),
         note=note,
+        drill_column=drill if any(k is not None for k in keyed) else None,
     )
+
+
+def _group_claim(
+    group: Column, value: Value, label: str, measure: Literal["mean", "gap"] = "mean"
+) -> GroupClaim:
+    return GroupClaim(
+        group=group.groups, value=value, key=None if label == OTHER else label, measure=measure
+    )
+
+
+def _group_key(label: str) -> str | None:
+    return None if label == OTHER else label
 
 
 def _value_format(col: Column) -> str:
@@ -701,7 +751,10 @@ def _histogram(con: duckdb.DuckDBPyConnection, col: Column, title: str) -> Chart
     for i in range(HISTOGRAM_BINS):
         start, end = lo + i * width, lo + (i + 1) * width
         label = f"{_value(col, start)} to {_value(col, end)}"
-        points.append(ChartPoint(label=label, value=float(counts.get(i, 0)), x=start, x2=end))
+        claim = BinClaim(column=col.name, low=lo, width=width, index=i, bins=HISTOGRAM_BINS)
+        points.append(
+            ChartPoint(label=label, value=float(counts.get(i, 0)), x=start, x2=end, claim=claim)
+        )
     return ChartData(
         kind="histogram",
         title=title,
@@ -739,7 +792,10 @@ def _date_distribution(ctx: _Ctx, col: Column) -> None:
             values={"first": first, "last": last, "peak_rows": busiest[1]},
         )
     )
-    ctx.chart(_line(series, grain, f"Rows per {grain}", col.label, "Rows", "count", None))
+    ctx.chart(
+        _line(series, grain, f"Rows per {grain}", col.label, "Rows", "count", None,
+              claim=lambda p: PeriodClaim(column=col.name, grain=grain, start=_iso(p)))
+    )  # fmt: skip
 
 
 def _category_distribution(ctx: _Ctx, col: Column) -> None:
@@ -770,9 +826,16 @@ def _category_distribution(ctx: _Ctx, col: Column) -> None:
     )
     rest = total - sum(n for _, n in shown)
     points = [(label, n / total, n) for label, n in shown]
+    claims: list[Claim] = [ShareClaim(column=col.groups, key=label) for label, _ in shown]
+    keys: list[str | None] = [label for label, _ in shown]
     if rest >= MIN_ROWS:
         points.append((OTHER, rest / total, rest))
-    ctx.chart(_bar(f"Share of rows by {col.label}", col.label, "Share of rows", points, "percent"))
+        claims.append(
+            ShareClaim(column=col.groups, key=None, exclude=tuple(label for label, _ in shown))
+        )
+        keys.append(None)
+    ctx.chart(_bar(f"Share of rows by {col.label}", col.label, "Share of rows", points, "percent",
+                   claims=claims, keys=keys, drill=col.drill))  # fmt: skip
 
 
 # --------------------------------------------------------------------------- relationships
@@ -830,7 +893,8 @@ def _numeric_pair(ctx: _Ctx, a: Column, b: Column) -> None:
     )
     points = ctx.con.execute(
         f"SELECT x, y FROM (SELECT {_num(a)} AS x, {_num(b)} AS y FROM {ident(TABLE)}) "
-        f"WHERE x IS NOT NULL AND y IS NOT NULL ORDER BY hash(x, y), x, y LIMIT {SCATTER_POINTS}"
+        "WHERE x IS NOT NULL AND y IS NOT NULL AND isfinite(x) AND isfinite(y) "
+        f"ORDER BY hash(x, y), x, y LIMIT {SCATTER_POINTS}"
     ).fetchall()
     ctx.chart(
         ChartData(
@@ -841,7 +905,12 @@ def _numeric_pair(ctx: _Ctx, a: Column, b: Column) -> None:
             value_format=_value_format(b),
             unit=b.unit,
             points=tuple(
-                ChartPoint(label=f"{_value(a, px)}, {_value(b, py)}", value=float(py), x=float(px))
+                ChartPoint(
+                    label=f"{_value(a, px)}, {_value(b, py)}",
+                    value=float(py),
+                    x=float(px),
+                    claim=PointClaim(x=a.name, y=b.name),
+                )
                 for px, py in sorted(points)
             ),
             note=f"A sample of {SCATTER_POINTS} rows." if len(x) > SCATTER_POINTS else None,
@@ -894,8 +963,13 @@ def _category_pair(ctx: _Ctx, a: Column, b: Column) -> None:
         key=lambda t: (-t[1], t[0]),
     )[:TOP_GROUPS]
     if len(points) >= 2:
+        claims = [
+            ShareClaim(column=b.groups, key=common, given=a.groups, given_key=x, n="base")
+            for x, _, _ in points
+        ]
         ctx.chart(_bar(f"Share with {b.label} {common}, by {a.label}", a.label,
-                       f"Share {common}", points, "percent"))  # fmt: skip
+                       f"Share {common}", points, "percent", claims=claims,
+                       keys=[x for x, _, _ in points], drill=a.drill))  # fmt: skip
 
 
 # --------------------------------------------------------------------------- trends
@@ -918,7 +992,7 @@ def _trend_of(ctx: _Ctx, when: Column, num: Column) -> None:
     if first is None or last is None:
         raise _Skip(f"No row has both {when.label} and {num.label}.")
     grain = _grain(first, last)
-    series = _period_series(ctx.con, w, f"avg({v})", grain, where=f"{v} IS NOT NULL")
+    series = _period_series(ctx.con, w, f"avg({v})", grain, where=f"isfinite({v})")
     if len(series) < MIN_PERIODS:
         raise _Skip(f"{when.label} covers too few {grain}s to show a trend.")
     rows = sum(n for _, _, n in series)
@@ -970,8 +1044,11 @@ def _trend_of(ctx: _Ctx, when: Column, num: Column) -> None:
             unreliable=unreliable,
         )
     )
+    value = Value(column=num.name)
     ctx.chart(_line(series, grain, f"Average {num.label} per {grain}", when.label,
-                    f"Average {num.label}", _value_format(num), num.unit))  # fmt: skip
+                    f"Average {num.label}", _value_format(num), num.unit,
+                    claim=lambda p: PeriodClaim(column=when.name, grain=grain, start=_iso(p),
+                                                value=value)))  # fmt: skip
 
 
 def _grain(first: Any, last: Any) -> str:
@@ -1007,7 +1084,7 @@ def _period_label(value: Any, grain: str) -> str:
 
 def _line(  # noqa: PLR0913, PLR0917
     series: Sequence[tuple[Any, float, int]], grain: str, title: str, x_label: str,
-    y_label: str, value_format: str, unit: str | None,
+    y_label: str, value_format: str, unit: str | None, *, claim: Callable[[Any], Claim],
 ) -> ChartData:  # fmt: skip
     return ChartData(
         kind="line",
@@ -1016,8 +1093,16 @@ def _line(  # noqa: PLR0913, PLR0917
         y_label=y_label,
         value_format=value_format,
         unit=unit,
-        points=tuple(ChartPoint(label=_period_label(p, grain), value=m, n=n) for p, m, n in series),
+        points=tuple(
+            ChartPoint(label=_period_label(p, grain), value=m, n=n, claim=claim(p))
+            for p, m, n in series
+        ),
     )
+
+
+def _iso(value: Any) -> str:
+    """A period's start as ISO text (what the claim compares against)."""
+    return value.isoformat() if isinstance(value, datetime | date) else str(value)
 
 
 # --------------------------------------------------------------------------- groups
@@ -1080,9 +1165,14 @@ def _segment_numeric(ctx: _Ctx, group: Column, num: Column) -> None:
             ),
         )
     )  # fmt: skip
-    shown = [(_level(group, label), m, n) for label, n, m in g.shown()]
+    groups = g.shown()
+    shown = [(_level(group, label), m, n) for label, n, m in groups]
+    value = Value(column=num.name)
     ctx.chart(_bar(f"Average {num.label} by {group.label}", group.label, f"Average {num.label}",
-                   shown, _value_format(num), num.unit))  # fmt: skip
+                   shown, _value_format(num), num.unit,
+                   claims=[_group_claim(group, value, label) for label, _, _ in groups],
+                   keys=[_group_key(label) for label, _, _ in groups],
+                   drill=group.drill))  # fmt: skip
 
 
 def _segment_category(ctx: _Ctx, group: Column, cat: Column) -> None:
@@ -1124,9 +1214,13 @@ def _segment_category(ctx: _Ctx, group: Column, cat: Column) -> None:
             ),
         )
     )
-    shown = [(_level(group, label), n, m) for label, n, m in g.shown()]
+    groups = g.shown()
+    value = Value(column=cat.groups, positive=positive)
     ctx.chart(_bar(f"Share with {what}, by {group.label}", group.label, f"Share {what}",
-                   [(label, m, n) for label, n, m in shown], "percent"))  # fmt: skip
+                   [(_level(group, label), m, n) for label, n, m in groups], "percent",
+                   claims=[_group_claim(group, value, label) for label, _, _ in groups],
+                   keys=[_group_key(label) for label, _, _ in groups],
+                   drill=group.drill))  # fmt: skip
 
 
 def _benchmark(ctx: _Ctx, cols: list[Column]) -> None:
@@ -1140,6 +1234,7 @@ def _benchmark(ctx: _Ctx, cols: list[Column]) -> None:
         raise _Skip(f"Fewer than two {group.label} groups have at least ten rows.")
     test = _difference_test(ctx, "groups", (group.name, num.name), g)
     gaps = [(_level(group, label), (m - g.grand) / abs(g.grand), n) for label, n, m in g.real]
+    raw = [label for label, _, _ in g.real]  # the group each gap is, as the data writes it
     above = max(gaps, key=lambda t: (t[1], t[0]))
     below = min(gaps, key=lambda t: (t[1], t[0]))
     overall, up, down = _value(num, g.grand), fmt.signed_share(above[1]), fmt.signed_share(below[1])
@@ -1165,12 +1260,15 @@ def _benchmark(ctx: _Ctx, cols: list[Column]) -> None:
             ),
         )
     )
-    ordered = sorted(gaps, key=lambda t: (-t[1], t[0]))
-    if len(ordered) > TOP_GROUPS:
+    order = sorted(range(len(gaps)), key=lambda i: (-gaps[i][1], gaps[i][0]))
+    if len(order) > TOP_GROUPS:
         half = TOP_GROUPS // 2
-        ordered = ordered[:half] + ordered[-half:]
+        order = order[:half] + order[-half:]
+    value = Value(column=num.name)
     ctx.chart(_bar(f"{num.label} against the overall average, by {group.label}", group.label,
-                   "Difference from average", ordered, "signed_percent"))  # fmt: skip
+                   "Difference from average", [gaps[i] for i in order], "signed_percent",
+                   claims=[_group_claim(group, value, raw[i], "gap") for i in order],
+                   keys=[raw[i] for i in order], drill=group.drill))  # fmt: skip
 
 
 # --------------------------------------------------------------------------- unusual values
@@ -1178,6 +1276,7 @@ def _benchmark(ctx: _Ctx, cols: list[Column]) -> None:
 
 def _anomaly(ctx: _Ctx, cols: list[Column]) -> None:
     counted: list[tuple[str, float, int]] = []
+    fenced: list[Claim] = []
     for col in cols:
         if col.kind != "numeric":
             continue
@@ -1220,13 +1319,15 @@ def _anomaly(ctx: _Ctx, cols: list[Column]) -> None:
             )
         )
         counted.append((col.label, float(outside), int(n)))
+        fenced.append(OutlierClaim(column=col.name))
     if not counted:
         raise _Skip("None of these columns has enough numeric values.")
     if len(counted) == 1:
         ctx.chart(_histogram(ctx.con, next(c for c in cols if c.kind == "numeric"),
                              f"Distribution of {counted[0][0]}"))  # fmt: skip
     else:
-        ctx.chart(_bar("Rows with unusual values", "Column", "Rows", counted, "count"))
+        ctx.chart(_bar("Rows with unusual values", "Column", "Rows", counted, "count",
+                       claims=fenced))  # fmt: skip
 
 
 # --------------------------------------------------------------------------- drivers
@@ -1309,8 +1410,22 @@ def _driver(ctx: _Ctx, cols: list[Column]) -> None:
         )
     strongest = [(c.label, t.size, t.n) for c, t in scored[:10]]
     note = "Before the false-discovery check; the text names only the reliable ones."
+    goal_positive = levels[0] if levels else None
+    claims = [_candidate_claim(c, goal, goal_positive) for c, _ in scored[:10]]
     ctx.chart(_bar(f"How strongly each column is associated with {what}", "Column",
-                   "Strength (0 to 1)", strongest, "strength", note=note))  # fmt: skip
+                   "Strength (0 to 1)", strongest, "strength", note=note,
+                   claims=claims))  # fmt: skip
+
+
+def _candidate_claim(cand: Column, goal: Column, positive: str | None) -> Claim:
+    """What ``_candidate_test`` measured, as a claim on the size of the association."""
+    if cand.kind == "numeric" and positive is None:
+        return CorrelationClaim(x=cand.name, y=goal.name, absolute=True)
+    if cand.kind == "numeric":
+        return EtaClaim(group=goal.groups, value=Value(column=cand.name))
+    if positive is not None:
+        return EtaClaim(group=cand.groups, value=Value(column=goal.groups, positive=positive))
+    return EtaClaim(group=cand.groups, value=Value(column=goal.name))
 
 
 def _absolute(test: TestResult) -> TestResult:
@@ -1527,9 +1642,11 @@ def _missing(ctx: _Ctx, cols: list[Column]) -> None:
     if other.kind == "numeric":
         y, label = _num(other), f"average {other.label}"
         show = write = partial(_value, other)
+        measured = Value(column=other.name)
     elif levels is not None:
         y, label = _indicator(other, levels[0]), f"share with {other.label} {levels[0]}"
         show, write = fmt.share, fmt.signed_share
+        measured = Value(column=other.groups, positive=levels[0])
     else:
         return
     data = ctx.con.execute(
@@ -1576,12 +1693,17 @@ def _missing(ctx: _Ctx, cols: list[Column]) -> None:
             unreliable=(f"{head}; the difference is not reliable.", (without, with_v)),
         )
     )
+    grouped = col.kind == "categorical"
+    where = col.groups if grouped else col.name
     ctx.chart(_bar(f"{label[:1].upper()}{label[1:]} with and without {col.label}", col.label,
                    label[:1].upper() + label[1:],
                    [(f"{col.label} missing", float(absent.mean()), len(absent)),
                     (f"{col.label} present", float(kept.mean()), len(kept))],
                    "percent" if levels else _value_format(other),
-                   None if levels else other.unit))  # fmt: skip
+                   None if levels else other.unit,
+                   claims=[MissingClaim(column=where, group=grouped, value=measured, missing=True),
+                           MissingClaim(column=where, group=grouped, value=measured,
+                                        missing=False)]))  # fmt: skip
 
 
 # --------------------------------------------------------------------------- within groups
@@ -1647,9 +1769,12 @@ def _conditional(ctx: _Ctx, cols: list[Column]) -> None:
             ),
         )
     )  # fmt: skip
+    ordered = sorted(within, key=lambda t: (-t[1], t[0]))
     ctx.chart(_bar(f"Link between {a.label} and {b.label}, within each {group.label}",
-                   group.label, "Rank correlation",
-                   sorted(within, key=lambda t: (-t[1], t[0])), "strength"))  # fmt: skip
+                   group.label, "Rank correlation", ordered, "strength",
+                   claims=[CorrelationClaim(x=a.name, y=b.name, group=group.groups, key=g)
+                           for g, _, _ in ordered],
+                   keys=[g for g, _, _ in ordered], drill=group.drill))  # fmt: skip
 
 
 _Miner = Callable[[_Ctx, list[Column]], None]

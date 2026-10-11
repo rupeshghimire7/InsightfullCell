@@ -15,12 +15,14 @@ from uuid import UUID
 from sqlalchemy import func, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from insightfulcell.db.models import Dataset, DatasetVersion, Run, RunStage
+from insightfulcell.db.models import Dataset, DatasetVersion, Run, RunReport, RunStage
 from insightfulcell.db.tenant import TenantDatabase
 from insightfulcell.domain.errors import (
     DatasetNotFound,
     DatasetVersionNotFound,
     DatasetVersionPurged,
+    NarrationNotRetryable,
+    ReportOutdated,
     RunChanged,
 )
 from insightfulcell.domain.ids import new_uuid7
@@ -41,6 +43,8 @@ from insightfulcell.services.datasets import MAX_PAGE_SIZE, decode_cursor, encod
 from insightfulcell.services.dto import RunAccepted, RunDetail, RunEventBatch, RunPage
 
 logger = logging.getLogger(__name__)
+
+REPORT_STAGE = "report"
 
 _IDEMPOTENCY_PATH = "/v1/runs"
 
@@ -179,6 +183,7 @@ class RunService:
         principal: Principal,
         *,
         dataset_id: UUID | None = None,
+        parent_run_id: UUID | None = None,
         limit: int = 25,
         cursor: str | None = None,
     ) -> RunPage:
@@ -192,6 +197,8 @@ class RunService:
         )
         if dataset_id is not None:
             stmt = stmt.where(Run.dataset_id == dataset_id)
+        if parent_run_id is not None:
+            stmt = stmt.where(Run.parent_run_id == parent_run_id)
         if cursor is not None:
             after_ts, after_id = decode_cursor(cursor)
             stmt = stmt.where(tuple_(Run.created_at, Run.id) < tuple_(after_ts, after_id))
@@ -278,6 +285,71 @@ class RunService:
             await _reset_unfinished_stages(session, principal.org_id, run_id)
             await run_store.append_event(
                 session, org_id=principal.org_id, run_id=run_id, type_=EventType.RUN_RETRIED
+            )
+            detail = await run_store.run_detail(session, principal.org_id, run_id)
+        await self._defer(
+            PhaseJob(run_id, principal.org_id, Phase(detail.run.phase), Queue(detail.run.queue))
+        )
+        return detail
+
+    async def renarrate(
+        self, principal: Principal, run_id: UUID, *, if_match: int | None = None
+    ) -> RunDetail:
+        """Write a finished run's report again after its narration was simplified because the
+        model was unavailable. Every other stage keeps its checkpoint; the report stage runs
+        again and saves a new revision of the report."""
+        require(principal, Action.RUN_CREATE)
+        async with self._db.transaction(principal) as session:
+            run = await run_store.require_run(session, principal.org_id, run_id, lock=True)
+            _check_if_match(run, if_match)
+            require_status(RunStatus(run.status), {RunStatus.SUCCEEDED}, "narrated again")
+            if run.code_version != self._pipeline.code_version:
+                # Its stages and checkpoints belong to another version of the pipeline: the
+                # worker would refuse the run (and fail a finished analysis).
+                raise ReportOutdated(
+                    "This report was written by an earlier version of InsightfulCell, so it "
+                    "cannot be narrated again.",
+                    hint="Start a new analysis of the dataset to get a fresh report.",
+                )
+            document = (
+                await session.execute(
+                    select(RunReport.document)
+                    .where(RunReport.run_id == run_id, RunReport.org_id == principal.org_id)
+                    .order_by(RunReport.revision.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            narration = (document or {}).get("narration") or {}
+            if not narration.get("retryable"):
+                raise NarrationNotRetryable(
+                    "This report was not simplified by a model outage.",
+                    hint="Only a report written while the language model was unavailable can "
+                    "be narrated again.",
+                )
+            await run_store.transition(
+                session,
+                org_id=principal.org_id,
+                run_id=run_id,
+                target=RunStatus.QUEUED,
+                sources={RunStatus.SUCCEEDED},
+                values={"finished_at": None, "stage": None, "attempts": 0, "crash_count": 0},
+            )
+            await session.execute(
+                update(RunStage)
+                .where(
+                    RunStage.run_id == run_id,
+                    RunStage.org_id == principal.org_id,
+                    RunStage.name == REPORT_STAGE,
+                )
+                .values(status=StageStatus.PENDING.value, started_at=None, finished_at=None)
+            )
+            await run_store.append_event(
+                session,
+                org_id=principal.org_id,
+                run_id=run_id,
+                type_=EventType.RUN_RETRIED,
+                stage=REPORT_STAGE,
+                data={"reason": "renarrate"},
             )
             detail = await run_store.run_detail(session, principal.org_id, run_id)
         await self._defer(

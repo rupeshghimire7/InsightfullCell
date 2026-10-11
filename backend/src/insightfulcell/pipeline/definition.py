@@ -6,12 +6,16 @@ A run executes as two jobs split at the review gate.
   gate, where a person checks the plan and the cleaning, may ask for changes (Phase A then
   runs again, reusing what did not change), and approves.
 - Phase B: ``clean_apply`` -> ``geo`` -> ``features`` -> ``mine`` -> ``sensitivity`` ->
-  ``rank`` -> ``report``: the approved cleaning applied, places resolved to regions, features
-  kept only if they pass the signal gate, every question answered with tested facts under the
-  run's false-discovery control (facts and test log stored), the top findings re-tested on
-  minimally cleaned data, the findings ranked, and the report written with citations. The
-  baseline's narrate, verify, visualize and assemble are inside ``report`` until Phases 5
-  and 6 split them out.
+  ``rank`` -> ``visualize`` -> ``report``: the approved cleaning applied (and a drill-down's
+  subset kept), places resolved to regions, features kept only if they pass the signal gate,
+  every question answered with tested facts under the run's false-discovery control (facts and
+  test log stored), the top findings re-tested on minimally cleaned data, the findings ranked,
+  every chart and map checked value by value against the data, and the report narrated (each
+  question separately, every sentence verified against its facts) and assembled with
+  citations, together with the dashboard.
+
+A drill-down is a run that starts at Phase B with its parent's Phase A checkpoints, approved
+plan and cleaning (``services.drilldowns``).
 """
 
 from __future__ import annotations
@@ -35,6 +39,7 @@ from insightfulcell.pipeline.report import ReportStage
 from insightfulcell.pipeline.sensitivity import SensitivityStage
 from insightfulcell.pipeline.stage import Stage
 from insightfulcell.pipeline.understand import UnderstandStage
+from insightfulcell.pipeline.visualize import VisualizeStage
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +82,8 @@ def default_pipeline(
     *,
     card_token_budget: int = 9_000,
     model_identity: tuple[str, str] | None = None,
+    judge: bool = False,
+    narration_concurrency: int = 4,
 ) -> Pipeline:
     return Pipeline(
         phase_a=(
@@ -92,6 +99,11 @@ def default_pipeline(
             MineStage(),
             SensitivityStage(),
             RankStage(),
-            ReportStage(model_identity=model_identity),
+            VisualizeStage(),
+            ReportStage(
+                model_identity=model_identity,
+                judge=judge,
+                concurrency=narration_concurrency,
+            ),
         ),
     )

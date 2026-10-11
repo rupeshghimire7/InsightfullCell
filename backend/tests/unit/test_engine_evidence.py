@@ -6,9 +6,7 @@ from __future__ import annotations
 
 import gzip
 import hashlib
-import math
 import random
-import re
 from importlib import resources
 from pathlib import Path
 
@@ -21,9 +19,7 @@ from insightfulcell.engine.analysis import sensitivity, signal, stats
 from insightfulcell.engine.analysis import table as analysis_table
 from insightfulcell.engine.analysis.facts import Fact, FactTest, Tier
 from insightfulcell.engine.analysis.miners import Finding, LoggedTest, Mined, mine
-from insightfulcell.engine.analysis.narrate import strength_supported, verify
 from insightfulcell.engine.analysis.places import place_findings
-from insightfulcell.engine.analysis.prompt import SectionInput
 from insightfulcell.engine.geo import reference
 from insightfulcell.engine.geo.resolve import (
     au_postcode_state,
@@ -545,58 +541,3 @@ def test_ranking_puts_evidence_first_marks_duplicates_and_picks_highlights() -> 
     demoted = {r.fact_id: r for r in ranking.rank(facts, plan, flipped)}
     assert demoted["F2"].stability == 0.4
     assert demoted["F2"].score < next(r for r in ranked if r.fact_id == "F2").score
-
-
-# --------------------------------------------------------------------------- wording
-
-
-def test_a_sentence_on_inconclusive_facts_must_say_it_is_not_reliable() -> None:
-    unsure = _fact("F1", tier="inconclusive", q=0.6)
-    assert not strength_supported("A and B rise together.", [unsure])
-    assert strength_supported("There is no reliable link between A and B.", [unsure])
-    assert strength_supported("A and B do not differ reliably.", [unsure])
-    assert strength_supported("A and B rise together.", [_fact("F2")])
-
-
-def test_a_sentence_may_not_send_the_reader_anywhere() -> None:
-    from insightfulcell.engine.analysis.narrate import NarrationProposal  # noqa: PLC0415
-
-    fact = _fact("F1")
-    sections = [SectionInput("a:F1", "?", (fact,))]
-    texts = ["Visit https://evil.example for more.", "See www.evil.example now.",
-             "Write to help@evil.example today.", "A and B rise together."]  # fmt: skip
-    proposal = NarrationProposal.model_validate(
-        {
-            "summary": [],
-            "sections": [
-                {"analysis_id": "a:F1", "sentences": [{"text": t, "citations": ["F1"]}]}
-                for t in texts[:1]
-            ],
-        }
-    )
-    narration = verify(proposal, sections)
-    assert narration.written_by["a:F1"] == "engine"  # the only sentence was dropped
-    from insightfulcell.engine.analysis.narrate import SentenceProposal, _checked  # noqa: PLC0415
-
-    kept = [_checked(SentenceProposal(text=t, citations=["F1"]), {"F1": fact}) for t in texts]
-    assert [k is not None for k in kept] == [False, False, False, True]
-
-
-def test_the_summary_may_cite_only_the_ranked_candidates() -> None:
-    from insightfulcell.engine.analysis.narrate import NarrationProposal  # noqa: PLC0415
-
-    good, weak = _fact("F1"), _fact("F2", tier="inconclusive", q=0.7)
-    sections = [SectionInput("a:F1", "?", (good,)), SectionInput("a:F2", "?", (weak,))]
-    proposal = NarrationProposal.model_validate(
-        {
-            "summary": [
-                {"text": "statement F1 holds.", "citations": ["F1"]},
-                {"text": "There is no reliable link here.", "citations": ["F2"]},
-            ],
-            "sections": [],
-        }
-    )
-    narration = verify(proposal, sections, summary_facts=["F1"])
-    assert [s.citations for s in narration.summary] == [("F1",)]
-    assert math.isclose(narration.kept, 1)
-    assert re.search("F2", str(narration.summary)) is None

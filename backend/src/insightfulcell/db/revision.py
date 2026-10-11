@@ -4,4 +4,4 @@ Bump together with every new migration; ``tests/unit/test_migrations_head.py`` f
 drift, so a forgotten bump is caught in CI rather than in production.
 """
 
-EXPECTED_SCHEMA_REVISION = "0007"
+EXPECTED_SCHEMA_REVISION = "0009"

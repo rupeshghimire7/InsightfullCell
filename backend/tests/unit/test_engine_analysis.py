@@ -1,22 +1,14 @@
-"""Phase B's engine: the miners' facts, number formatting, the narration verifier and its
-fallbacks, the report, and the engine's reading of a person's requests."""
+"""Phase B's engine: the miners' facts, number formatting, the report, and the engine's
+reading of a person's requests."""
 
 from __future__ import annotations
 
 from datetime import date
-from uuid import uuid4
 
 import pytest
 
 from insightfulcell.engine.analysis import facts as fmt
-from insightfulcell.engine.analysis.facts import Fact
 from insightfulcell.engine.analysis.miners import mine
-from insightfulcell.engine.analysis.narrate import (
-    NarrationProposal,
-    narrate,
-    numbers_supported,
-    verify,
-)
 from insightfulcell.engine.analysis.prompt import SectionInput
 from insightfulcell.engine.analysis.report import Preparation, build
 from insightfulcell.engine.planning import requests as person_requests
@@ -29,8 +21,6 @@ from insightfulcell.engine.planning.language import (
     Role,
     Source,
 )
-from insightfulcell.engine.planning.schema import response_schema
-from insightfulcell.engine.ports import ModelReply, ModelRequest, ModelUnavailable, NoModel
 from insightfulcell.engine.types import Meaning
 from tests.unit.engine_support import analyse, by_name, table
 
@@ -75,20 +65,6 @@ def plan_with(
         relevance={},
         cleaning=(),
         provenance=Provenance(source="rules", schema_fingerprint="0" * 64),
-    )
-
-
-def fact(fid: str, statement: str, numbers: tuple[str, ...], **values: object) -> Fact:
-    return Fact(
-        id=fid,
-        analysis_id="a",
-        kind=str(values.pop("kind", "correlation")),
-        columns=("x",),
-        rows=40,
-        method="m",
-        statement=statement,
-        numbers=numbers,
-        values=dict(values),
     )
 
 
@@ -215,143 +191,6 @@ def test_strength_words_follow_fixed_thresholds() -> None:
         "moderate",
         "strong",
     ]
-
-
-# --------------------------------------------------------------------------- narration
-
-
-SECTIONS = [
-    SectionInput(
-        analysis_id="relationship:x,y",
-        question="Is X related to Y?",
-        facts=(fact("F1", "X and Y rise together (rank correlation 0.42).", ("0.42",)),),
-    ),
-    SectionInput(
-        analysis_id="trend:d,y",
-        question="How does Y change?",
-        facts=(
-            fact(
-                "F2",
-                "Average Y went from 10 in Jan 2025 to 8 in Jun 2025 (-20%).",
-                ("10", "8", "-20%"),
-                kind="trend",
-                first=10.0,
-                last=8.0,
-            ),
-        ),
-    ),
-]
-
-
-def proposal(sections: dict[str, list[dict[str, object]]]) -> NarrationProposal:
-    return NarrationProposal.model_validate(
-        {
-            "summary": [{"text": "Y fell by 20% over the period.", "citations": ["F2"]}],
-            "sections": [{"analysis_id": k, "sentences": v} for k, v in sections.items()],
-        }
-    )
-
-
-def test_numbers_must_appear_in_the_cited_facts() -> None:
-    cited = [SECTIONS[0].facts[0]]
-    assert numbers_supported("The link is moderate, at 0.42.", cited)
-    assert not numbers_supported("The link is moderate, at 0.47.", cited)
-    assert not numbers_supported("About 42% move together.", cited)  # 42% is not 0.42
-
-
-def test_the_verifier_keeps_supported_sentences_and_drops_the_rest() -> None:
-    narration = verify(
-        proposal(
-            {
-                "relationship:x,y": [
-                    {"text": "X and Y tend to rise together (0.42).", "citations": ["F1"]},
-                    {"text": "Higher X causes higher Y.", "citations": ["F1"]},  # causal
-                ],
-                "trend:d,y": [
-                    {"text": "Y went from 10 to 8 between January and June.", "citations": ["F2"]},
-                    {"text": "Y grew steadily.", "citations": ["F2"]},  # wrong direction
-                    {"text": "The link is 0.42.", "citations": ["F1"]},  # another question's
-                ],
-            }
-        ),
-        SECTIONS,
-        provider="gemini",
-        model="m",
-    )
-    # x,y lost one of two sentences (more than a third): the engine wrote it instead.
-    assert narration.written_by == {"relationship:x,y": "engine", "trend:d,y": "engine"}
-    assert narration.sections["relationship:x,y"][0].text == SECTIONS[0].facts[0].statement
-    assert narration.source == "engine"
-    assert [s.text for s in narration.summary] == ["Y fell by 20% over the period."]
-    assert narration.dropped == 5
-
-
-def test_a_clean_model_answer_is_kept_with_its_citations() -> None:
-    narration = verify(
-        proposal(
-            {
-                "relationship:x,y": [
-                    {
-                        "text": "X and Y tend to rise together, moderately (0.42).",
-                        "citations": ["F1"],
-                    }
-                ],
-                "trend:d,y": [{"text": "Y fell from 10 to 8, a 20% drop.", "citations": ["F2"]}],
-            }
-        ),
-        SECTIONS,
-    )
-    assert narration.source == "model"
-    assert narration.sections["trend:d,y"][0].citations == ("F2",)
-    assert (narration.kept, narration.dropped) == (3, 0)
-
-
-class _Narrator:
-    def __init__(self, reply: NarrationProposal | None) -> None:
-        self.reply = reply
-        self.requests: list[ModelRequest] = []
-
-    @property
-    def identity(self) -> tuple[str, str] | None:
-        return ("anthropic", "claude-sonnet-5")
-
-    async def complete(self, request: ModelRequest) -> ModelReply:
-        self.requests.append(request)
-        if self.reply is None:
-            raise ModelUnavailable("timeout")
-        return ModelReply(
-            data=self.reply,
-            provider="anthropic",
-            model="claude-sonnet-5",
-            input_tokens=1,
-            output_tokens=1,
-            attempts=1,
-        )
-
-
-async def call(model: object) -> object:
-    return await narrate(
-        model,  # type: ignore[arg-type]
-        org_id=uuid4(),
-        run_id=uuid4(),
-        sections=SECTIONS,
-        context={"table": "test"},
-        response_schema=response_schema(NarrationProposal),
-        sensitive_values=frozenset({"secret@example.com"}),
-    )
-
-
-async def test_without_a_model_or_when_it_fails_the_engine_writes_every_answer() -> None:
-    off = await call(NoModel())
-    failing = _Narrator(None)
-    failed = await call(failing)
-    for narration in (off, failed):
-        assert narration.source == "engine"  # type: ignore[attr-defined]
-    assert (off.fallback_reason, failed.fallback_reason) == ("disabled", "timeout")  # type: ignore[attr-defined]
-    (request,) = failing.requests
-    assert "F2" in request.user
-    assert "Average Y went from 10" in request.user
-    assert request.sensitive_values == frozenset({"secret@example.com"})
 
 
 # --------------------------------------------------------------------------- report

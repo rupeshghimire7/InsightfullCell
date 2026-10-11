@@ -107,7 +107,8 @@ TRANSITIONS: Final[dict[RunStatus, frozenset[RunStatus]]] = {
         {RunStatus.QUEUED, RunStatus.CANCELLED, RunStatus.EXPIRED}
     ),
     RunStatus.FAILED: frozenset({RunStatus.QUEUED}),
-    RunStatus.SUCCEEDED: frozenset(),
+    # Only to write the report again after the model was out (``report:renarrate``).
+    RunStatus.SUCCEEDED: frozenset({RunStatus.QUEUED}),
     RunStatus.CANCELLED: frozenset(),
     RunStatus.EXPIRED: frozenset(),
 }

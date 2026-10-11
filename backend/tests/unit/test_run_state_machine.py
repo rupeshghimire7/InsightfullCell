@@ -29,6 +29,7 @@ ALLOWED = {
     (S.AWAITING_REVIEW, S.CANCELLED),
     (S.AWAITING_REVIEW, S.EXPIRED),
     (S.FAILED, S.QUEUED),
+    (S.SUCCEEDED, S.QUEUED),  # report:renarrate, after a model outage only
 }
 
 
@@ -44,8 +45,9 @@ def test_every_status_has_an_entry() -> None:
 
 def test_terminal_statuses_go_nowhere() -> None:
     assert {S.SUCCEEDED, S.FAILED, S.CANCELLED, S.EXPIRED} == TERMINAL_STATUSES
-    for status in TERMINAL_STATUSES - {S.FAILED}:
+    for status in TERMINAL_STATUSES - {S.FAILED, S.SUCCEEDED}:
         assert TRANSITIONS[status] == frozenset()
+    assert TRANSITIONS[S.SUCCEEDED] == {S.QUEUED}  # only to narrate the report again
     assert all(status.terminal for status in TERMINAL_STATUSES)
     assert not S.RUNNING.terminal
 
@@ -56,7 +58,7 @@ def test_active_and_cancellable() -> None:
     assert not S.AWAITING_REVIEW.active
     assert {S.QUEUED, S.RUNNING, S.AWAITING_REVIEW} == CANCELLABLE
     assert sources_for(S.CANCELLED) == CANCELLABLE
-    assert sources_for(S.QUEUED) == {S.AWAITING_REVIEW, S.FAILED}
+    assert sources_for(S.QUEUED) == {S.AWAITING_REVIEW, S.FAILED, S.SUCCEEDED}
 
 
 def test_refusals_explain_in_words() -> None:

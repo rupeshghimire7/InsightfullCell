@@ -97,6 +97,15 @@ class StageInfo:
 
 
 @dataclass(frozen=True, slots=True)
+class Drilldown:
+    """The subset a drill-down analyses: one column and the groups kept."""
+
+    parent_run_id: UUID
+    column: str
+    values: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class RunSummary:
     id: UUID
     dataset_id: UUID
@@ -115,6 +124,7 @@ class RunSummary:
     started_at: datetime | None
     finished_at: datetime | None
     review_requested_at: datetime | None
+    drilldown: Drilldown | None = None
 
 
 @dataclass(frozen=True, slots=True)

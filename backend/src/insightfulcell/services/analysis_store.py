@@ -24,6 +24,7 @@ from insightfulcell.db.models import (
     RunFact,
     RunReport,
     TestLog,
+    VerificationResult,
 )
 from insightfulcell.db.tenant import TenantDatabase
 from insightfulcell.domain.ids import new_uuid7
@@ -300,8 +301,32 @@ class RunAnalysisStore:
                     provider=record.provider,
                     model=record.model,
                     prompt_version=record.prompt_version,
+                    dashboard=dict(record.dashboard) if record.dashboard is not None else None,
                 )
             )
+            if record.verification:
+                await session.execute(
+                    insert(VerificationResult).values(
+                        [
+                            {
+                                "id": new_uuid7(),
+                                "org_id": self._org_id,
+                                "run_id": self._run_id,
+                                "report_revision": revision,
+                                "part": v.part[:4000],
+                                "position": v.position,
+                                "attempt": v.attempt,
+                                "accepted": v.accepted,
+                                "check": v.check,
+                                "detail": (v.detail or "")[:500] or None,
+                                "citations": list(v.citations),
+                                "sentence": v.text[:2000],
+                                "prompt_version": record.prompt_version or "unknown",
+                            }
+                            for v in record.verification
+                        ]
+                    )
+                )
 
 
 class FactsChanged(RuntimeError):

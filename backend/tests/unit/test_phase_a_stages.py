@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,7 +16,7 @@ from typing import Any
 from uuid import uuid4
 
 from insightfulcell.domain.runs import Phase
-from insightfulcell.engine.analysis.narrate import NarrationProposal
+from insightfulcell.engine.analysis.narrate import DraftProposal
 from insightfulcell.engine.planning.language import ProposedPlan
 from insightfulcell.engine.ports import (
     CachedPlan,
@@ -189,8 +190,8 @@ class FakeModel:
     fail: bool = False
     requests: list[ModelRequest] = field(default_factory=list)
     plan: Mapping[str, Any] = field(default_factory=lambda: MODEL_PLAN)
-    #: What the narrator answers; ``None``: narration is unavailable (the engine writes).
-    narration: Mapping[str, Any] | None = None
+    #: Narrate by repeating the first fact's statement with its slots; off: unavailable.
+    narration: bool = False
 
     @property
     def identity(self) -> tuple[str, str] | None:
@@ -201,9 +202,13 @@ class FakeModel:
         if self.fail:
             raise ModelUnavailable("timeout")
         if request.purpose is Purpose.NARRATE:
-            if self.narration is None:
+            if not self.narration:
                 raise ModelUnavailable("provider_error")
-            data: Any = NarrationProposal.model_validate(self.narration)
+            facts = json.loads(request.user.split("<facts>\n", 1)[1].split("\n</facts>", 1)[0])
+            first = facts[0]
+            data: Any = DraftProposal.model_validate(
+                {"sentences": [{"text": first["statement"], "citations": [first["id"]]}]}
+            )
         else:
             data = ProposedPlan.model_validate(self.plan)
         return ModelReply(
@@ -455,3 +460,32 @@ async def test_phase_b_answers_every_question_with_cited_facts(tmp_path: Path) -
     assert all(set(s["citations"]) <= fact_ids for s in document["summary"])
     assert all(f["content_hash"] for f in recorder.facts)
     assert "p1@example.com" not in str(document)  # personal data never reaches the report
+
+
+async def test_phase_b_narrates_each_question_and_keeps_every_verdict(tmp_path: Path) -> None:
+    model, recorder = FakeModel(narration=True), Recorder()
+    results = await run_phase_a(tmp_path, model, recorder, phases=(Phase.A, Phase.B))
+    (report,) = recorder.reports
+    narration = report.document["narration"]
+    # Each statement, sent back with its slots, passes the verifier and is filled in again.
+    rejected = [(v.check, v.detail, v.text) for v in report.verification if not v.accepted]
+    assert not rejected, rejected
+    # Every answer is the model's. The summary is too when a ranked highlight is cited in an
+    # answer; otherwise it is written from the highlights' own statements.
+    cited = {c for s in report.document["sections"] for x in s["answer"] for c in x["citations"]}
+    by_model = bool(cited & set(report.document["highlights"]))
+    assert all(s["written_by"] == "model" for s in report.document["sections"] if s["answer"])
+    assert report.narration_source == narration["source"] == ("model" if by_model else "mixed")
+    assert narration["prompt_version"] == report.prompt_version == "narrate-v3"
+    assert not narration["simplified"]
+    assert narration["sentences_dropped"] == 0
+    statements = {f["id"]: f["statement"] for f in recorder.facts}
+    for section in report.document["sections"]:
+        for sentence in section["answer"]:
+            assert sentence["written_by"] == "model"
+            assert sentence["text"] == statements[sentence["citations"][0]]
+    narrated = [r for r in model.requests if r.purpose is Purpose.NARRATE]
+    answered = [s for s in report.document["sections"] if not s["skipped"]]
+    assert len(narrated) == len(answered) + by_model  # one call per question, the summary last
+    assert len(report.verification) == results["report"].output["sentences_kept"]
+    assert all(v.accepted and v.attempt == 1 for v in report.verification)

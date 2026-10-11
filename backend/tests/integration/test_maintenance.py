@@ -282,6 +282,7 @@ async def test_maintenance_functions_return_ids_only_and_are_not_public(
         ("ensure_llm_call_partitions", False, True),
         ("ensure_run_event_partitions", False, True),
         ("ensure_test_log_partitions", False, True),
+        ("ensure_verification_partitions", False, True),
         ("purge_idempotency_keys", False, True),
         ("reviews_due", False, True),
         ("runs_without_live_job", False, True),

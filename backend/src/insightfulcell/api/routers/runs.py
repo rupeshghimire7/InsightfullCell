@@ -16,7 +16,7 @@ from typing import Annotated, Any, Final
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, Response, status
-from fastapi.responses import PlainTextResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from insightfulcell.api.container import Services
@@ -29,7 +29,9 @@ from insightfulcell.api.problems import (
 from insightfulcell.api.schemas import (
     CleaningOperationOut,
     CleaningPlanOut,
+    CreateDrilldownRequest,
     CreateRunRequest,
+    DashboardOut,
     DecideCleaningRequest,
     PlanColumnOut,
     PlanOut,
@@ -44,8 +46,11 @@ from insightfulcell.api.schemas import (
 from insightfulcell.auth.tokens import EventTicket
 from insightfulcell.domain.errors import DomainError, RunChanged, RunNotFound, Unauthenticated
 from insightfulcell.domain.runs import RunStatus
+from insightfulcell.engine.analysis import vegalite
+from insightfulcell.engine.analysis.facts import ChartData
 from insightfulcell.engine.cleaning.operations import CATALOGUE
 from insightfulcell.engine.planning.language import CleaningKind
+from insightfulcell.exports.html import CONTENT_SECURITY_POLICY
 from insightfulcell.services.datasets import MAX_PAGE_SIZE
 from insightfulcell.services.dto import RunDetail, RunEventInfo
 from insightfulcell.services.plans import ColumnEdit, PlanDecision, PlanView
@@ -132,15 +137,18 @@ async def create_run(
 
 
 @router.get("", response_model=RunPageOut, summary="List runs, newest first")
-async def list_runs(
+async def list_runs(  # noqa: PLR0913, PLR0917  (FastAPI dependencies)
     principal: CurrentPrincipal,
     services: ServicesDep,
     dataset_id: Annotated[UUID | None, Query(description="Only runs of this dataset.")] = None,
+    parent_run_id: Annotated[
+        UUID | None, Query(description="Only drill-downs (explorations) of this run.")
+    ] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = 25,
     cursor: Annotated[str | None, Query(max_length=512)] = None,
 ) -> RunPageOut:
     page = await services.runs.list_runs(
-        principal, dataset_id=dataset_id, limit=limit, cursor=cursor
+        principal, dataset_id=dataset_id, parent_run_id=parent_run_id, limit=limit, cursor=cursor
     )
     return RunPageOut.model_validate(page)
 
@@ -187,6 +195,29 @@ async def retry_run(
     if_match: IfMatch = None,
 ) -> RunOut:
     detail = await services.runs.retry_run(principal, run_id, if_match=parse_if_match(if_match))
+    response.headers["ETag"] = etag(detail.run.row_version)
+    return to_run_out(detail)
+
+
+@router.post(
+    "/{run_id}/report:renarrate",
+    response_model=RunOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Write a simplified report's words again, after a model outage",
+    responses={409: problem_response(), 412: problem_response()},
+)
+async def renarrate_report(
+    run_id: UUID,
+    principal: CurrentPrincipal,
+    services: ServicesDep,
+    response: Response,
+    if_match: IfMatch = None,
+) -> RunOut:
+    """Only for a finished run whose report says ``narration.retryable`` (it was written from
+    templates because the model was unavailable). The facts, tests and charts are reused; only
+    the words are written again, as a new revision of the report. ``409``
+    ``narration-not-retryable`` otherwise."""
+    detail = await services.runs.renarrate(principal, run_id, if_match=parse_if_match(if_match))
     response.headers["ETag"] = etag(detail.run.row_version)
     return to_run_out(detail)
 
@@ -338,14 +369,53 @@ async def revise_plan(  # noqa: PLR0913, PLR0917  (FastAPI dependencies)
     return to_run_out(detail)
 
 
+def _with_spec(chart: Any) -> Any:
+    """A stored chart plus its Vega-Lite spec, built when read (not stored twice)."""
+    if not isinstance(chart, dict):
+        return chart
+    return {**chart, "vega_lite": vegalite.spec(ChartData.model_validate(chart))}
+
+
 def to_report_out(view: ReportView) -> ReportOut:
+    document = dict(view.document)
+    document["sections"] = [
+        {**section, "chart": _with_spec(section.get("chart"))}
+        for section in document.get("sections", [])
+    ]
     return ReportOut.model_validate(
         {
-            **view.document,
+            **document,
             "run": to_run_out(view.run),
             "revision": view.revision,
             "created_at": view.created_at,
             "facts": view.facts,
+            "has_dashboard": view.dashboard is not None,
+        }
+    )
+
+
+def to_dashboard_out(view: ReportView) -> DashboardOut:
+    board = dict(view.dashboard or {})
+    for part in ("insights", "gallery"):
+        board[part] = [{**i, "chart": _with_spec(i.get("chart"))} for i in board.get(part, [])]
+    cited = {
+        fid
+        for part in ("insights", "maps", "gallery")
+        for item in board.get(part, [])
+        for fid in item.get("facts", [])
+    }
+    cited |= {t["fact_id"] for t in board.get("tiles", [])}
+    cited |= {c for q in board.get("questions", []) for s in q.get("answer", []) for c in s.get(
+        "citations", [])}  # fmt: skip
+    return DashboardOut.model_validate(
+        {
+            **board,
+            "run": to_run_out(view.run),
+            "revision": view.revision,
+            "created_at": view.created_at,
+            "scope": view.document.get("scope"),
+            "narration": view.document.get("narration"),
+            "facts": [f for f in view.facts if f["id"] in cited],
         }
     )
 
@@ -361,6 +431,77 @@ async def get_report(run_id: UUID, principal: CurrentPrincipal, services: Servic
     sentence lists the ids of the facts it rests on; ``facts`` holds each fact's statement,
     columns, the rows it rests on and how it was computed."""
     return to_report_out(await services.reports.get_report(principal, run_id))
+
+
+@router.get(
+    "/{run_id}/dashboard",
+    response_model=DashboardOut,
+    summary="The finished run's dashboard: tiles, top charts, maps, suggested questions",
+    responses={409: problem_response()},
+)
+async def get_dashboard(
+    run_id: UUID, principal: CurrentPrincipal, services: ServicesDep
+) -> DashboardOut:
+    """Assembled with the report from the same facts (409 ``report-not-ready`` before the run
+    finishes; 409 ``dashboard-not-available`` for a report written before dashboards)."""
+    return to_dashboard_out(await services.reports.get_dashboard(principal, run_id))
+
+
+@router.get(
+    "/{run_id}/report.html",
+    response_class=HTMLResponse,
+    summary="Download the report as one self-contained HTML file (print it to save a PDF)",
+    responses={
+        200: {"content": {"text/html": {}}, "description": "The report, with no scripts."},
+        409: problem_response(),
+    },
+)
+async def export_report(
+    run_id: UUID, principal: CurrentPrincipal, services: ServicesDep
+) -> Response:
+    """The report, its dashboard tiles, charts and maps as SVG, and every fact with its test and
+    content hash. Nothing in the file loads or runs anything."""
+    filename, html = await services.reports.export_html(principal, run_id)
+    return HTMLResponse(
+        html,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Security-Policy": CONTENT_SECURITY_POLICY,
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.post(
+    "/{run_id}/drilldowns",
+    response_model=RunOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Explore a subset of a finished analysis (an exploratory sub-run)",
+    responses={409: problem_response()},
+)
+async def create_drilldown(  # noqa: PLR0913, PLR0917  (FastAPI dependencies)
+    run_id: UUID,
+    body: CreateDrilldownRequest,
+    idempotency_key: IdempotencyKey,
+    principal: CurrentPrincipal,
+    services: ServicesDep,
+    response: Response,
+) -> RunOut:
+    """Keeps only the rows whose ``column`` is one of ``values`` (a chart's ``drill_column``
+    and its points' ``key``) and analyses them again with the run's approved plan and
+    cleaning; no review, no planning. The new run's facts are labelled exploratory. ``409``
+    when the run has not finished, is itself a drill-down, or was made by an earlier version;
+    ``422`` when the column cannot be explored."""
+    accepted = await services.drilldowns.create(
+        principal,
+        run_id,
+        column=body.column,
+        values=body.values,
+        idempotency_key=idempotency_key,
+    )
+    response.headers["Location"] = f"/v1/runs/{accepted.detail.run.id}"
+    response.headers["ETag"] = etag(accepted.detail.run.row_version)
+    return to_run_out(accepted.detail)
 
 
 @router.get(

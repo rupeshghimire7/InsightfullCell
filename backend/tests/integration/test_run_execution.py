@@ -141,7 +141,16 @@ class TestRealIngest:
         ]
         phase_b = [
             (kind, stage)
-            for stage in ("clean_apply", "geo", "features", "mine", "sensitivity", "rank", "report")
+            for stage in (
+                "clean_apply",
+                "geo",
+                "features",
+                "mine",
+                "sensitivity",
+                "rank",
+                "visualize",
+                "report",
+            )
             for kind in ("stage.started", "stage.completed")
         ]
         assert events(owner_sql, run_id) == [

@@ -16,6 +16,7 @@ EXPECTED: dict[Action, set[Role]] = {
     Action.RUN_READ: {Role.OWNER, Role.ADMIN, Role.ANALYST, Role.VIEWER},
     Action.RUN_CANCEL: {Role.OWNER, Role.ADMIN, Role.ANALYST},
     Action.CLEANING_DECIDE: {Role.OWNER, Role.ADMIN, Role.ANALYST},
+    Action.DRILLDOWN_CREATE: {Role.OWNER, Role.ADMIN, Role.ANALYST},
 }
 
 

@@ -208,6 +208,53 @@ class ReportNotReady(DomainError):
     title = "The report is not ready yet"
 
 
+class NarrationNotRetryable(DomainError):
+    """The report's narration was not simplified by a model outage, so writing it again would
+    change nothing."""
+
+    kind = ErrorKind.CONFLICT
+    code = "narration-not-retryable"
+    title = "This report cannot be narrated again"
+
+
+class ReportOutdated(DomainError):
+    """The run was made by an earlier version of the analysis, so a step that re-runs part of
+    it (narrating again, exploring a subset) cannot reuse its results."""
+
+    kind = ErrorKind.CONFLICT
+    code = "report-outdated"
+    title = "This report was made by an earlier version of the analysis"
+
+
+class DashboardNotAvailable(DomainError):
+    """The report exists, but was written before dashboards were assembled."""
+
+    kind = ErrorKind.CONFLICT
+    code = "dashboard-not-available"
+    title = "This report has no dashboard"
+
+
+class DrilldownNotAllowed(DomainError):
+    """Exploring a subset needs a finished full analysis."""
+
+    kind = ErrorKind.CONFLICT
+    code = "drilldown-not-allowed"
+    title = "This analysis cannot be explored further"
+
+
+class InvalidDrilldown(DomainError):
+    code = "invalid-drilldown"
+    title = "This subset cannot be explored"
+
+
+class SubsetTooSmall(DomainError):
+    """Raised by the worker when a drill-down's filter leaves too few rows; safe to show."""
+
+    kind = ErrorKind.UNPROCESSABLE
+    code = "subset-too-small"
+    title = "Too few rows to explore"
+
+
 class CleaningPlanChanged(DomainError):
     """The decision names a cleaning plan revision that is no longer the latest."""
 

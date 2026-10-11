@@ -123,7 +123,10 @@ def build_worker(
     queue = ProcrastinateQueue(app)
     model = model or build_gateway(settings, db)
     pipeline = pipeline or default_pipeline(
-        card_token_budget=settings.schema_card_token_budget, model_identity=model.identity
+        card_token_budget=settings.schema_card_token_budget,
+        model_identity=model.identity,
+        judge=settings.llm_judge,
+        narration_concurrency=settings.llm_narration_concurrency,
     )
     executor = RunExecutor(db, store, queue, pipeline, settings, model=model)
     maintenance = Maintenance(db, store, queue, executor, settings)

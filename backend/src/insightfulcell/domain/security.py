@@ -29,6 +29,7 @@ class Action(StrEnum):
     RUN_READ = "run:read"
     RUN_CANCEL = "run:cancel"
     CLEANING_DECIDE = "cleaning:decide"
+    DRILLDOWN_CREATE = "drilldown:create"
 
 
 _ALL: Final = frozenset(Role)
@@ -44,6 +45,8 @@ POLICY: Final[dict[Action, frozenset[Role]]] = {
     Action.RUN_CANCEL: _WRITERS,
     # Approving cleaning changes is analyst work; viewers read plans but never decide them.
     Action.CLEANING_DECIDE: _WRITERS,
+    # Exploring a subset starts a new (exploratory) run: analyst work.
+    Action.DRILLDOWN_CREATE: _WRITERS,
 }
 
 

@@ -140,6 +140,7 @@ class Run(Base):
         TIMESTAMP(timezone=True), default=None
     )
     inputs: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
+    parent_run_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), default=None)
 
 
 class RunStage(Base):
@@ -356,6 +357,29 @@ class TestLog(Base):
     )
 
 
+class VerificationResult(Base):
+    """The verifier's verdict on one proposed sentence (append-only, partitioned by month)."""
+
+    __tablename__ = "verification_results"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    org_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True))
+    run_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True))
+    report_revision: Mapped[int] = mapped_column(Integer)
+    part: Mapped[str] = mapped_column(Text)
+    position: Mapped[int] = mapped_column(SmallInteger)
+    attempt: Mapped[int] = mapped_column(SmallInteger)
+    accepted: Mapped[bool] = mapped_column(Boolean)
+    check: Mapped[str | None] = mapped_column(Text, default=None)
+    detail: Mapped[str | None] = mapped_column(Text, default=None)
+    citations: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    sentence: Mapped[str] = mapped_column(Text)
+    prompt_version: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=_NOW, primary_key=True
+    )
+
+
 class RunReport(Base):
     __tablename__ = "run_reports"
 
@@ -368,4 +392,5 @@ class RunReport(Base):
     provider: Mapped[str | None] = mapped_column(Text, default=None)
     model: Mapped[str | None] = mapped_column(Text, default=None)
     prompt_version: Mapped[str | None] = mapped_column(Text, default=None)
+    dashboard: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=_NOW)

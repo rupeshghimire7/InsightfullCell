@@ -47,6 +47,25 @@
         "title": "AnalysisItemOut",
         "type": "object"
       },
+      "ChartCheckOut": {
+        "properties": {
+          "claims": {
+            "description": "Values recomputed from the data, one query each.",
+            "title": "Claims",
+            "type": "integer"
+          },
+          "verified": {
+            "title": "Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "claims",
+          "verified"
+        ],
+        "title": "ChartCheckOut",
+        "type": "object"
+      },
       "ChartItemOut": {
         "properties": {
           "aggregate": {
@@ -123,6 +142,29 @@
       },
       "ChartOut": {
         "properties": {
+          "check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChartCheckOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The visualize stage's check (absent on older reports)."
+          },
+          "drill_column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The column a point's key belongs to, if explorable.",
+            "title": "Drill Column"
+          },
           "kind": {
             "enum": [
               "bar",
@@ -177,6 +219,19 @@
             "title": "Value Format",
             "type": "string"
           },
+          "vega_lite": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The chart as a Vega-Lite spec, values inline.",
+            "title": "Vega Lite"
+          },
           "x_label": {
             "title": "X Label",
             "type": "string"
@@ -201,6 +256,18 @@
       },
       "ChartPointOut": {
         "properties": {
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The group this point is, as the data writes it, when it can be explored on its own (POST /v1/runs/{id}/drilldowns with the chart's drill_column).",
+            "title": "Key"
+          },
           "label": {
             "title": "Label",
             "type": "string"
@@ -626,6 +693,36 @@
         "title": "CompletedPartIn",
         "type": "object"
       },
+      "CreateDrilldownRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "column": {
+            "description": "The chart's drill_column.",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Column",
+            "type": "string"
+          },
+          "values": {
+            "description": "Point keys (or map region keys) to keep.",
+            "items": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "column",
+          "values"
+        ],
+        "title": "CreateDrilldownRequest",
+        "type": "object"
+      },
       "CreateRunRequest": {
         "additionalProperties": false,
         "properties": {
@@ -691,6 +788,112 @@
           "size_bytes"
         ],
         "title": "CreateUploadRequest",
+        "type": "object"
+      },
+      "DashboardOut": {
+        "description": "A finished run's dashboard: headline tiles, top charts, maps, a gallery and suggested\nquestions answered with the report's verified sentences. Every number cites a fact.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dataset_name": {
+            "title": "Dataset Name",
+            "type": "string"
+          },
+          "exploratory": {
+            "title": "Exploratory",
+            "type": "boolean"
+          },
+          "facts": {
+            "description": "The facts the dashboard cites.",
+            "items": {
+              "$ref": "#/components/schemas/FactOut"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
+          "gallery": {
+            "items": {
+              "$ref": "#/components/schemas/InsightOut"
+            },
+            "title": "Gallery",
+            "type": "array"
+          },
+          "glance": {
+            "$ref": "#/components/schemas/GlanceOut"
+          },
+          "insights": {
+            "items": {
+              "$ref": "#/components/schemas/InsightOut"
+            },
+            "title": "Insights",
+            "type": "array"
+          },
+          "maps": {
+            "items": {
+              "$ref": "#/components/schemas/InsightOut"
+            },
+            "title": "Maps",
+            "type": "array"
+          },
+          "narration": {
+            "$ref": "#/components/schemas/NarrationOut"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/SuggestedQuestionOut"
+            },
+            "title": "Questions",
+            "type": "array"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "run": {
+            "$ref": "#/components/schemas/RunOut"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScopeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tiles": {
+            "items": {
+              "$ref": "#/components/schemas/TileOut"
+            },
+            "title": "Tiles",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run",
+          "revision",
+          "created_at",
+          "title",
+          "dataset_name",
+          "glance",
+          "tiles",
+          "insights",
+          "maps",
+          "gallery",
+          "questions",
+          "exploratory",
+          "narration",
+          "facts"
+        ],
+        "title": "DashboardOut",
         "type": "object"
       },
       "DatasetDetailOut": {
@@ -924,6 +1127,34 @@
         "title": "DictionaryEntryOut",
         "type": "object"
       },
+      "DrilldownOut": {
+        "description": "The subset a drill-down analyses, chosen from its parent's report.",
+        "properties": {
+          "column": {
+            "title": "Column",
+            "type": "string"
+          },
+          "parent_run_id": {
+            "format": "uuid",
+            "title": "Parent Run Id",
+            "type": "string"
+          },
+          "values": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "parent_run_id",
+          "column",
+          "values"
+        ],
+        "title": "DrilldownOut",
+        "type": "object"
+      },
       "EventType": {
         "description": "What the browser is told. Payloads never carry cell values.",
         "enum": [
@@ -1059,6 +1290,12 @@
             "description": "SHA-256 of the fact's content, fixed when stored.",
             "title": "Content Hash",
             "type": "string"
+          },
+          "exploratory": {
+            "default": false,
+            "description": "Computed in a drill-down: a lead to check, not a conclusion.",
+            "title": "Exploratory",
+            "type": "boolean"
           },
           "id": {
             "title": "Id",
@@ -1315,6 +1552,95 @@
         "title": "FieldError",
         "type": "object"
       },
+      "GlanceOut": {
+        "properties": {
+          "charts_verified": {
+            "title": "Charts Verified",
+            "type": "integer"
+          },
+          "charts_withheld": {
+            "title": "Charts Withheld",
+            "type": "integer"
+          },
+          "columns": {
+            "title": "Columns",
+            "type": "integer"
+          },
+          "reliable": {
+            "title": "Reliable",
+            "type": "integer"
+          },
+          "rows": {
+            "title": "Rows",
+            "type": "integer"
+          },
+          "tests": {
+            "title": "Tests",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rows",
+          "columns",
+          "tests",
+          "reliable",
+          "charts_verified",
+          "charts_withheld"
+        ],
+        "title": "GlanceOut",
+        "type": "object"
+      },
+      "InsightOut": {
+        "properties": {
+          "analysis_id": {
+            "title": "Analysis Id",
+            "type": "string"
+          },
+          "chart": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChartOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "facts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
+          "kind_label": {
+            "title": "Kind Label",
+            "type": "string"
+          },
+          "map": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MapOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "analysis_id",
+          "question",
+          "kind_label",
+          "facts"
+        ],
+        "title": "InsightOut",
+        "type": "object"
+      },
       "LatestRunOut": {
         "description": "The most recent analysis of a dataset, for lists.",
         "properties": {
@@ -1365,6 +1691,205 @@
         "title": "LatestRunOut",
         "type": "object"
       },
+      "MapOut": {
+        "properties": {
+          "check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChartCheckOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "drill_column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drill Column"
+          },
+          "height": {
+            "title": "Height",
+            "type": "number"
+          },
+          "level": {
+            "enum": [
+              "country",
+              "state"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "place_label": {
+            "default": "",
+            "description": "The place column's display name.",
+            "title": "Place Label",
+            "type": "string"
+          },
+          "reference_set": {
+            "title": "Reference Set",
+            "type": "string"
+          },
+          "regions": {
+            "items": {
+              "$ref": "#/components/schemas/MapRegionOut"
+            },
+            "title": "Regions",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "value_format": {
+            "enum": [
+              "number",
+              "percent",
+              "count",
+              "strength",
+              "signed_percent"
+            ],
+            "title": "Value Format",
+            "type": "string"
+          },
+          "value_label": {
+            "title": "Value Label",
+            "type": "string"
+          },
+          "width": {
+            "title": "Width",
+            "type": "number"
+          }
+        },
+        "required": [
+          "title",
+          "value_label",
+          "value_format",
+          "unit",
+          "level",
+          "country",
+          "width",
+          "height",
+          "regions",
+          "note",
+          "drill_column",
+          "reference_set",
+          "check"
+        ],
+        "title": "MapOut",
+        "type": "object"
+      },
+      "MapRegionOut": {
+        "properties": {
+          "code": {
+            "description": "ISO 3166 code.",
+            "title": "Code",
+            "type": "string"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "description": "SVG path data in the map's view box (fill-rule evenodd).",
+            "title": "Path",
+            "type": "string"
+          },
+          "status": {
+            "description": "few_rows: fewer than ten rows, drawn hatched and without a number.",
+            "enum": [
+              "value",
+              "few_rows",
+              "no_rows"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "path",
+          "status",
+          "value",
+          "n",
+          "key"
+        ],
+        "title": "MapRegionOut",
+        "type": "object"
+      },
       "MeOut": {
         "properties": {
           "org_id": {
@@ -1413,6 +1938,23 @@
             ],
             "title": "Fallback Reason"
           },
+          "flagged": {
+            "description": "Parts written from templates because too many sentences failed the checks.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Flagged",
+            "type": "array"
+          },
+          "judge": {
+            "default": "off",
+            "enum": [
+              "off",
+              "on"
+            ],
+            "title": "Judge",
+            "type": "string"
+          },
           "model": {
             "anyOf": [
               {
@@ -1423,6 +1965,17 @@
               }
             ],
             "title": "Model"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Version"
           },
           "provider": {
             "anyOf": [
@@ -1435,6 +1988,20 @@
             ],
             "title": "Provider"
           },
+          "rejected": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Rejected sentences per check: form, citation, stray_number, direction, strength, causal, condition, judge.",
+            "title": "Rejected",
+            "type": "object"
+          },
+          "retryable": {
+            "default": false,
+            "description": "Narrating again (report:renarrate) may succeed.",
+            "title": "Retryable",
+            "type": "boolean"
+          },
           "sentences_dropped": {
             "title": "Sentences Dropped",
             "type": "integer"
@@ -1442,6 +2009,17 @@
           "sentences_kept": {
             "title": "Sentences Kept",
             "type": "integer"
+          },
+          "sentences_repaired": {
+            "default": 0,
+            "title": "Sentences Repaired",
+            "type": "integer"
+          },
+          "simplified": {
+            "default": false,
+            "description": "The model was unavailable for some part, so it was written from the facts' own statements.",
+            "title": "Simplified",
+            "type": "boolean"
           },
           "source": {
             "enum": [
@@ -2057,6 +2635,12 @@
             "title": "Features",
             "type": "array"
           },
+          "has_dashboard": {
+            "default": false,
+            "description": "GET /dashboard is available.",
+            "title": "Has Dashboard",
+            "type": "boolean"
+          },
           "highlights": {
             "description": "Fact ids of the best findings, best first.",
             "items": {
@@ -2096,6 +2680,17 @@
           "run": {
             "$ref": "#/components/schemas/RunOut"
           },
+          "scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScopeOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set for a drill-down: the subset, findings exploratory."
+          },
           "sections": {
             "items": {
               "$ref": "#/components/schemas/ReportSectionOut"
@@ -2116,6 +2711,16 @@
           },
           "understanding": {
             "$ref": "#/components/schemas/UnderstandingOut"
+          },
+          "visuals": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VisualsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -2160,6 +2765,12 @@
               }
             ]
           },
+          "chart_withheld": {
+            "default": false,
+            "description": "A chart was drawn but one of its values did not match.",
+            "title": "Chart Withheld",
+            "type": "boolean"
+          },
           "columns": {
             "items": {
               "$ref": "#/components/schemas/ColumnRefOut"
@@ -2181,6 +2792,13 @@
           "kind_label": {
             "title": "Kind Label",
             "type": "string"
+          },
+          "maps": {
+            "items": {
+              "$ref": "#/components/schemas/MapOut"
+            },
+            "title": "Maps",
+            "type": "array"
           },
           "question": {
             "title": "Question",
@@ -2474,6 +3092,17 @@
             "title": "Dataset Version Id",
             "type": "string"
           },
+          "drilldown": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DrilldownOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set for an exploratory run of a subset of another run."
+          },
           "events_url": {
             "description": "Server-Sent Events stream of this run's progress.",
             "title": "Events Url",
@@ -2663,6 +3292,17 @@
             "title": "Dataset Version Id",
             "type": "string"
           },
+          "drilldown": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DrilldownOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set for an exploratory run of a subset of another run."
+          },
           "failure": {
             "anyOf": [
               {
@@ -2773,6 +3413,43 @@
         "title": "RunSummaryOut",
         "type": "object"
       },
+      "ScopeOut": {
+        "description": "The subset a drill-down analysed.",
+        "properties": {
+          "column": {
+            "title": "Column",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "parent_run_id": {
+            "title": "Parent Run Id",
+            "type": "string"
+          },
+          "rows": {
+            "title": "Rows",
+            "type": "integer"
+          },
+          "values": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "parent_run_id",
+          "column",
+          "display_name",
+          "values",
+          "rows"
+        ],
+        "title": "ScopeOut",
+        "type": "object"
+      },
       "SentenceOut": {
         "properties": {
           "citations": {
@@ -2786,6 +3463,22 @@
           "text": {
             "title": "Text",
             "type": "string"
+          },
+          "written_by": {
+            "anyOf": [
+              {
+                "enum": [
+                  "model",
+                  "engine"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "model: written by the language model and verified; engine: the fact's own statement (a template).",
+            "title": "Written By"
           }
         },
         "required": [
@@ -2875,6 +3568,48 @@
         "title": "StageStatus",
         "type": "string"
       },
+      "SuggestedQuestionOut": {
+        "properties": {
+          "analysis_id": {
+            "title": "Analysis Id",
+            "type": "string"
+          },
+          "answer": {
+            "description": "The report's verified sentences.",
+            "items": {
+              "$ref": "#/components/schemas/SentenceOut"
+            },
+            "title": "Answer",
+            "type": "array"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "written_by": {
+            "anyOf": [
+              {
+                "enum": [
+                  "model",
+                  "engine"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Written By"
+          }
+        },
+        "required": [
+          "analysis_id",
+          "question",
+          "answer"
+        ],
+        "title": "SuggestedQuestionOut",
+        "type": "object"
+      },
       "TargetOut": {
         "properties": {
           "column": {
@@ -2911,6 +3646,56 @@
           "source"
         ],
         "title": "TargetOut",
+        "type": "object"
+      },
+      "TileOut": {
+        "properties": {
+          "analysis_id": {
+            "title": "Analysis Id",
+            "type": "string"
+          },
+          "fact_id": {
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "statement": {
+            "title": "Statement",
+            "type": "string"
+          },
+          "tier": {
+            "enum": [
+              "descriptive",
+              "strong",
+              "supported",
+              "inconclusive"
+            ],
+            "title": "Tier",
+            "type": "string"
+          },
+          "value": {
+            "description": "One of the fact's own numbers, as the fact writes it.",
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fact_id",
+          "analysis_id",
+          "label",
+          "value",
+          "question",
+          "statement",
+          "tier"
+        ],
+        "title": "TileOut",
         "type": "object"
       },
       "UnderstandingOut": {
@@ -3072,6 +3857,35 @@
         ],
         "title": "VersionOut",
         "type": "object"
+      },
+      "VisualsOut": {
+        "properties": {
+          "charts": {
+            "title": "Charts",
+            "type": "integer"
+          },
+          "claims": {
+            "description": "Chart and map values recomputed from the data.",
+            "title": "Claims",
+            "type": "integer"
+          },
+          "maps": {
+            "title": "Maps",
+            "type": "integer"
+          },
+          "withheld": {
+            "title": "Withheld",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "charts",
+          "withheld",
+          "maps",
+          "claims"
+        ],
+        "title": "VisualsOut",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -3085,7 +3899,7 @@
   "info": {
     "description": "Identity-verified, tenant-isolated uploads, datasets and analysis runs.",
     "title": "InsightfulCell API",
-    "version": "0.4.0"
+    "version": "0.6.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -3567,6 +4381,25 @@
               ],
               "description": "Only runs of this dataset.",
               "title": "Dataset Id"
+            }
+          },
+          {
+            "description": "Only drill-downs (explorations) of this run.",
+            "in": "query",
+            "name": "parent_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only drill-downs (explorations) of this run.",
+              "title": "Parent Run Id"
             }
           },
           {
@@ -4149,6 +4982,288 @@
           }
         ],
         "summary": "Accept or reject each cleaning change and approve the plan",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/v1/runs/{run_id}/dashboard": {
+      "get": {
+        "description": "Assembled with the report from the same facts (409 ``report-not-ready`` before the run\nfinishes; 409 ``dashboard-not-available`` for a report written before dashboards).",
+        "operationId": "get_dashboard_v1_runs__run_id__dashboard_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The finished run's dashboard: tiles, top charts, maps, suggested questions",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/v1/runs/{run_id}/drilldowns": {
+      "post": {
+        "description": "Keeps only the rows whose ``column`` is one of ``values`` (a chart's ``drill_column``\nand its points' ``key``) and analyses them again with the run's approved plan and\ncleaning; no review, no planning. The new run's facts are labelled exploratory. ``409``\nwhen the run has not finished, is itself a drill-down, or was made by an earlier version;\n``422`` when the column cannot be explored.",
+        "operationId": "create_drilldown_v1_runs__run_id__drilldowns_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client-generated unique key; makes retries of this request safe.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "description": "Client-generated unique key; makes retries of this request safe.",
+              "maxLength": 200,
+              "minLength": 8,
+              "pattern": "^[A-Za-z0-9_\\-:.]+$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDrilldownRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Explore a subset of a finished analysis (an exploratory sub-run)",
         "tags": [
           "runs"
         ]
@@ -4806,6 +5921,298 @@
           }
         ],
         "summary": "The finished run's report: answers, charts and the facts they cite",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/v1/runs/{run_id}/report.html": {
+      "get": {
+        "description": "The report, its dashboard tiles, charts and maps as SVG, and every fact with its test and\ncontent hash. Nothing in the file loads or runs anything.",
+        "operationId": "export_report_v1_runs__run_id__report_html_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The report, with no scripts."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "text/html": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "text/html": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "text/html": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "text/html": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "text/html": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "text/html": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Download the report as one self-contained HTML file (print it to save a PDF)",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/v1/runs/{run_id}/report:renarrate": {
+      "post": {
+        "description": "Only for a finished run whose report says ``narration.retryable`` (it was written from\ntemplates because the model was unavailable). The facts, tests and charts are reused; only\nthe words are written again, as a new revision of the report. ``409``\n``narration-not-retryable`` otherwise.",
+        "operationId": "renarrate_report_v1_runs__run_id__report_renarrate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The run's row_version (ETag) you last saw; 412 if it changed since.",
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The run's row_version (ETag) you last saw; 412 if it changed since.",
+              "title": "If-Match"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Write a simplified report's words again, after a model outage",
         "tags": [
           "runs"
         ]

@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from insightfulcell.db.models import Dataset, DatasetPreferences, Organization
+from insightfulcell.engine.subset import Subset
 from insightfulcell.pipeline.stage import RunInputs
 
 
@@ -50,4 +51,5 @@ def from_snapshot(data: dict[str, Any]) -> RunInputs:
         cleaning_decisions={
             str(k): bool(v) for k, v in dict(data.get("cleaning_decisions") or {}).items()
         },
+        drilldown=Subset.model_validate(data["drilldown"]) if data.get("drilldown") else None,
     )

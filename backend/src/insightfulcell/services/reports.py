@@ -1,4 +1,4 @@
-"""Report use cases for the API: a finished run's report with the facts its sentences cite,
+"""Report use cases for the API: a finished run's report and dashboard with the facts they cite,
 each with its test (after the run's false-discovery control) and its sensitivity check."""
 
 from __future__ import annotations
@@ -12,9 +12,12 @@ from sqlalchemy import select
 
 from insightfulcell.db.models import RunFact, RunReport, TestLog
 from insightfulcell.db.tenant import TenantDatabase
-from insightfulcell.domain.errors import ReportNotReady
+from insightfulcell.domain.errors import DashboardNotAvailable, ReportNotReady
 from insightfulcell.domain.security import Action, Principal, require
+from insightfulcell.engine.analysis.dashboard import Dashboard
+from insightfulcell.engine.analysis.report import Report
 from insightfulcell.engine.analysis.sensitivity import NOTES
+from insightfulcell.exports.html import filename, render_report
 from insightfulcell.services import run_store
 from insightfulcell.services.dto import RunDetail
 
@@ -26,11 +29,38 @@ class ReportView:
     created_at: datetime
     document: dict[str, Any]
     facts: list[dict[str, Any]]
+    #: The dashboard of the same revision (None for reports written before dashboards).
+    dashboard: dict[str, Any] | None = None
 
 
 class ReportService:
     def __init__(self, db: TenantDatabase) -> None:
         self._db = db
+
+    async def get_dashboard(self, principal: Principal, run_id: UUID) -> ReportView:
+        """The dashboard with the report it was assembled from (the facts and names)."""
+        view = await self.get_report(principal, run_id)
+        if view.dashboard is None:
+            raise DashboardNotAvailable(
+                "This report was written before dashboards were part of the analysis.",
+                hint="Open the report, or start a new analysis of the dataset for a dashboard.",
+            )
+        return view
+
+    async def export_html(self, principal: Principal, run_id: UUID) -> tuple[str, str]:
+        """The report, its dashboard and every fact as one self-contained HTML file:
+        ``(filename, html)``."""
+        view = await self.get_report(principal, run_id)
+        report = Report.model_validate(view.document)
+        board = Dashboard.model_validate(view.dashboard) if view.dashboard is not None else None
+        html = render_report(
+            report=report,
+            dashboard=board,
+            facts=view.facts,
+            run_id=str(view.run.run.id),
+            written_at=view.created_at,
+        )
+        return filename(report.dataset_name, str(view.run.run.id)), html
 
     async def get_report(self, principal: Principal, run_id: UUID) -> ReportView:
         require(principal, Action.RUN_READ)
@@ -79,6 +109,7 @@ class ReportService:
                 created_at=row.created_at,
                 document=row.document,
                 facts=fact_rows,
+                dashboard=row.dashboard,
             )
 
 
@@ -114,4 +145,5 @@ def _fact(fact: RunFact, names: dict[str, str], check: TestLog | None) -> dict[s
         if check is not None and check.outcome
         else None,
         "content_hash": fact.content_hash,
+        "exploratory": bool((fact.provenance or {}).get("exploratory")),
     }

@@ -169,13 +169,14 @@ class Maintenance:
 
     async def ensure_event_partitions(self) -> int:
         """Monthly partitions ahead of time for the partitioned logs (run events, LLM calls,
-        the test log)."""
+        the test log, verification results)."""
         created = 0
         async with self._db.unscoped_transaction() as session:
             for function in (
                 "ensure_run_event_partitions",
                 "ensure_llm_call_partitions",
                 "ensure_test_log_partitions",
+                "ensure_verification_partitions",
             ):
                 created += int(
                     (

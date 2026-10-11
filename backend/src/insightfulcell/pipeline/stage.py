@@ -22,6 +22,7 @@ from insightfulcell.engine.ports import (
     NoModel,
     NullRepository,
 )
+from insightfulcell.engine.subset import Subset
 from insightfulcell.ingestion.formats import FileFormat
 
 __all__ = [
@@ -76,6 +77,9 @@ class RunInputs:
     #: Cleaning decisions a person already made in this run's review (operation id -> apply),
     #: kept when they ask for the plan to be revised.
     cleaning_decisions: Mapping[str, bool] = field(default_factory=dict)
+    #: A drill-down's subset. Not part of ``fingerprint``: a drill-down reuses its parent's
+    #: Phase A checkpoints, and only stages that set ``uses_subset`` are keyed by it.
+    drilldown: Subset | None = None
 
     def fingerprint(self) -> dict[str, Any]:
         return {
@@ -121,7 +125,9 @@ class Stage(Protocol):
     version: str
     # A stage may also set ``uses_run_inputs``: ``True`` makes all of the run's inputs (policy,
     # a person's choices, the reference date) part of its checkpoint key; a tuple of field
-    # names includes only those, so a change elsewhere does not redo the stage.
+    # names includes only those, so a change elsewhere does not redo the stage. And
+    # ``uses_subset = True`` keys it by a drill-down's subset (the first stage that reads it:
+    # every later key follows through the upstream keys).
 
     def fingerprint(self, source: SourceFile) -> Mapping[str, Any]:
         """The inputs and configuration that determine this stage's output (JSON-safe)."""
@@ -148,6 +154,9 @@ def checkpoint_key(
         fingerprint["run_inputs"] = (
             everything if uses is True else {name: everything[name] for name in uses}
         )
+    # Only when set, so a full run's keys are what they always were.
+    if inputs is not None and inputs.drilldown is not None and getattr(stage, "uses_subset", False):
+        fingerprint["subset"] = inputs.drilldown.fingerprint()
     canonical = json.dumps(
         fingerprint,
         sort_keys=True,

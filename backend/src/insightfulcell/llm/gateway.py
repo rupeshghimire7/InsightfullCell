@@ -220,9 +220,19 @@ class LLMGateway:
                     exc.reason, "The model provider refused the request."
                 ) from exc
 
-            parsed = _parse(raw, request)
+            parsed, cause = _parse(raw, request)
             if parsed is None:
                 reason = "invalid_output"
+                # Why, without any of the answer's content (it may echo the prompt).
+                logger.warning(
+                    "model answer unusable",
+                    extra={
+                        "purpose": request.purpose.value,
+                        "cause": cause,
+                        "attempt": attempt,
+                        "output_tokens": raw.output_tokens,
+                    },
+                )
                 await self._record(
                     request, transport.provider, model, attempt, "invalid", raw, started
                 )
@@ -279,11 +289,18 @@ class LLMGateway:
             logger.exception("could not record an llm call", extra={"outcome": outcome})
 
 
-def _parse(raw: RawReply, request: ModelRequest) -> BaseModel | None:
-    if raw.truncated or not raw.text.strip():
-        return None
+def _parse(raw: RawReply, request: ModelRequest) -> tuple[BaseModel | None, str]:
+    """The validated answer, or ``None`` and why: truncated, empty, not_json or schema."""
+    if raw.truncated:
+        return None, "truncated"
+    if not raw.text.strip():
+        return None, "empty"
     text = _FENCE.sub("", raw.text.strip())
     try:
-        return request.response_model.model_validate(json.loads(text))
-    except (json.JSONDecodeError, ValidationError, TypeError):
-        return None
+        data = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return None, "not_json"
+    try:
+        return request.response_model.model_validate(data), "ok"
+    except ValidationError:
+        return None, "schema"

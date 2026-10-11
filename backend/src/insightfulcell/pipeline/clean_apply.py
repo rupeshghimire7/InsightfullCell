@@ -9,6 +9,10 @@ exactly the accepted operations with the same SQL the recipe uses. Writes two ta
 - the **minimally cleaned** data: the same file with only the accepted lossless operations,
   which the sensitivity check re-tests the top findings on.
 
+A drill-down (a sub-run on a subset a person chose from a finished report) keeps only the rows
+of its subset in both tables, right after the cleaning, so every later step sees only those
+rows; its cleaned data has its own silver key.
+
 The upload itself is never changed. Features are added later, only if they pass the gate.
 """
 
@@ -21,9 +25,11 @@ from typing import Any
 
 import duckdb
 
+from insightfulcell.domain.errors import SubsetTooSmall
 from insightfulcell.engine.cleaning.operations import Decision, Operation, cleaned_select
 from insightfulcell.engine.planning.language import ResolvedPlan, content_hash
 from insightfulcell.engine.sql import literal
+from insightfulcell.engine.subset import MIN_ROWS, Subset, keep
 from insightfulcell.pipeline.artifacts import fetch, fetch_json, put_json, table
 from insightfulcell.pipeline.stage import SourceFile, StageContext, StageResult
 
@@ -31,6 +37,7 @@ from insightfulcell.pipeline.stage import SourceFile, StageContext, StageResult
 class CleanApplyStage:
     name = "clean_apply"
     version = "2"
+    uses_subset = True
 
     def fingerprint(self, source: SourceFile) -> Mapping[str, Any]:
         return {"sha256": source.sha256}
@@ -59,18 +66,23 @@ class CleanApplyStage:
         lossy_applied = sum(1 for op in accepted if op.lossy)
         cleaned = ctx.workdir / "cleaned.parquet"
         minimal = ctx.workdir / "minimal.parquet"
+        subset = ctx.inputs.drilldown
 
         def compute() -> tuple[int, int, int]:
             with table(parquet) as con:
                 before = _count(con, "t")
-                after = _write(con, operations, cleaned)
-                kept = _write(con, lossless, minimal) if lossy_applied else after
+                after = _write(con, operations, cleaned, plan, subset)
+                kept = _write(con, lossless, minimal, plan, subset) if lossy_applied else after
                 return before, after, kept
 
         before, after, minimal_rows = await asyncio.to_thread(compute)
-        digest = content_hash(
-            {"plan": plan.digest(), "operations": [op.model_dump(mode="json") for op in accepted]}
-        )
+        hashed: dict[str, Any] = {
+            "plan": plan.digest(),
+            "operations": [op.model_dump(mode="json") for op in accepted],
+        }
+        if subset is not None:  # only then, so a full run's silver key is unchanged
+            hashed["subset"] = subset.fingerprint()
+        digest = content_hash(hashed)
         data_key = ctx.silver_key(digest)
         await ctx.store.upload_file(cleaned, data_key)
         artifacts = {"data": data_key}
@@ -94,6 +106,8 @@ class CleanApplyStage:
                 "minimal_rows": minimal_rows,
                 "plan_hash": plan.digest(),
                 "data_hash": digest,
+                # The column only, never the values kept (they are cell values).
+                **({"subset_column": subset.column} if subset is not None else {}),
             },
             artifacts=artifacts,
         )
@@ -104,10 +118,31 @@ def _count(con: duckdb.DuckDBPyConnection, name: str) -> int:
     return int(row[0]) if row else 0
 
 
-def _write(con: duckdb.DuckDBPyConnection, operations: Sequence[Operation], out: Path) -> int:
+def _write(
+    con: duckdb.DuckDBPyConnection,
+    operations: Sequence[Operation],
+    out: Path,
+    plan: ResolvedPlan,
+    subset: Subset | None,
+) -> int:
     names = [row[0] for row in con.execute("DESCRIBE t").fetchall()]
     query = cleaned_select(names, operations, table="t")
     con.execute(f"CREATE OR REPLACE TABLE cleaned AS {query}")
+    result = "cleaned"
+    if subset is not None:
+        condition = keep(con, "cleaned", plan, subset)
+        # The condition quotes the column and reads the kept values from a bound table.
+        con.execute(
+            f"CREATE OR REPLACE TABLE cleaned_subset AS SELECT * FROM cleaned WHERE {condition}"  # noqa: S608
+        )
+        result = "cleaned_subset"
+        rows = _count(con, result)
+        if rows < MIN_ROWS:
+            raise SubsetTooSmall(
+                f"Only {rows:,} rows are in this subset after cleaning; an exploratory analysis "
+                f"needs at least {MIN_ROWS}.",
+                hint="Go back to the report and explore a larger group.",
+            )
     # The path is the worker's own.
-    con.execute(f"COPY cleaned TO {literal(str(out))} (FORMAT parquet)")
-    return _count(con, "cleaned")
+    con.execute(f"COPY {result} TO {literal(str(out))} (FORMAT parquet)")
+    return _count(con, result)

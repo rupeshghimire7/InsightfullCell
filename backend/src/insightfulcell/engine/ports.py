@@ -157,12 +157,29 @@ class TestRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class VerificationRecord:
+    """The verifier's verdict on one sentence the model proposed (one attempt)."""
+
+    part: str  # the question's analysis id, or "summary"
+    position: int  # the sentence's place in the model's draft
+    attempt: int  # 1: first draft, 2: the repair
+    accepted: bool
+    check: str | None  # the first check that failed
+    detail: str | None
+    citations: tuple[str, ...]
+    text: str  # filled in when accepted, as proposed (with slots) when not
+
+
+@dataclass(frozen=True, slots=True)
 class ReportRecord:
     document: Mapping[str, Any]
     narration_source: str  # model, engine or mixed
     provider: str | None = None
     model: str | None = None
     prompt_version: str | None = None
+    verification: Sequence[VerificationRecord] = ()
+    #: The dashboard document assembled from the same report revision.
+    dashboard: Mapping[str, Any] | None = None
 
 
 class AnalysisRepository(Protocol):

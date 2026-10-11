@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from insightfulcell.domain.runs import EventType, Phase, Queue, RunStatus, StageStatus
 from insightfulcell.domain.security import Role
@@ -158,6 +158,14 @@ class StageOut(_Out):
     )
 
 
+class DrilldownOut(_Out):
+    """The subset a drill-down analyses, chosen from its parent's report."""
+
+    parent_run_id: UUID
+    column: str
+    values: list[str]
+
+
 class RunSummaryOut(_Out):
     id: UUID
     dataset_id: UUID
@@ -176,6 +184,9 @@ class RunSummaryOut(_Out):
     started_at: datetime | None
     finished_at: datetime | None
     review_requested_at: datetime | None
+    drilldown: DrilldownOut | None = Field(
+        default=None, description="Set for an exploratory run of a subset of another run."
+    )
 
 
 class RunOut(RunSummaryOut):
@@ -410,6 +421,14 @@ class RevisePlanRequest(_In):
 class SentenceOut(_Out):
     text: str
     citations: list[str] = Field(description="Ids of the facts the sentence rests on.")
+    written_by: Literal["model", "engine"] | None = Field(
+        default=None,
+        description="model: written by the language model and verified; engine: the fact's own "
+        "statement (a template).",
+    )
+
+
+ValueFormat = Literal["number", "percent", "count", "strength", "signed_percent"]
 
 
 class ChartPointOut(_Out):
@@ -418,6 +437,16 @@ class ChartPointOut(_Out):
     x: float | None
     x2: float | None
     n: int | None
+    key: str | None = Field(
+        default=None,
+        description="The group this point is, as the data writes it, when it can be explored "
+        "on its own (POST /v1/runs/{id}/drilldowns with the chart's drill_column).",
+    )
+
+
+class ChartCheckOut(_Out):
+    claims: int = Field(description="Values recomputed from the data, one query each.")
+    verified: bool
 
 
 class ChartOut(_Out):
@@ -425,10 +454,48 @@ class ChartOut(_Out):
     title: str
     x_label: str
     y_label: str
-    value_format: Literal["number", "percent", "count", "strength", "signed_percent"]
+    value_format: ValueFormat
     unit: str | None
     points: list[ChartPointOut]
     note: str | None
+    drill_column: str | None = Field(
+        default=None, description="The column a point's key belongs to, if explorable."
+    )
+    check: ChartCheckOut | None = Field(
+        default=None, description="The visualize stage's check (absent on older reports)."
+    )
+    vega_lite: dict[str, Any] | None = Field(
+        default=None, description="The chart as a Vega-Lite spec, values inline."
+    )
+
+
+class MapRegionOut(_Out):
+    code: str = Field(description="ISO 3166 code.")
+    name: str
+    path: str = Field(description="SVG path data in the map's view box (fill-rule evenodd).")
+    status: Literal["value", "few_rows", "no_rows"] = Field(
+        description="few_rows: fewer than ten rows, drawn hatched and without a number."
+    )
+    value: float | None
+    n: int | None
+    key: str | None
+
+
+class MapOut(_Out):
+    title: str
+    value_label: str
+    value_format: ValueFormat
+    unit: str | None
+    place_label: str = Field(default="", description="The place column's display name.")
+    level: Literal["country", "state"]
+    country: str | None
+    width: float
+    height: float
+    regions: list[MapRegionOut]
+    note: str | None
+    drill_column: str | None
+    reference_set: str
+    check: ChartCheckOut | None
 
 
 class ColumnRefOut(_Out):
@@ -448,6 +515,10 @@ class ReportSectionOut(_Out):
     chart: ChartOut | None
     facts: list[str]
     skipped: str | None = Field(description="Why the question could not be answered, if not.")
+    maps: list[MapOut] = Field(default_factory=list)
+    chart_withheld: bool = Field(
+        default=False, description="A chart was drawn but one of its values did not match."
+    )
 
 
 class UnderstandingOut(_Out):
@@ -482,6 +553,26 @@ class NarrationOut(_Out):
     fallback_reason: str | None
     sentences_kept: int
     sentences_dropped: int
+    sentences_repaired: int = 0
+    simplified: bool = Field(
+        default=False,
+        description="The model was unavailable for some part, so it was written from the "
+        "facts' own statements.",
+    )
+    retryable: bool = Field(
+        default=False, description="Narrating again (report:renarrate) may succeed."
+    )
+    flagged: list[str] = Field(
+        default_factory=list,
+        description="Parts written from templates because too many sentences failed the checks.",
+    )
+    judge: Literal["off", "on"] = "off"
+    rejected: dict[str, int] = Field(
+        default_factory=dict,
+        description="Rejected sentences per check: form, citation, stray_number, direction, "
+        "strength, causal, condition, judge.",
+    )
+    prompt_version: str | None = None
 
 
 class FactTestOut(_Out):
@@ -521,6 +612,9 @@ class FactOut(_Out):
     test: FactTestOut | None
     check: FactCheckOut | None
     content_hash: str = Field(description="SHA-256 of the fact's content, fixed when stored.")
+    exploratory: bool = Field(
+        default=False, description="Computed in a drill-down: a lead to check, not a conclusion."
+    )
 
 
 class EvidenceOut(_Out):
@@ -534,6 +628,23 @@ class FeatureNoteOut(_Out):
     label: str
     outcome: Literal["kept", "no_signal", "redundant", "not_computed", "no_target"]
     redundant_with: str | None = None
+
+
+class ScopeOut(_Out):
+    """The subset a drill-down analysed."""
+
+    parent_run_id: str
+    column: str
+    display_name: str
+    values: list[str]
+    rows: int
+
+
+class VisualsOut(_Out):
+    charts: int
+    withheld: int
+    maps: int
+    claims: int = Field(description="Chart and map values recomputed from the data.")
 
 
 class ReportOut(_Out):
@@ -557,4 +668,72 @@ class ReportOut(_Out):
     )
     evidence: EvidenceOut | None = None
     features: list[FeatureNoteOut] = Field(default_factory=list)
+    scope: ScopeOut | None = Field(
+        default=None, description="Set for a drill-down: the subset, findings exploratory."
+    )
+    visuals: VisualsOut | None = None
+    has_dashboard: bool = Field(default=False, description="GET /dashboard is available.")
     facts: list[FactOut]
+
+
+class TileOut(_Out):
+    fact_id: str
+    analysis_id: str
+    label: str
+    value: str = Field(description="One of the fact's own numbers, as the fact writes it.")
+    question: str
+    statement: str
+    tier: Literal["descriptive", "strong", "supported", "inconclusive"]
+
+
+class InsightOut(_Out):
+    analysis_id: str
+    question: str
+    kind_label: str
+    chart: ChartOut | None = None
+    map: MapOut | None = None
+    facts: list[str]
+
+
+class SuggestedQuestionOut(_Out):
+    analysis_id: str
+    question: str
+    answer: list[SentenceOut] = Field(description="The report's verified sentences.")
+    written_by: Literal["model", "engine"] | None = None
+
+
+class GlanceOut(_Out):
+    rows: int
+    columns: int
+    tests: int
+    reliable: int
+    charts_verified: int
+    charts_withheld: int
+
+
+class DashboardOut(_Out):
+    """A finished run's dashboard: headline tiles, top charts, maps, a gallery and suggested
+    questions answered with the report's verified sentences. Every number cites a fact."""
+
+    run: RunOut
+    revision: int
+    created_at: datetime
+    title: str
+    dataset_name: str
+    glance: GlanceOut
+    tiles: list[TileOut]
+    insights: list[InsightOut]
+    maps: list[InsightOut]
+    gallery: list[InsightOut]
+    questions: list[SuggestedQuestionOut]
+    exploratory: bool
+    scope: ScopeOut | None = None
+    narration: NarrationOut
+    facts: list[FactOut] = Field(description="The facts the dashboard cites.")
+
+
+class CreateDrilldownRequest(_In):
+    column: str = Field(min_length=1, max_length=300, description="The chart's drill_column.")
+    values: list[Annotated[str, StringConstraints(min_length=1, max_length=200)]] = Field(
+        min_length=1, max_length=20, description="Point keys (or map region keys) to keep."
+    )

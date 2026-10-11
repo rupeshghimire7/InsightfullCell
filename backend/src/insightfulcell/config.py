@@ -91,6 +91,11 @@ class Settings(BaseSettings):
     llm_run_input_token_budget: int = Field(default=120_000, ge=1_000)
     llm_breaker_failures: int = Field(default=5, ge=1, le=100)
     llm_breaker_open_seconds: float = Field(default=60.0, gt=0, le=3_600)
+    # Narration (Phase 5): report sections narrated at the same time, and the judge (a second
+    # model that can only reject a verified sentence). The judge stays off until its spike
+    # shows it catches what the verifier misses without rejecting good sentences.
+    llm_narration_concurrency: int = Field(default=4, ge=1, le=16)
+    llm_judge: bool = False
     # Prices (USD per million input / output tokens) for cost accounting, as JSON:
     # {"model-id": [input, output]}. Merged over the built-in table; unknown models cost null.
     llm_prices_json: str = "{}"

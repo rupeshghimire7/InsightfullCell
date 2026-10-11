@@ -23,6 +23,7 @@ from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from insightfulcell.engine.analysis.claims import Claim
 from insightfulcell.engine.types import Meaning
 
 MIN_ROWS: Final = 10  # below this, nothing is said about a group or a column
@@ -77,6 +78,9 @@ class Fact(BaseModel):
         return hashlib.sha256(canonical.encode()).hexdigest()
 
 
+ValueFormat = Literal["number", "percent", "count", "strength", "signed_percent"]
+
+
 class ChartPoint(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -85,6 +89,20 @@ class ChartPoint(BaseModel):
     x: float | None = None  # scatter x, or a bin's start
     x2: float | None = None  # a bin's end
     n: int | None = None  # rows behind the point
+    #: The group this point stands for, as the data writes it, when it can be explored on its
+    #: own (a drill-down on the chart's ``drill_column``).
+    key: str | None = None
+    #: What the point says about the data, checked by the ``visualize`` stage.
+    claim: Claim | None = None
+
+
+class ChartCheck(BaseModel):
+    """The ``visualize`` stage's check of a chart: every claim recomputed from the data."""
+
+    model_config = ConfigDict(frozen=True)
+
+    claims: int
+    verified: bool
 
 
 class ChartData(BaseModel):
@@ -96,10 +114,51 @@ class ChartData(BaseModel):
     title: str
     x_label: str
     y_label: str
-    value_format: Literal["number", "percent", "count", "strength", "signed_percent"]
+    value_format: ValueFormat
     unit: str | None = None
     points: tuple[ChartPoint, ...]
     note: str | None = None
+    #: The plan column whose groups the points are, when a point can be explored on its own.
+    drill_column: str | None = None
+    check: ChartCheck | None = None
+
+
+class MapRegion(BaseModel):
+    """One area of a map. ``value`` and ``n`` are left out for an area with fewer than ten
+    rows (drawn hatched) and for an area with none."""
+
+    model_config = ConfigDict(frozen=True)
+
+    code: str  # ISO 3166
+    name: str
+    path: str  # SVG path data in the map's view box
+    status: Literal["value", "few_rows", "no_rows"]
+    value: float | None = None
+    n: int | None = None
+    key: str | None = None  # the group value, for a drill-down on ``drill_column``
+    claim: Claim | None = None
+
+
+class MapData(BaseModel):
+    """A map of regions coloured by one measure, with its outlines already projected."""
+
+    model_config = ConfigDict(frozen=True)
+
+    title: str
+    value_label: str
+    value_format: ValueFormat
+    unit: str | None = None
+    #: The place column's display name ("State"), for sentences about one region.
+    place_label: str = ""
+    level: Literal["country", "state"]
+    country: str | None = None  # the country whose states are drawn
+    width: float
+    height: float
+    regions: tuple[MapRegion, ...]
+    note: str | None = None
+    drill_column: str | None = None
+    reference_set: str = ""
+    check: ChartCheck | None = None
 
 
 # --------------------------------------------------------------------------- formatting

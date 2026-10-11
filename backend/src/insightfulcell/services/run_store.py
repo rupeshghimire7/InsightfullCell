@@ -18,6 +18,7 @@ from insightfulcell.db.models import Dataset, Run, RunEvent, RunStage
 from insightfulcell.domain.errors import RunNotFound
 from insightfulcell.domain.runs import EventType, RunStatus
 from insightfulcell.services.dto import (
+    Drilldown,
     RunDetail,
     RunEventInfo,
     RunFailure,
@@ -205,6 +206,18 @@ def to_summary(run: Run, dataset_name: str) -> RunSummary:
         started_at=run.started_at,
         finished_at=run.finished_at,
         review_requested_at=run.review_requested_at,
+        drilldown=_drilldown(run),
+    )
+
+
+def _drilldown(run: Run) -> Drilldown | None:
+    subset = (run.inputs or {}).get("drilldown")
+    if run.parent_run_id is None or not isinstance(subset, dict):
+        return None
+    return Drilldown(
+        parent_run_id=run.parent_run_id,
+        column=str(subset.get("column", "")),
+        values=tuple(str(v) for v in subset.get("values") or ()),
     )
 
 

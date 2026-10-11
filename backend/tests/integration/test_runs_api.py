@@ -48,6 +48,7 @@ class TestSubmit:
             ("mine", "pending", "B"),
             ("sensitivity", "pending", "B"),
             ("rank", "pending", "B"),
+            ("visualize", "pending", "B"),
             ("report", "pending", "B"),
         ]
         assert body["last_event_seq"] == 1

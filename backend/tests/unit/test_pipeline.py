@@ -97,7 +97,8 @@ class TestPipeline:
             (Phase.B, 7, "mine"),
             (Phase.B, 8, "sensitivity"),
             (Phase.B, 9, "rank"),
-            (Phase.B, 10, "report"),
+            (Phase.B, 10, "visualize"),
+            (Phase.B, 11, "report"),
         ]
 
     def test_the_model_does_not_change_the_stage_list(self) -> None:

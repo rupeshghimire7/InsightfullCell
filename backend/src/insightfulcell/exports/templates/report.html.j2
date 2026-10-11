@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="InsightfulCell {{ version }}">
+<meta name="referrer" content="no-referrer">
+<title>{{ report.title }}</title>
+<style>
+  :root { --ink: #1f2421; --muted: #5e625e; --line: #dedcd6; --bg: #fcfcfa; --panel: #f4f3f1;
+          --accent: #2f6f62; --warn: #86621f; }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); color: var(--ink); font: 15px/1.55 ui-sans-serif, system-ui,
+         -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-text-size-adjust: 100%; }
+  body { margin: 0 auto; max-width: 860px; padding: 32px 20px 64px; }
+  h1 { font-size: 26px; line-height: 1.2; margin: 6px 0 8px; letter-spacing: -0.01em; }
+  h2 { font-size: 18px; margin: 40px 0 12px; padding-top: 8px; border-top: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 0 0 6px; }
+  p { margin: 0 0 10px; max-width: 72ch; }
+  .muted, .meta { color: var(--muted); }
+  .meta { font-size: 13px; }
+  .brand { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+           color: var(--accent); }
+  .notice { border: 1px solid var(--line); border-left: 4px solid var(--warn); background: var(--panel);
+            padding: 12px 14px; border-radius: 8px; margin: 18px 0; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+  .tile { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: #fff; }
+  .tile .value { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .tile .label { font-size: 12px; color: var(--muted); }
+  .answer { padding: 18px 0; border-bottom: 1px solid var(--line); break-inside: avoid-page; }
+  .answer:last-child { border-bottom: 0; }
+  .kind { font-size: 12px; color: var(--muted); }
+  .asked { color: var(--accent); font-weight: 600; margin-left: 8px; }
+  a.cite { display: inline-block; margin-left: 3px; padding: 0 4px; border: 1px solid var(--line);
+           border-radius: 4px; font: 11px/16px ui-monospace, SFMono-Regular, monospace;
+           color: var(--accent); text-decoration: none; vertical-align: 0.1em; }
+  figure { margin: 14px 0; }
+  figcaption { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  svg.chart, svg.map { width: 100%; height: auto; display: block; }
+  svg.map { max-height: 460px; }
+  .note { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  details { margin-top: 6px; font-size: 13px; }
+  summary { cursor: pointer; color: var(--accent); }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; margin-top: 6px; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
+  .hatch { background: repeating-linear-gradient(45deg, #f4f3f1 0 3px, #5e625e 3px 4px); }
+  ul.sources { list-style: none; padding: 0; margin: 10px 0 0; }
+  ul.sources li, .fact { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+                         margin: 6px 0; font-size: 13px; background: #fff; break-inside: avoid; }
+  .fid { font: 600 12px ui-monospace, SFMono-Regular, monospace; color: var(--accent); margin-right: 6px; }
+  .tier { display: inline-block; font-size: 11px; border: 1px solid var(--line); border-radius: 999px;
+          padding: 0 8px; margin-left: 6px; color: var(--muted); }
+  .small { font-size: 12px; color: var(--muted); }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px 24px; }
+  code { font: 11px ui-monospace, SFMono-Regular, monospace; word-break: break-all; }
+  footer { margin-top: 48px; font-size: 12px; color: var(--muted); }
+  @media print {
+    html { background: #fff; font-size: 12px; }
+    body { max-width: none; padding: 0; }
+    h2 { break-after: avoid; }
+    details > *:not(summary) { display: block; }
+    details summary { display: none; }
+    a { color: inherit; }
+    .tile, ul.sources li, .fact { background: #fff; }
+  }
+</style>
+</head>
+<body>
+{% macro sentences(items) %}{% for s in items %}{% if not loop.first %} {% endif %}{{ s.text }}{% for c in s.citations %}<a class="cite" href="#fact-{{ c }}" aria-label="Source {{ c }}">{{ c }}</a>{% endfor %}{% endfor %}{% endmacro %}
+{% macro chart_figure(chart) %}
+<figure>
+  <figcaption>{{ chart.title }}</figcaption>
+  {{ chart_svg(chart) }}
+  {% if chart.note %}<p class="note">{{ chart.note }}</p>{% endif %}
+  <details>
+    <summary>The numbers</summary>
+    <table>
+      <thead><tr><th scope="col">{{ chart.x_label }}</th>{% if chart.kind != "scatter" %}<th scope="col" class="num">{{ chart.y_label }}</th>{% endif %}{% if chart.points | rejectattr("n", "none") | list %}<th scope="col" class="num">Rows</th>{% endif %}</tr></thead>
+      <tbody>
+      {% for p in chart.points %}
+        <tr><th scope="row">{{ p.label }}</th>{% if chart.kind != "scatter" %}<td class="num">{{ format_value(p.value, chart.value_format, chart.unit) }}</td>{% endif %}{% if chart.points | rejectattr("n", "none") | list %}<td class="num">{{ (p.n | count) if p.n is not none else "" }}</td>{% endif %}</tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </details>
+</figure>
+{% endmacro %}
+{% macro map_figure(m) %}
+<figure>
+  <figcaption>{{ m.title }}</figcaption>
+  {{ map_svg(m) }}
+  <div class="legend">
+    {% for colour, words in map_legend(m) %}<span><span class="swatch" style="background: {{ colour }}"></span>{{ words }}</span>{% endfor %}
+    {% if m.regions | selectattr("status", "equalto", "few_rows") | list %}<span><span class="swatch hatch"></span>Fewer than ten rows</span>{% endif %}
+  </div>
+  {% if m.note %}<p class="note">{{ m.note }}</p>{% endif %}
+  <details>
+    <summary>The numbers</summary>
+    <table>
+      <thead><tr><th scope="col">Region</th><th scope="col" class="num">{{ m.value_label }}</th><th scope="col" class="num">Rows</th></tr></thead>
+      <tbody>
+      {% for r in m.regions if r.status != "no_rows" %}
+        <tr><th scope="row">{{ r.name }}</th><td class="num">{{ format_value(r.value, m.value_format, m.unit) if r.status == "value" else "Fewer than ten rows" }}</td><td class="num">{{ (r.n | count) if r.n is not none else "" }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </details>
+</figure>
+{% endmacro %}
+
+<header>
+  <div class="brand">InsightfulCell report</div>
+  <h1>{{ report.title }}</h1>
+  <p class="meta">Dataset: {{ report.dataset_name or "untitled" }} · Written {{ written_at }} · Run <code>{{ run_id }}</code></p>
+</header>
+
+{% if report.scope %}
+<div class="notice" role="note">
+  <strong>Exploratory analysis.</strong> Only the rows where {{ report.scope.display_name }} is {{ report.scope.values | join(", ") }} ({{ report.scope.rows | count }} rows). These findings are leads to check, not conclusions.
+</div>
+{% endif %}
+{% if report.narration.simplified %}
+<div class="notice" role="note"><strong>Narration simplified.</strong> The language model was unavailable for some answers, so they are written from the facts' own statements.</div>
+{% endif %}
+
+{% if dashboard and dashboard.tiles %}
+<section aria-labelledby="glance">
+  <h2 id="glance">At a glance</h2>
+  <div class="tiles">
+  {% for t in dashboard.tiles %}
+    <div class="tile">
+      <div class="label">{{ t.label }}</div>
+      <div class="value">{{ t.value }}</div>
+      <div class="small">{{ t.question }} <a class="cite" href="#fact-{{ t.fact_id }}">{{ t.fact_id }}</a></div>
+    </div>
+  {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section aria-labelledby="short">
+  <h2 id="short">In short</h2>
+  {% if report.summary %}<p>{{ sentences(report.summary) }}</p>{% else %}<p class="muted">None of the questions could be answered on this data.</p>{% endif %}
+</section>
+
+{% set answered = report.sections | selectattr("skipped", "none") | list %}
+{% if answered %}
+<section aria-labelledby="answers">
+  <h2 id="answers">Answers</h2>
+  {% for s in answered %}
+  <article class="answer" id="q-{{ loop.index }}">
+    <div class="kind">{{ s.kind_label }}{% if s.requested_by_person %}<span class="asked">You asked for this</span>{% endif %}</div>
+    <h3>{{ s.question }}</h3>
+    <p>{{ sentences(s.answer) }}</p>
+    {% if s.chart %}{{ chart_figure(s.chart) }}{% endif %}
+    {% if s.chart_withheld %}<p class="note">A chart for this answer was withheld because one of its values did not match the data.</p>{% endif %}
+    {% for m in s.maps %}{{ map_figure(m) }}{% endfor %}
+    {% if s.facts %}
+    <ul class="sources" aria-label="Sources">
+      {% for fid in s.facts if fid in facts_by_id %}{% set f = facts_by_id[fid] %}
+      <li><span class="fid">{{ f.id }}</span>{{ f.statement }}<span class="tier">{{ tier_label(f.tier) }}</span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </article>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% set skipped = report.sections | rejectattr("skipped", "none") | list %}
+{% if skipped %}
+<section aria-labelledby="skipped">
+  <h2 id="skipped">Questions that could not be answered</h2>
+  <ul>{% for s in skipped %}<li><strong>{{ s.question }}</strong> <span class="muted">{{ s.skipped }}</span></li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+<section aria-labelledby="how">
+  <h2 id="how">How this report was made</h2>
+  <div class="grid2">
+    <div>
+      <h3>The table</h3>
+      {% if report.understanding.summary %}<p>{{ report.understanding.summary }}</p>{% endif %}
+      <p class="small">{{ report.understanding.rows | count }} rows analysed, {{ report.understanding.columns | count }} columns{% if report.understanding.masked_columns %}, {{ report.understanding.masked_columns | count }} masked as personal data{% endif %}.{% if report.understanding.target %} Outcome: {{ report.understanding.target }}.{% endif %}</p>
+    </div>
+    <div>
+      <h3>Cleaning</h3>
+      <p class="small">{{ report.preparation.applied | length }} change{{ "" if report.preparation.applied | length == 1 else "s" }} applied {{ "after review" if report.preparation.reviewed_by_person else "by the organisation's policy" }}; {{ report.preparation.rows_before | count }} rows went in and {{ report.preparation.rows_after | count }} were analysed.</p>
+      {% if report.preparation.applied %}<ul class="small">{% for step in report.preparation.applied %}<li>{{ step.label }}: {{ step.column or "all rows" }}</li>{% endfor %}</ul>{% endif %}
+    </div>
+    <div>
+      <h3>Writing</h3>
+      <p class="small">{{ writing }}</p>
+    </div>
+    {% if report.evidence %}
+    <div>
+      <h3>Evidence</h3>
+      <p class="small">{{ report.evidence.tests | count }} comparisons and links were tested; {{ report.evidence.reliable | count }} are reliable, with false discoveries held at {{ (report.evidence.alpha * 100) | round | int }}% across the analysis.{% if report.visuals %} {{ report.visuals.claims | count }} chart and map values were recomputed from the data before being shown{% if report.visuals.withheld %}; {{ report.visuals.withheld | count }} chart{{ "" if report.visuals.withheld == 1 else "s" }} withheld{% endif %}.{% endif %}</p>
+    </div>
+    {% endif %}
+  </div>
+  <ul class="small">{% for note in report.method_notes %}<li>{{ note }}</li>{% endfor %}</ul>
+</section>
+
+<section aria-labelledby="facts">
+  <h2 id="facts">Facts</h2>
+  <p class="small">Every number in this report comes from one of these facts. Each is stored unchanged, with a content hash.</p>
+  {% for f in facts %}
+  <div class="fact" id="fact-{{ f.id }}">
+    <div><span class="fid">{{ f.id }}</span>{{ f.statement }}<span class="tier">{{ tier_label(f.tier) }}</span>{% if f.exploratory %}<span class="tier">Exploratory</span>{% endif %}</div>
+    <div class="small">Columns: {{ f.columns | map(attribute="display_name") | join(", ") }} · {{ f.rows | count }} rows · {{ f.method }}</div>
+    {% if f.test %}<div class="small">{{ f.test.method }}: {{ effect_label(f.test.effect_name) }} {{ "%.3g" | format(f.test.effect) }}{% if f.test.ci_low is not none and f.test.ci_high is not none %} (95% interval {{ "%.3g" | format(f.test.ci_low) }} to {{ "%.3g" | format(f.test.ci_high) }}){% endif %}; p {{ "%.3g" | format(f.test.p_value) }}, q {{ "%.3g" | format(f.test.q_value) }}.</div>{% endif %}
+    {% if f.check and f.check.outcome != "same_data" %}<div class="small">{{ f.check.note }}</div>{% endif %}
+    <div class="small">Content hash <code>{{ f.content_hash }}</code></div>
+  </div>
+  {% endfor %}
+</section>
+
+<footer>Made with InsightfulCell {{ version }}. Raw rows never left your organisation's storage; language models saw only the facts.</footer>
+</body>
+</html>
