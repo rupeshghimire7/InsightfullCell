@@ -86,6 +86,11 @@ const STAGE_LABEL: Record<string, { title: string; description: string }> = {
     title: "Rank the findings",
     description: "Puts the strongest and most relevant findings first and drops repeats.",
   },
+  visualize: {
+    title: "Check the charts and maps",
+    description:
+      "Computes every value each chart and map shows again from your data, one at a time; a chart that does not match is withheld.",
+  },
   report: {
     title: "Write the report",
     description:

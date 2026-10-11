@@ -10,6 +10,9 @@ import {
   type PointerEvent,
   type ReactNode,
 } from "react";
+import { ExploreButton, useExplore } from "@/components/report/explore";
+import { DownloadSimple, SealCheck } from "@/components/ui/icons";
+import { saveJson, slug } from "@/lib/download";
 import { formatChartValue, niceTicks } from "@/lib/report/format";
 import type { Chart, ChartPoint } from "@/lib/report/types";
 
@@ -19,10 +22,18 @@ import type { Chart, ChartPoint } from "@/lib/report/types";
  * thick with a 4 px rounded data end, 2 px lines, 8 px markers with a 2 px surface ring,
  * hairline solid grid. Every chart reads out the value under the pointer or the keyboard
  * (arrow keys), and every value is also in the table under it, so nothing hides behind a hover.
+ * A chart checked by the analysis says so; groups that can be explored on their own get an
+ * Explore button in the table.
  */
 export function ReportChart({ chart }: { chart: Chart }) {
   const tableId = useId();
+  const explore = useExplore();
   const format = (value: number) => formatChartValue(value, chart.value_format, chart.unit);
+  const explorable =
+    explore !== null && chart.drill_column !== null && chart.drill_column !== undefined
+      ? chart.drill_column
+      : null;
+  const exploring = explorable !== null && chart.points.some((p) => p.key);
   return (
     <figure className="min-w-0 space-y-3">
       <figcaption className="text-sm font-medium">{chart.title}</figcaption>
@@ -32,12 +43,13 @@ export function ReportChart({ chart }: { chart: Chart }) {
         <PlotChart chart={chart} format={format} />
       )}
       {chart.note ? <p className="text-xs text-muted">{chart.note}</p> : null}
+      <ChartFooter chart={chart} />
       <details className="group text-sm">
         <summary
           className="inline-flex min-h-9 cursor-pointer items-center text-xs font-medium text-accent underline underline-offset-2 select-none pointer-coarse:min-h-11"
           aria-controls={tableId}
         >
-          Show the numbers
+          {exploring ? "Show the numbers and explore a group" : "Show the numbers"}
         </summary>
         <div
           id={tableId}
@@ -63,6 +75,11 @@ export function ReportChart({ chart }: { chart: Chart }) {
                     Rows
                   </th>
                 ) : null}
+                {exploring ? (
+                  <th scope="col" className="px-3 py-1.5 font-medium">
+                    <span className="sr-only">Explore</span>
+                  </th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -81,6 +98,21 @@ export function ReportChart({ chart }: { chart: Chart }) {
                       {point.n === null ? "" : point.n.toLocaleString("en-US")}
                     </td>
                   ) : null}
+                  {exploring ? (
+                    <td className="px-1 py-0.5 text-right">
+                      {point.key && explorable ? (
+                        <ExploreButton
+                          target={{
+                            column: explorable,
+                            columnLabel: chart.x_label,
+                            key: point.key,
+                            label: point.label,
+                            rows: point.n,
+                          }}
+                        />
+                      ) : null}
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
@@ -93,6 +125,34 @@ export function ReportChart({ chart }: { chart: Chart }) {
 
 type Format = (value: number) => string;
 
+/** Whether the analysis re-checked the chart, and its Vega-Lite spec to download. */
+function ChartFooter({ chart }: { chart: Chart }) {
+  const spec = chart.vega_lite;
+  if (!chart.check?.verified && !spec) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+      {chart.check?.verified ? (
+        <span className="inline-flex items-center gap-1">
+          <SealCheck aria-hidden="true" weight="fill" className="size-3.5 text-success" />
+          {chart.check.claims === 1
+            ? "Its value was checked against the data"
+            : `All ${chart.check.claims.toLocaleString("en-US")} values were checked against the data`}
+        </span>
+      ) : null}
+      {spec ? (
+        <button
+          type="button"
+          onClick={() => saveJson(`${slug(chart.title)}.vl.json`, spec)}
+          className="inline-flex min-h-8 items-center gap-1 font-medium text-accent underline-offset-2 hover:underline print:hidden pointer-coarse:min-h-11"
+        >
+          <DownloadSimple aria-hidden="true" className="size-3.5" />
+          Download Vega-Lite spec
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 // --------------------------------------------------------------------------- bars
 
 /** Horizontal bars in HTML: labels wrap and stay readable at any width. Signed values grow
@@ -103,6 +163,10 @@ function BarChart({ chart, format }: { chart: Chart; format: Format }) {
   const high = Math.max(0, ...values);
   const span = high - low || 1;
   const zero = ((0 - low) / span) * 100;
+  // Room beside the bars for the longest value label, so it never runs past the chart (11 px
+  // mono digits are about 6.7 px wide, plus the 6 px gap).
+  const longest = Math.max(...chart.points.map((p) => format(p.value).length), 1);
+  const reserve = Math.ceil(longest * 6.7 + 8);
   return (
     <ul
       className="space-y-1.5"
@@ -119,31 +183,36 @@ function BarChart({ chart, format }: { chart: Chart; format: Format }) {
             <span className="truncate text-text" title={point.label}>
               {point.label}
             </span>
-            <span className="relative flex h-5 items-center">
-              {low < 0 ? (
+            <span
+              className="flex h-5 min-w-0 items-center"
+              style={{ paddingLeft: low < 0 ? reserve : 0, paddingRight: high > 0 ? reserve : 0 }}
+            >
+              <span className="relative flex h-5 w-full items-center">
+                {low < 0 ? (
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-y-0 w-px bg-border"
+                    style={{ left: `${zero}%` }}
+                  />
+                ) : null}
                 <span
                   aria-hidden="true"
-                  className="absolute inset-y-0 w-px bg-border"
-                  style={{ left: `${zero}%` }}
+                  className={`absolute h-4 bg-chart ${negative ? "rounded-l-[4px]" : "rounded-r-[4px]"}`}
+                  style={{
+                    left: `${negative ? zero - width : zero}%`,
+                    width: `${Math.max(width, point.value === 0 ? 0 : 0.6)}%`,
+                  }}
                 />
-              ) : null}
-              <span
-                aria-hidden="true"
-                className={`absolute h-4 bg-chart ${negative ? "rounded-l-[4px]" : "rounded-r-[4px]"}`}
-                style={{
-                  left: `${negative ? zero - width : zero}%`,
-                  width: `${Math.max(width, point.value === 0 ? 0 : 0.6)}%`,
-                }}
-              />
-              <span
-                className="tabular absolute font-mono text-[11px] whitespace-nowrap text-muted"
-                style={
-                  negative
-                    ? { right: `${100 - (zero - width)}%`, paddingRight: 6 }
-                    : { left: `${zero + width}%`, paddingLeft: 6 }
-                }
-              >
-                {format(point.value)}
+                <span
+                  className="tabular absolute font-mono text-[11px] whitespace-nowrap text-muted"
+                  style={
+                    negative
+                      ? { right: `${100 - (zero - width)}%`, paddingRight: 6 }
+                      : { left: `${zero + width}%`, paddingLeft: 6 }
+                  }
+                >
+                  {format(point.value)}
+                </span>
               </span>
             </span>
           </li>

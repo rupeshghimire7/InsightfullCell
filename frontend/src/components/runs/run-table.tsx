@@ -53,6 +53,11 @@ export function RunTable({
                 >
                   {showDataset ? run.dataset_name || "Dataset" : `Run ${run.id.slice(-8)}`}
                 </Link>
+                {run.drilldown ? (
+                  <span className="mt-0.5 block truncate text-xs font-normal text-muted">
+                    Exploring {run.drilldown.column}: {run.drilldown.values.join(", ")}
+                  </span>
+                ) : null}
               </th>
               <td className="px-4 py-3">
                 <RunStatusBadge status={run.status} animated={false} />

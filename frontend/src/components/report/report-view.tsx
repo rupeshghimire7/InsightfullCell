@@ -1,112 +1,139 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { PrivacyNote } from "@/components/plans/privacy-note";
+import { CheckLine, EvidenceBadge, ExploratoryBadge, TestLine } from "@/components/report/evidence";
+import { ExploreProvider } from "@/components/report/explore";
+import { FactsProvider, Sentences } from "@/components/report/facts";
 import { ReportChart } from "@/components/report/report-chart";
-import {
-  CaretDown,
-  CheckCircle,
-  Info,
-  SealCheck,
-  WarningCircle,
-  type IconComponent,
-} from "@/components/ui/icons";
+import { ReportMap } from "@/components/report/report-map";
+import { ScopeNotice } from "@/components/report/scope-notice";
+import { SimplifiedNotice } from "@/components/report/simplified-notice";
+import { CaretDown, EyeSlash } from "@/components/ui/icons";
 import { formatCount } from "@/lib/format";
 import { fallbackLabel, providerLabel } from "@/lib/plans/labels";
-import { effectLabel, formatEffect, formatProbability, TIER } from "@/lib/report/format";
-import type { Report, ReportFact, ReportSection, Sentence } from "@/lib/report/types";
+import type { Report, ReportFact, ReportSection } from "@/lib/report/types";
 
 /**
- * The finished report. Every sentence ends with links to the facts it rests on; each answer
- * lists those facts (what was computed, from which columns, over how many rows, how), so any
- * number on the page can be traced to its source without leaving it.
+ * The finished report. Every sentence ends with chips for the facts it rests on (each opens the
+ * fact inspector); each answer also lists those facts (what was computed, from which columns,
+ * over how many rows, how), so any number on the page can be traced to its source without
+ * leaving it. Charts and maps were checked value by value against the data before being stored.
  */
-export function ReportView({ report, orgId }: { report: Report; orgId: string }) {
+export function ReportView({
+  report,
+  orgId,
+  canExplore = false,
+  explorations,
+}: {
+  report: Report;
+  orgId: string;
+  /** Analysts and above, on a full analysis: groups can be explored on their own. */
+  canExplore?: boolean;
+  /** Explorations of this analysis (drill-downs already started), shown at the end. */
+  explorations?: ReactNode;
+}) {
   const facts = new Map(report.facts.map((f) => [f.id, f]));
   const answered = report.sections.filter((s) => !s.skipped);
   const skipped = report.sections.filter((s) => s.skipped);
   const runId = report.run.id;
   return (
-    <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_15rem]">
-      <div className="min-w-0 space-y-12">
-        <section
-          aria-labelledby="summary-title"
-          className="rounded-panel border border-border bg-surface p-5 sm:p-6"
-        >
-          <h2 id="summary-title" className="text-lg font-semibold">
-            In short
-          </h2>
-          {report.summary.length > 0 ? (
-            <p className="mt-3 max-w-[70ch] text-[15px] leading-relaxed">
-              <Sentences sentences={report.summary} />
-            </p>
-          ) : (
-            <p className="mt-3 text-muted">None of the questions could be answered on this data.</p>
-          )}
-        </section>
-
-        {answered.length > 0 ? (
-          <section aria-labelledby="answers-title" className="space-y-2">
-            <h2 id="answers-title" className="text-lg font-semibold">
-              Answers
-            </h2>
-            <div className="divide-y divide-border">
-              {answered.map((section) => (
-                <Answer key={section.analysis_id} section={section} facts={facts} />
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {skipped.length > 0 ? (
-          <details className="group rounded-panel border border-border bg-surface">
-            <summary className="flex min-h-11 cursor-pointer items-center gap-2 px-4 text-sm font-medium select-none">
-              <CaretDown
-                aria-hidden="true"
-                className="size-4 shrink-0 text-muted transition-transform group-open:rotate-180 motion-reduce:transition-none"
+    <FactsProvider facts={report.facts} sourceLinks>
+      <ExploreProvider orgId={orgId} runId={runId} enabled={canExplore && !report.scope}>
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_15rem]">
+          <div className="min-w-0 space-y-12">
+            {report.scope ? <ScopeNotice scope={report.scope} orgId={orgId} /> : null}
+            {report.narration.simplified ? (
+              <SimplifiedNotice
+                orgId={orgId}
+                runId={runId}
+                rowVersion={report.run.row_version}
+                reason={report.narration.fallback_reason}
+                retryable={report.narration.retryable}
               />
-              {skipped.length === 1
-                ? "1 question could not be answered"
-                : `${skipped.length} questions could not be answered`}
-            </summary>
-            <ul className="space-y-2 border-t border-border px-4 py-3 text-sm">
-              {skipped.map((s) => (
-                <li key={s.analysis_id}>
-                  <span className="font-medium">{s.question}</span>{" "}
-                  <span className="text-muted">{s.skipped}</span>
-                </li>
-              ))}
-            </ul>
-          </details>
-        ) : null}
+            ) : null}
+            <section
+              aria-labelledby="summary-title"
+              className="rounded-panel border border-border bg-surface p-5 sm:p-6"
+            >
+              <h2 id="summary-title" className="text-lg font-semibold">
+                In short
+              </h2>
+              {report.summary.length > 0 ? (
+                <p className="mt-3 max-w-[70ch] text-[15px] leading-relaxed">
+                  <Sentences sentences={report.summary} />
+                </p>
+              ) : (
+                <p className="mt-3 text-muted">
+                  None of the questions could be answered on this data.
+                </p>
+              )}
+            </section>
 
-        <HowItWasMade report={report} />
-        <PrivacyNote recipeHref={`/o/${orgId}/runs/${runId}/recipe`} />
-      </div>
+            {answered.length > 0 ? (
+              <section aria-labelledby="answers-title" className="space-y-2">
+                <h2 id="answers-title" className="text-lg font-semibold">
+                  Answers
+                </h2>
+                <div className="divide-y divide-border">
+                  {answered.map((section) => (
+                    <Answer key={section.analysis_id} section={section} facts={facts} />
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
-      {answered.length > 1 ? (
-        <nav aria-label="Questions in this report" className="hidden lg:block">
-          <div className="sticky top-20 space-y-2">
-            <p className="text-xs font-medium text-muted">On this page</p>
-            <ol className="max-h-[70vh] space-y-1 overflow-y-auto pr-1 text-sm">
-              {answered.map((s) => (
-                <li key={s.analysis_id}>
-                  <a
-                    href={`#${anchor(s.analysis_id)}`}
-                    className="block rounded-control px-2 py-1 text-muted hover:bg-surface hover:text-text"
-                  >
-                    {s.question}
-                  </a>
-                </li>
-              ))}
-            </ol>
+            {skipped.length > 0 ? (
+              <details className="group rounded-panel border border-border bg-surface">
+                <summary className="flex min-h-11 cursor-pointer items-center gap-2 px-4 text-sm font-medium select-none">
+                  <CaretDown
+                    aria-hidden="true"
+                    className="size-4 shrink-0 text-muted transition-transform group-open:rotate-180 motion-reduce:transition-none"
+                  />
+                  {skipped.length === 1
+                    ? "1 question could not be answered"
+                    : `${skipped.length} questions could not be answered`}
+                </summary>
+                <ul className="space-y-2 border-t border-border px-4 py-3 text-sm">
+                  {skipped.map((s) => (
+                    <li key={s.analysis_id}>
+                      <span className="font-medium">{s.question}</span>{" "}
+                      <span className="text-muted">{s.skipped}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+
+            {explorations}
+            <HowItWasMade report={report} />
+            <PrivacyNote recipeHref={`/o/${orgId}/runs/${runId}/recipe`} />
           </div>
-        </nav>
-      ) : null}
-    </div>
+
+          {answered.length > 1 ? (
+            <nav aria-label="Questions in this report" className="hidden lg:block">
+              <div className="sticky top-20 space-y-2">
+                <p className="text-xs font-medium text-muted">On this page</p>
+                <ol className="max-h-[70vh] space-y-1 overflow-y-auto pr-1 text-sm">
+                  {answered.map((s) => (
+                    <li key={s.analysis_id}>
+                      <a
+                        href={`#${anchor(s.analysis_id)}`}
+                        className="block rounded-control px-2 py-1 text-muted hover:bg-surface hover:text-text"
+                      >
+                        {s.question}
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </nav>
+          ) : null}
+        </div>
+      </ExploreProvider>
+    </FactsProvider>
   );
 }
 
-function anchor(analysisId: string): string {
+export function anchor(analysisId: string): string {
   return `q-${analysisId.replace(/[^A-Za-z0-9_-]+/g, "-")}`;
 }
 
@@ -133,6 +160,16 @@ function Answer({ section, facts }: { section: ReportSection; facts: Map<string,
         <Sentences sentences={section.answer} />
       </p>
       {section.chart ? <ReportChart chart={section.chart} /> : null}
+      {section.chart_withheld ? (
+        <p className="flex items-start gap-1.5 text-xs text-muted">
+          <EyeSlash aria-hidden="true" className="mt-px size-3.5 shrink-0" />A chart for this answer
+          was withheld: one of its values did not match the data when it was checked. The words and
+          sources above are unaffected.
+        </p>
+      ) : null}
+      {section.maps?.map((map) => (
+        <ReportMap key={map.title} map={map} />
+      ))}
       {cited.length > 0 ? (
         <div className="space-y-2">
           <h4 className="text-xs font-medium text-muted">Sources</h4>
@@ -150,7 +187,10 @@ function Answer({ section, facts }: { section: ReportSection; facts: Map<string,
                     </span>
                     {fact.statement}
                   </p>
-                  <EvidenceBadge tier={fact.tier} />
+                  <span className="flex flex-wrap gap-1.5">
+                    <EvidenceBadge tier={fact.tier} />
+                    {fact.exploratory ? <ExploratoryBadge /> : null}
+                  </span>
                 </div>
                 <p className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted">
                   <span>
@@ -176,92 +216,45 @@ function Answer({ section, facts }: { section: ReportSection; facts: Map<string,
   );
 }
 
-const TONE: Record<(typeof TIER)[keyof typeof TIER]["tone"], { badge: string; icon: string }> = {
-  positive: { badge: "border-success/30 bg-success/10", icon: "text-success" },
-  attention: { badge: "border-warning/40 bg-warning/10", icon: "text-warning" },
-  neutral: { badge: "border-border bg-bg", icon: "text-muted" },
+const CHECK_LABELS: Record<string, string> = {
+  form: "form",
+  citation: "sources",
+  stray_number: "numbers",
+  direction: "direction",
+  strength: "strength words",
+  causal: "claims of cause",
+  condition: "missing conditions",
+  judge: "second opinion",
 };
-const TIER_ICON: Record<ReportFact["tier"], IconComponent> = {
-  strong: SealCheck,
-  supported: CheckCircle,
-  inconclusive: WarningCircle,
-  descriptive: Info,
-};
 
-/** How sure a fact is: an icon and words, from its test after the false-discovery control. */
-function EvidenceBadge({ tier }: { tier: ReportFact["tier"] }) {
-  const { label, tone } = TIER[tier];
-  const Icon = TIER_ICON[tier];
-  return (
-    <span
-      className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${TONE[tone].badge}`}
-    >
-      <Icon aria-hidden="true" weight="fill" className={`size-3.5 ${TONE[tone].icon}`} />
-      {label}
-    </span>
-  );
-}
-
-function TestLine({ test }: { test: NonNullable<ReportFact["test"]> }) {
-  const interval =
-    test.ci_low !== null && test.ci_high !== null
-      ? ` (95% interval ${formatEffect(test.ci_low)} to ${formatEffect(test.ci_high)})`
-      : "";
-  return (
-    <p className="mt-1 text-xs text-muted">
-      {test.method}: {effectLabel(test.effect_name)}{" "}
-      <span className="tabular font-mono">{formatEffect(test.effect)}</span>
-      {interval}; p-value{" "}
-      <span className="tabular font-mono">{formatProbability(test.p_value)}</span> (
-      <span className="tabular font-mono">{formatProbability(test.q_value)}</span> after the
-      false-discovery control).
-    </p>
-  );
-}
-
-function CheckLine({ check }: { check: NonNullable<ReportFact["check"]> }) {
-  const changed = check.outcome === "weakens" || check.outcome === "flips";
-  const Icon = changed ? WarningCircle : CheckCircle;
-  return (
-    <p className={`mt-1 flex items-start gap-1 text-xs ${changed ? "text-warning" : "text-muted"}`}>
-      <Icon aria-hidden="true" weight="fill" className="mt-px size-3.5 shrink-0" />
-      {check.note}
-    </p>
-  );
-}
-
-/** Sentences with their citations: each id links to the fact it names. */
-function Sentences({ sentences }: { sentences: Sentence[] }) {
-  return (
-    <>
-      {sentences.map((sentence, i) => (
-        <span key={i}>
-          {i > 0 ? " " : null}
-          {sentence.text}
-          {sentence.citations.map((id) => (
-            <a
-              key={id}
-              href={`#fact-${id}`}
-              aria-label={`Source ${id}`}
-              className="ml-1 inline-block rounded-[4px] border border-border px-1 align-[0.1em] font-mono text-[11px] leading-4 text-accent no-underline hover:border-accent"
-            >
-              {id}
-            </a>
-          ))}
-        </span>
-      ))}
-    </>
-  );
+/** Who wrote the words and what the checks did, in one or two sentences. */
+export function narrationText(n: Report["narration"]): string {
+  if (n.source === "engine") {
+    return `Written by our engine directly from the facts${n.fallback_reason ? `, because ${fallbackLabel(n.fallback_reason)}` : ""}.`;
+  }
+  const sentences = (k: number) => `${formatCount(k)} ${k === 1 ? "sentence" : "sentences"}`;
+  const rejected = Object.entries(n.rejected ?? {})
+    .filter(([, count]) => count > 0)
+    .map(([check, count]) => `${CHECK_LABELS[check] ?? check} ${formatCount(count)}`);
+  const parts = [
+    `Written by ${providerLabel(n.provider)}${n.model ? ` (${n.model})` : ""} from the facts, with every number filled in by our engine. Each sentence was checked against its sources: ${sentences(n.sentences_kept)} kept`,
+  ];
+  if (n.sentences_repaired)
+    parts.push(`${formatCount(n.sentences_repaired)} of them after one rewrite`);
+  if (n.sentences_dropped) {
+    parts.push(`${sentences(n.sentences_dropped)} replaced by the fact's own wording`);
+  }
+  let text = `${parts.join("; ")}.`;
+  if (rejected.length > 0) text += ` Rejections by check: ${rejected.join(", ")}.`;
+  if (n.source === "mixed") text += " Some parts were written by the engine instead.";
+  return text;
 }
 
 function HowItWasMade({ report }: { report: Report }) {
   const u = report.understanding;
   const p = report.preparation;
   const n = report.narration;
-  const writer =
-    n.source === "engine"
-      ? `Written by our engine directly from the facts${n.fallback_reason ? `, because ${fallbackLabel(n.fallback_reason)}` : ""}.`
-      : `Written by ${providerLabel(n.provider)}${n.model ? ` (${n.model})` : ""} from the facts, then checked by our engine: ${formatCount(n.sentences_kept)} ${n.sentences_kept === 1 ? "sentence was" : "sentences were"} kept${n.sentences_dropped ? ` and ${formatCount(n.sentences_dropped)} removed because a number, source or wording did not match the facts` : ""}.${n.source === "mixed" ? " Some answers were written by the engine instead." : ""}`;
+  const writer = narrationText(n);
   return (
     <section aria-labelledby="how-title" className="space-y-6">
       <h2 id="how-title" className="text-lg font-semibold">
@@ -332,7 +325,11 @@ function HowItWasMade({ report }: { report: Report }) {
           <p>{writer}</p>
         </Block>
         {report.evidence ? (
-          <EvidenceBlock evidence={report.evidence} features={report.features ?? []} />
+          <EvidenceBlock
+            evidence={report.evidence}
+            features={report.features ?? []}
+            visuals={report.visuals ?? null}
+          />
         ) : null}
       </div>
       <ul className="max-w-[75ch] space-y-1.5 text-sm text-muted">
@@ -347,9 +344,11 @@ function HowItWasMade({ report }: { report: Report }) {
 function EvidenceBlock({
   evidence: e,
   features,
+  visuals,
 }: {
   evidence: NonNullable<Report["evidence"]>;
   features: NonNullable<Report["features"]>;
+  visuals: Report["visuals"] | null;
 }) {
   const kept = features.filter((f) => f.outcome === "kept").map((f) => f.label);
   const tested = features.filter((f) => f.outcome !== "no_target").length;
@@ -365,6 +364,16 @@ function EvidenceBlock({
           ? ` The ${e.rechecked === 1 ? "strongest finding was" : `${formatCount(e.rechecked)} strongest findings were`} re-tested without the cleaning that removed or merged data.`
           : ""}
       </p>
+      {visuals && visuals.claims > 0 ? (
+        <p>
+          <span className="tabular font-mono">{formatCount(visuals.claims)}</span> chart and map
+          values were computed again from the data, one at a time, before they were shown
+          {visuals.withheld > 0
+            ? `; ${formatCount(visuals.withheld)} ${visuals.withheld === 1 ? "chart was" : "charts were"} withheld because a value did not match`
+            : ""}
+          .
+        </p>
+      ) : null}
       {tested > 0 ? (
         <p className="text-muted">
           {kept.length > 0
@@ -391,24 +400,5 @@ function Block({ title, children }: { title: string; children: ReactNode }) {
       <h3 className="font-medium">{title}</h3>
       {children}
     </div>
-  );
-}
-
-export function reportLinks(orgId: string, runId: string) {
-  return (
-    <>
-      <Link
-        href={`/o/${orgId}/runs/${runId}/plan`}
-        className="press inline-flex min-h-9 items-center justify-center rounded-control border border-border bg-surface px-4 text-sm font-medium hover:bg-bg pointer-coarse:min-h-11"
-      >
-        Open the plan
-      </Link>
-      <Link
-        href={`/o/${orgId}/runs/${runId}/recipe`}
-        className="press inline-flex min-h-9 items-center justify-center rounded-control border border-border bg-surface px-4 text-sm font-medium hover:bg-bg pointer-coarse:min-h-11"
-      >
-        Show recipe
-      </Link>
-    </>
   );
 }

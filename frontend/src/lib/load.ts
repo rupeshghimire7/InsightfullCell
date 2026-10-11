@@ -8,6 +8,7 @@ export type Loaded<T> =
 interface ApiResult<T> {
   data?: T;
   error?: {
+    code?: string;
     title?: string;
     detail?: string | null;
     hint?: string | null;
@@ -29,6 +30,7 @@ export async function load<T>(what: string, call: () => Promise<ApiResult<T>>): 
     return {
       status: response.status,
       error: {
+        code: error?.code,
         title: error?.title,
         detail: error?.detail ?? undefined,
         hint:

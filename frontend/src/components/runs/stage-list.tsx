@@ -17,6 +17,7 @@ import type {
   GeoOutput,
   IngestOutput,
   MineOutput,
+  VisualizeOutput,
   ProfileOutput,
   RunStatus,
   SensitivityOutput,
@@ -71,7 +72,7 @@ export function StageList({ stages, runStatus }: { stages: Stage[]; runStatus: R
                 <p className="tabular text-xs text-muted">
                   <span className="sr-only">Status: </span>
                   {DISPLAY_LABEL[state]}
-                  {stage.reused ? " (reused from an earlier attempt)" : ""}
+                  {stage.reused ? " (reused, not run again)" : ""}
                   {stage.started_at && stage.finished_at && state === "succeeded" ? (
                     <> in {formatDuration(stage.started_at, stage.finished_at)}</>
                   ) : null}
@@ -107,6 +108,8 @@ function Summary({ stage }: { stage: Stage }) {
       return <MineSummary output={stage.output as MineOutput} />;
     case "sensitivity":
       return <SensitivitySummary output={stage.output as SensitivityOutput} />;
+    case "visualize":
+      return <VisualizeSummary output={stage.output as VisualizeOutput} />;
     default:
       return null;
   }
@@ -169,6 +172,18 @@ function FeaturesSummary({ output }: { output: FeaturesOutput }) {
       </dl>
       {kept.length > 0 ? <p className="text-sm">Kept: {kept.join(", ")}.</p> : null}
     </div>
+  );
+}
+
+function VisualizeSummary({ output }: { output: VisualizeOutput }) {
+  const withheld = (output.charts_withheld ?? 0) + (output.maps_withheld ?? 0);
+  return (
+    <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+      <Fact label="Charts checked" value={count(output.charts_verified)} />
+      <Fact label="Maps" value={count(output.maps)} />
+      <Fact label="Values recomputed" value={count(output.claims_checked)} />
+      <Fact label="Withheld" value={count(withheld)} />
+    </dl>
   );
 }
 

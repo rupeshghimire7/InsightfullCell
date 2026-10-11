@@ -34,6 +34,7 @@ export {
   Hourglass,
   Info,
   ListChecks,
+  Printer,
   LockSimple,
   MapPin,
   Percent,

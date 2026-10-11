@@ -22,7 +22,7 @@ export function AppShell({
       >
         Skip to main content
       </a>
-      <header className="sticky top-0 z-10 border-b border-border bg-surface/95 backdrop-blur-sm supports-[backdrop-filter]:bg-surface/85">
+      <header className="sticky top-0 z-10 border-b border-border bg-surface/95 backdrop-blur-sm supports-[backdrop-filter]:bg-surface/85 print:hidden">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
           <div className="flex min-w-0 items-center gap-4 sm:gap-6">
             <Link href={home} className="flex shrink-0 items-center gap-2 font-semibold">
@@ -48,7 +48,7 @@ export function AppShell({
           <UserMenu email={email} />
         </div>
       </header>
-      <main id="main" className="mx-auto max-w-6xl px-4 pt-8 pb-16">
+      <main id="main" className="mx-auto max-w-6xl px-4 pt-8 pb-16 print:max-w-none print:p-0">
         {children}
       </main>
     </>

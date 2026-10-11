@@ -1,9 +1,12 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { axe } from "../axe";
 import { ReportChart } from "@/components/report/report-chart";
-import { ReportView, reportLinks } from "@/components/report/report-view";
+import { ReportActions } from "@/components/report/report-nav";
+import { ReportView } from "@/components/report/report-view";
+import { SimplifiedNotice } from "@/components/report/simplified-notice";
+import type { RunsApi } from "@/lib/runs/api";
 import {
   effectLabel,
   formatChartValue,
@@ -13,15 +16,16 @@ import {
 } from "@/lib/report/format";
 import { chart, report } from "../lib/report-fixtures";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push, refresh: vi.fn() }) }));
 
 describe("ReportView", () => {
   it("shows answers with linked sources, the review and the privacy note", async () => {
     const { container } = render(<ReportView report={report()} orgId="org-1" />);
     expect(screen.getByText("Do complaints differ by state?")).toBeInTheDocument();
     expect(screen.getByText("You asked for this")).toBeInTheDocument();
-    const links = screen.getAllByRole("link", { name: "Source F1" });
-    expect(links[0]).toHaveAttribute("href", "#fact-F1");
+    const chips = screen.getAllByRole("button", { name: "Source F1" });
+    expect(chips[0]).toHaveAttribute("aria-haspopup", "dialog");
     expect(screen.getByText("NSW complaint rate is 31%.")).toBeInTheDocument();
     expect(screen.getByText("1 question could not be answered")).toBeInTheDocument();
     expect(screen.getByText("You removed 1 question.")).toBeInTheDocument();
@@ -39,8 +43,13 @@ describe("ReportView", () => {
             provider: "gemini",
             model: "gemini-3.8-flash",
             fallback_reason: null,
-            sentences_kept: 1,
+            sentences_kept: 3,
             sentences_dropped: 2,
+            sentences_repaired: 1,
+            simplified: false,
+            retryable: false,
+            judge: "off",
+            rejected: { stray_number: 2, causal: 1 },
           },
           requests: [],
           removed_questions: 0,
@@ -48,7 +57,10 @@ describe("ReportView", () => {
         orgId="org-1"
       />,
     );
-    expect(screen.getByText(/2 removed because/)).toBeInTheDocument();
+    expect(document.body.textContent).toMatch(
+      /3 sentences kept; 1 of them after one rewrite; 2 sentences replaced by the fact's own wording\. Rejections by check: numbers 2, claims of cause 1\./,
+    );
+    expect(screen.queryByText("Narration simplified")).not.toBeInTheDocument();
     expect(screen.getByText("You approved the plan as proposed.")).toBeInTheDocument();
     rerender(<ReportView report={report({ summary: [], sections: [] })} orgId="org-1" />);
     expect(screen.getByText(/None of the questions could be answered/)).toBeInTheDocument();
@@ -93,12 +105,16 @@ describe("ReportView", () => {
     expect(screen.getByText(/None of the 1 extra measures/)).toBeInTheDocument();
   });
 
-  it("links to the plan and the recipe", () => {
-    render(reportLinks("org-1", "run-1"));
+  it("links to the plan and the recipe, and exports the report", () => {
+    render(<ReportActions orgId="org-1" runId="run-1" />);
     expect(screen.getByRole("link", { name: "Show recipe" })).toHaveAttribute(
       "href",
       "/o/org-1/runs/run-1/recipe",
     );
+    const download = screen.getByRole("link", { name: "Download HTML" });
+    expect(download).toHaveAttribute("href", "/api/backend/v1/runs/run-1/report.html");
+    expect(download).toHaveAttribute("download");
+    expect(screen.getByRole("button", { name: "Print or save as PDF" })).toBeInTheDocument();
   });
 });
 
@@ -188,5 +204,69 @@ describe("chart formatting", () => {
   it("picks round ticks", () => {
     expect(niceTicks(0, 100)).toEqual([0, 25, 50, 75, 100]);
     expect(niceTicks(5, 5)).toEqual([5]);
+  });
+});
+
+describe("SimplifiedNotice", () => {
+  const simplified = {
+    source: "engine" as const,
+    provider: null,
+    model: null,
+    fallback_reason: "breaker_open",
+    sentences_kept: 0,
+    sentences_dropped: 0,
+    sentences_repaired: 0,
+    simplified: true,
+    retryable: true,
+    judge: "off" as const,
+  };
+
+  it("says the narration was simplified, and why, at the top of the report", async () => {
+    const { container } = render(
+      <ReportView report={report({ narration: simplified })} orgId="org-1" />,
+    );
+    expect(screen.getByRole("heading", { name: "Narration simplified" })).toBeInTheDocument();
+    const notice = screen.getByRole("region", { name: "Narration simplified" });
+    expect(within(notice).getByText(/the model provider has been failing/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Write the answers again" })).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  }, 20_000);
+
+  it("writes the answers again and opens the run's progress", async () => {
+    const renarrate = vi.fn().mockResolvedValue({ id: "run-1" });
+    const api = { renarrate } as unknown as RunsApi;
+    render(
+      <SimplifiedNotice
+        orgId="org-1"
+        runId="run-1"
+        rowVersion={7}
+        reason="timeout"
+        retryable
+        api={api}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Write the answers again" }));
+    expect(renarrate).toHaveBeenCalledWith("run-1", 7);
+    expect(push).toHaveBeenCalledWith("/o/org-1/runs/run-1");
+  });
+
+  it("offers no retry when narrating again cannot help, and shows a refusal", async () => {
+    const { rerender } = render(
+      <SimplifiedNotice orgId="o" runId="r" rowVersion={1} reason="budget_run" retryable={false} />,
+    );
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    const renarrate = vi.fn().mockRejectedValue(new Error("offline"));
+    rerender(
+      <SimplifiedNotice
+        orgId="o"
+        runId="r"
+        rowVersion={1}
+        reason="timeout"
+        retryable
+        api={{ renarrate } as unknown as RunsApi}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Write the answers again" }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
   });
 });

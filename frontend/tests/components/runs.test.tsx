@@ -61,7 +61,7 @@ describe("StageList", () => {
     rerender(
       <StageList runStatus="running" stages={[stage({ status: "succeeded", reused: true })]} />,
     );
-    expect(screen.getByText(/reused from an earlier attempt/)).toBeInTheDocument();
+    expect(screen.getByText(/reused, not run again/)).toBeInTheDocument();
   });
 
   it("lists ingest warnings and copes with a missing summary", () => {

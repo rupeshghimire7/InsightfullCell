@@ -36,6 +36,10 @@ function problemAlert(page: Page) {
 }
 
 async function expectNoAxeViolations(page: Page) {
+  // Entrance animations fade content in; contrast is measured on the settled page.
+  await page.waitForFunction(() =>
+    document.getAnimations().every((a) => a.playState !== "running"),
+  );
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag22aa"])
     .analyze();
@@ -192,6 +196,12 @@ test("sign in, upload, deduplicate, sign out", async ({ page }) => {
   }, runId);
   expect(crossOrigin).toBe("refused");
 
+  // --- a finished run opens on its dashboard
+  await page.getByRole("link", { name: "Open the dashboard" }).click();
+  await expect(page.getByRole("heading", { name: /^Dashboard: / })).toBeVisible();
+  await expect(page.getByText("Charts checked")).toBeVisible();
+  await expectNoAxeViolations(page);
+
   // --- the run is listed, and the dataset shows its latest analysis
   await page.getByRole("link", { name: "Runs", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Runs", level: 1 })).toBeVisible();
@@ -322,4 +332,83 @@ test("a messy file pauses for review, and approving continues the analysis", asy
   ).toBeVisible();
   await expect(page.locator("main")).not.toContainText("@"); // personal data never shown
   await expectNoAxeViolations(page);
+
+  // --- a citation chip opens its fact in the inspector; Escape closes it
+  await page
+    .getByRole("button", { name: /^Source F\d+$/ })
+    .first()
+    .click();
+  const inspector = page.getByRole("dialog");
+  await expect(inspector).toContainText("Content hash");
+  await expectNoAxeViolations(page);
+  await page.keyboard.press("Escape");
+  await expect(inspector).toBeHidden();
+
+  // --- the dashboard: tiles, checked charts and the map of states, no personal data
+  await page.getByRole("link", { name: "Dashboard", exact: true }).click();
+  await expect(page.getByRole("heading", { name: /^Dashboard: / })).toBeVisible();
+  await expect(page.getByRole("img", { name: /by State/ }).first()).toBeVisible();
+  await expect(page.locator("main")).not.toContainText("@");
+  await expectNoAxeViolations(page);
+
+  // --- the report downloads as one HTML file that runs nothing
+  const download = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Download HTML" }).click();
+  const file = await download;
+  expect(file.suggestedFilename()).toMatch(/^report-[a-z0-9-]+\.html$/);
+  const html = await readFile((await file.path()) ?? "", "utf8");
+  expect(html.toLowerCase()).not.toContain("<script");
+  expect(html).toContain("<svg");
+});
+
+test("explore one group of a finished analysis", async ({ page }) => {
+  test.setTimeout(300_000);
+  await register(page, `e2e-explore-${Date.now()}@example.com`, "E2E Explorer");
+  const regions = ["North", "South", "East", "West"];
+  const rows = Array.from({ length: 240 }, (_, i) => {
+    const region = regions[i % 4];
+    const visits = 5 + ((i * 7) % 11);
+    const sales = 100 + 6 * visits + (region === "North" ? 60 : 0) + ((i * 13) % 17);
+    return `O${i},${region},${i % 3 ? "Online" : "Store"},${visits},${sales}`;
+  });
+  const file = Buffer.from(`order_id,region,channel,visits,sales\n${rows.join("\n")}\n`);
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "Regional sales.csv",
+    mimeType: "text/csv",
+    buffer: file,
+  });
+  await expect(page.getByText("Saved")).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("link", { name: "Regional sales" }).click();
+  await page.getByRole("button", { name: "Analyse newest version" }).click();
+  await expect(page.getByRole("heading", { name: "Your review is needed" })).toBeVisible({
+    timeout: 90_000,
+  });
+  await page.getByRole("link", { name: "Review changes" }).click();
+  await page.getByRole("button", { name: "Approve and continue" }).click();
+  await expect(page.getByText("Your report is ready")).toBeVisible({ timeout: 90_000 });
+
+  // --- one group explored on its own (an exploratory sub-run), then its dashboard
+  await page.getByRole("link", { name: "Open the report" }).click();
+  await expect(page.getByRole("heading", { name: "In short" })).toBeVisible();
+  await page.getByText("Show the numbers and explore a group").first().click();
+  await page
+    .getByRole("button", { name: /^Explore .+ on its own$/ })
+    .first()
+    .click();
+  const confirm = page.getByRole("dialog");
+  await expect(confirm).toContainText("marked exploratory");
+  await expectNoAxeViolations(page);
+  await confirm.getByRole("button", { name: "Start exploring" }).click();
+  await expect(page).toHaveURL(/\/runs\/[0-9a-f-]{36}$/);
+  await expect(page.getByText(/^Exploring a subset/)).toBeVisible();
+  await expect(page.getByText("Your report is ready")).toBeVisible({ timeout: 90_000 });
+  await page.getByRole("link", { name: "Open the dashboard" }).click();
+  await expect(page.getByText("Exploratory analysis of a subset")).toBeVisible();
+  await expectNoAxeViolations(page);
+  await page.getByRole("link", { name: "Open the full analysis" }).click();
+  await expect(page.getByRole("heading", { name: "Explorations of this analysis" })).toBeVisible();
+
+  // The runs list says which run explores what.
+  await page.getByRole("link", { name: "Runs", exact: true }).click();
+  await expect(page.getByRole("row", { name: /Exploring region/ })).toHaveCount(1);
 });

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   ChartBar,
   Compass,
+  SquaresFour,
   Hourglass,
   Info,
   Pulse,
@@ -178,9 +179,29 @@ export function RunProgress({
   const waiting = Number(cleanPlan?.output?.waiting_for_review ?? 0);
   const planHref = `/o/${orgId}/runs/${runId}/plan`;
   const reportHref = `/o/${orgId}/runs/${runId}/report`;
+  const dashboardHref = `/o/${orgId}/runs/${runId}/dashboard`;
+  // Reports written since dashboards exist say how many tiles they assembled.
+  const hasDashboard = run.stages.find((s) => s.name === "report")?.output?.tiles !== undefined;
+  const scope = run.drilldown;
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <div className="min-w-0 space-y-6">
+        {scope ? (
+          <p className="flex items-start gap-2 rounded-panel border border-warning/40 bg-warning/10 p-3 text-sm">
+            <Compass aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning" />
+            <span>
+              Exploring a subset: the rows where {scope.column} is {scope.values.join(", ")}. It
+              reuses the approved plan and cleaning of{" "}
+              <Link
+                href={`/o/${orgId}/runs/${scope.parent_run_id}/report`}
+                className="font-medium text-accent underline underline-offset-2"
+              >
+                the full analysis
+              </Link>
+              ; its findings are exploratory.
+            </span>
+          </p>
+        ) : null}
         {view.note ? (
           <p className="enter flex items-start gap-2 rounded-panel border border-border bg-surface p-3 text-sm">
             <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-accent" />
@@ -259,6 +280,15 @@ export function RunProgress({
               </div>
               {planned ? (
                 <div className="flex flex-wrap gap-x-5 gap-y-2">
+                  {hasDashboard ? (
+                    <Link
+                      href={dashboardHref}
+                      className="inline-flex items-center gap-1.5 font-medium text-accent underline underline-offset-2"
+                    >
+                      <SquaresFour aria-hidden="true" className="size-4" />
+                      Open the dashboard
+                    </Link>
+                  ) : null}
                   <Link
                     href={reportHref}
                     className="inline-flex items-center gap-1.5 font-medium text-accent underline underline-offset-2"

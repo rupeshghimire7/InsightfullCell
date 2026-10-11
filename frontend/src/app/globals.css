@@ -157,7 +157,8 @@
 @layer utilities {
   .enter {
     animation: enter 320ms var(--ease-out-soft) both;
-    animation-delay: calc(var(--i, 0) * 40ms);
+    /* Staggered, but capped: the tenth item of a long list is not kept waiting. */
+    animation-delay: calc(min(var(--i, 0), 8) * 40ms);
   }
   .press {
     transition:
@@ -179,5 +180,51 @@
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+/*
+ * Print (and "Save as PDF"): the page as a document. Chrome, buttons and the in-page index are
+ * left out; collapsed tables are opened; light colours whatever the screen theme; sections do not break
+ * across pages where avoidable.
+ */
+@media print {
+  :root,
+  :root[data-theme="dark"] {
+    color-scheme: light;
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-raised: #ffffff;
+    --border: #d6d3cc;
+    --text: #1f2421;
+    --text-muted: #4f534f;
+    --accent: #2f6f62;
+    --chart: #1a8a6f;
+  }
+  html {
+    font-size: 12px;
+  }
+  /* Citation chips stay: every number keeps its source on paper too. */
+  button:not([data-citation]),
+  nav,
+  dialog {
+    display: none !important;
+  }
+  /* Collapsed sections are opened just before printing (PrintButton). */
+  details > summary {
+    display: none;
+  }
+  article,
+  figure,
+  li {
+    break-inside: avoid;
+  }
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+  a {
+    color: inherit;
+    text-decoration: none;
   }
 }

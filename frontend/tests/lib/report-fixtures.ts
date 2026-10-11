@@ -1,4 +1,4 @@
-import type { Chart, Report } from "@/lib/report/types";
+import type { Chart, Dashboard, Report, ReportMap } from "@/lib/report/types";
 import { run } from "./runs-fixtures";
 
 export function chart(overrides: Partial<Chart> = {}): Chart {
@@ -99,6 +99,10 @@ export function report(overrides: Partial<Report> = {}): Report {
       fallback_reason: "disabled",
       sentences_kept: 2,
       sentences_dropped: 0,
+      sentences_repaired: 0,
+      simplified: false,
+      retryable: false,
+      judge: "off",
     },
     preparation: {
       applied: [{ label: "Trim spaces", column: "State", rows: 2 }],
@@ -119,4 +123,126 @@ export function report(overrides: Partial<Report> = {}): Report {
     },
     ...overrides,
   } as Report;
+}
+
+export function regionMap(overrides: Partial<ReportMap> = {}): ReportMap {
+  return {
+    title: "Share of rows by State",
+    value_label: "Share of rows",
+    value_format: "percent",
+    unit: null,
+    place_label: "State",
+    level: "state",
+    country: "AU",
+    width: 100,
+    height: 80,
+    note: "Hatched: fewer than ten rows, too few to show on their own.",
+    drill_column: "state",
+    reference_set: "ne-5.1.2",
+    check: { claims: 3, verified: true },
+    regions: [
+      {
+        code: "AU-NSW",
+        name: "New South Wales",
+        path: "M10 10L40 10L40 40Z",
+        status: "value",
+        value: 0.6,
+        n: 60,
+        key: "New South Wales",
+      },
+      {
+        code: "AU-VIC",
+        name: "Victoria",
+        path: "M50 10L80 10L80 40Z",
+        status: "value",
+        value: 0.35,
+        n: 35,
+        key: "Victoria",
+      },
+      {
+        code: "AU-TAS",
+        name: "Tasmania",
+        path: "M50 50L60 50L60 60Z",
+        status: "few_rows",
+        value: null,
+        n: null,
+        key: null,
+      },
+      {
+        code: "AU-WA",
+        name: "Western Australia",
+        path: "M5 50L20 50L20 70Z",
+        status: "no_rows",
+        value: null,
+        n: null,
+        key: null,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+export function dashboard(overrides: Partial<Dashboard> = {}): Dashboard {
+  const base = report();
+  const section = base.sections[0]!;
+  return {
+    run: base.run,
+    revision: 1,
+    created_at: "2026-10-10T00:00:00Z",
+    title: "Dashboard: jobs.csv",
+    dataset_name: "jobs.csv",
+    glance: {
+      rows: 1200,
+      columns: 8,
+      tests: 12,
+      reliable: 3,
+      charts_verified: 2,
+      charts_withheld: 1,
+    },
+    tiles: [
+      {
+        fact_id: "F1",
+        analysis_id: section.analysis_id,
+        label: "Highest group share: NSW",
+        value: "31%",
+        question: section.question,
+        statement: "NSW complaint rate is 31%.",
+        tier: "strong",
+      },
+    ],
+    insights: [
+      {
+        analysis_id: section.analysis_id,
+        question: section.question,
+        kind_label: "Comparison",
+        chart: chart({ check: { claims: 2, verified: true }, drill_column: "State" }),
+        map: null,
+        facts: ["F1"],
+      },
+    ],
+    maps: [
+      {
+        analysis_id: "places:State",
+        question: "Where are the rows, by State?",
+        kind_label: "Places",
+        chart: null,
+        map: regionMap(),
+        facts: ["F1"],
+      },
+    ],
+    gallery: [],
+    questions: [
+      {
+        analysis_id: section.analysis_id,
+        question: section.question,
+        answer: section.answer,
+        written_by: "engine",
+      },
+    ],
+    exploratory: false,
+    scope: null,
+    narration: base.narration,
+    facts: base.facts,
+    ...overrides,
+  };
 }

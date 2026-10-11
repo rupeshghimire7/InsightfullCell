@@ -98,6 +98,14 @@ export interface FeaturesOutput {
 }
 
 /** What the mine stage reports. */
+export interface VisualizeOutput {
+  charts_verified?: number;
+  charts_withheld?: number;
+  maps?: number;
+  maps_withheld?: number;
+  claims_checked?: number;
+}
+
 export interface MineOutput {
   questions?: number;
   answered?: number;

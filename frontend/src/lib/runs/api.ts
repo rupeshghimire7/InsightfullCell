@@ -35,6 +35,19 @@ export const runsApi = {
       method: "POST",
       headers: { "If-Match": `"${rowVersion}"` },
     }),
+  /** Write a simplified report's words again (after a model outage); 202 with the run. */
+  renarrate: (runId: string, rowVersion: number) =>
+    call<Run>(`/api/backend/v1/runs/${encodeURIComponent(runId)}/report:renarrate`, {
+      method: "POST",
+      headers: { "If-Match": `"${rowVersion}"` },
+    }),
+  /** Explore a subset of a finished analysis: 202 with the new (exploratory) run. */
+  drilldown: (runId: string, input: { column: string; values: string[]; idempotencyKey: string }) =>
+    call<Run>(`/api/backend/v1/runs/${encodeURIComponent(runId)}/drilldowns`, {
+      method: "POST",
+      headers: { "Idempotency-Key": input.idempotencyKey },
+      body: JSON.stringify({ column: input.column, values: input.values }),
+    }),
   ticket: (runId: string) =>
     call<EventTicket>(`/api/runs/${encodeURIComponent(runId)}/events-ticket`, { method: "POST" }),
 };

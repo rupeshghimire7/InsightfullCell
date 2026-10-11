@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ReportView, reportLinks } from "@/components/report/report-view";
+import { Explorations } from "@/components/report/explorations";
+import { ReportActions, ReportTabs } from "@/components/report/report-nav";
+import { ReportView } from "@/components/report/report-view";
 import { BackLink } from "@/components/ui/back-link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Hourglass } from "@/components/ui/icons";
@@ -11,6 +13,7 @@ import { ProblemAlert } from "@/components/ui/problem-alert";
 import { serverApi } from "@/lib/backend";
 import { isUuid } from "@/lib/ids";
 import { load } from "@/lib/load";
+import { reportContext } from "@/lib/report/context";
 
 export const metadata: Metadata = { title: "Report" };
 
@@ -60,6 +63,7 @@ export default async function ReportPage({
     );
   }
   const report = result.data;
+  const context = await reportContext(runId, !!report.scope);
   return (
     <>
       <PageHeader
@@ -70,9 +74,20 @@ export default async function ReportPage({
             Written <LocalTime iso={report.created_at} />
           </span>
         }
-        actions={reportLinks(org, runId)}
+        actions={<ReportActions orgId={org} runId={runId} />}
       />
-      <ReportView report={report} orgId={org} />
+      <ReportTabs
+        orgId={org}
+        runId={runId}
+        current="report"
+        hasDashboard={report.has_dashboard ?? false}
+      />
+      <ReportView
+        report={report}
+        orgId={org}
+        canExplore={context.canExplore}
+        explorations={<Explorations orgId={org} runs={context.explorations} />}
+      />
     </>
   );
 }

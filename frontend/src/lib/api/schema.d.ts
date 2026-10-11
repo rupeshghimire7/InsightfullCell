@@ -155,6 +155,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/runs/{run_id}/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The finished run's dashboard: tiles, top charts, maps, suggested questions
+         * @description Assembled with the report from the same facts (409 ``report-not-ready`` before the run
+         *     finishes; 409 ``dashboard-not-available`` for a report written before dashboards).
+         */
+        get: operations["get_dashboard_v1_runs__run_id__dashboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs/{run_id}/drilldowns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Explore a subset of a finished analysis (an exploratory sub-run)
+         * @description Keeps only the rows whose ``column`` is one of ``values`` (a chart's ``drill_column``
+         *     and its points' ``key``) and analyses them again with the run's approved plan and
+         *     cleaning; no review, no planning. The new run's facts are labelled exploratory. ``409``
+         *     when the run has not finished, is itself a drill-down, or was made by an earlier version;
+         *     ``422`` when the column cannot be explored.
+         */
+        post: operations["create_drilldown_v1_runs__run_id__drilldowns_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/runs/{run_id}/events": {
         parameters: {
             query?: never;
@@ -253,6 +298,50 @@ export interface paths {
         get: operations["get_report_v1_runs__run_id__report_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs/{run_id}/report.html": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the report as one self-contained HTML file (print it to save a PDF)
+         * @description The report, its dashboard tiles, charts and maps as SVG, and every fact with its test and
+         *     content hash. Nothing in the file loads or runs anything.
+         */
+        get: operations["export_report_v1_runs__run_id__report_html_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs/{run_id}/report:renarrate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Write a simplified report's words again, after a model outage
+         * @description Only for a finished run whose report says ``narration.retryable`` (it was written from
+         *     templates because the model was unavailable). The facts, tests and charts are reused; only
+         *     the words are written again, as a new revision of the report. ``409``
+         *     ``narration-not-retryable`` otherwise.
+         */
+        post: operations["renarrate_report_v1_runs__run_id__report_renarrate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -411,6 +500,16 @@ export interface components {
              */
             source: "rules" | "model" | "person";
         };
+        /** ChartCheckOut */
+        ChartCheckOut: {
+            /**
+             * Claims
+             * @description Values recomputed from the data, one query each.
+             */
+            claims: number;
+            /** Verified */
+            verified: boolean;
+        };
         /** ChartItemOut */
         ChartItemOut: {
             /** Aggregate */
@@ -435,6 +534,13 @@ export interface components {
         };
         /** ChartOut */
         ChartOut: {
+            /** @description The visualize stage's check (absent on older reports). */
+            check?: components["schemas"]["ChartCheckOut"] | null;
+            /**
+             * Drill Column
+             * @description The column a point's key belongs to, if explorable.
+             */
+            drill_column?: string | null;
             /**
              * Kind
              * @enum {string}
@@ -453,6 +559,13 @@ export interface components {
              * @enum {string}
              */
             value_format: "number" | "percent" | "count" | "strength" | "signed_percent";
+            /**
+             * Vega Lite
+             * @description The chart as a Vega-Lite spec, values inline.
+             */
+            vega_lite?: {
+                [key: string]: unknown;
+            } | null;
             /** X Label */
             x_label: string;
             /** Y Label */
@@ -460,6 +573,11 @@ export interface components {
         };
         /** ChartPointOut */
         ChartPointOut: {
+            /**
+             * Key
+             * @description The group this point is, as the data writes it, when it can be explored on its own (POST /v1/runs/{id}/drilldowns with the chart's drill_column).
+             */
+            key?: string | null;
             /** Label */
             label: string;
             /** N */
@@ -626,6 +744,19 @@ export interface components {
             /** Part Number */
             part_number: number;
         };
+        /** CreateDrilldownRequest */
+        CreateDrilldownRequest: {
+            /**
+             * Column
+             * @description The chart's drill_column.
+             */
+            column: string;
+            /**
+             * Values
+             * @description Point keys (or map region keys) to keep.
+             */
+            values: string[];
+        };
         /** CreateRunRequest */
         CreateRunRequest: {
             /**
@@ -656,6 +787,45 @@ export interface components {
              * @description Exact size of the file in bytes.
              */
             size_bytes: number;
+        };
+        /**
+         * DashboardOut
+         * @description A finished run's dashboard: headline tiles, top charts, maps, a gallery and suggested
+         *     questions answered with the report's verified sentences. Every number cites a fact.
+         */
+        DashboardOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Dataset Name */
+            dataset_name: string;
+            /** Exploratory */
+            exploratory: boolean;
+            /**
+             * Facts
+             * @description The facts the dashboard cites.
+             */
+            facts: components["schemas"]["FactOut"][];
+            /** Gallery */
+            gallery: components["schemas"]["InsightOut"][];
+            glance: components["schemas"]["GlanceOut"];
+            /** Insights */
+            insights: components["schemas"]["InsightOut"][];
+            /** Maps */
+            maps: components["schemas"]["InsightOut"][];
+            narration: components["schemas"]["NarrationOut"];
+            /** Questions */
+            questions: components["schemas"]["SuggestedQuestionOut"][];
+            /** Revision */
+            revision: number;
+            run: components["schemas"]["RunOut"];
+            scope?: components["schemas"]["ScopeOut"] | null;
+            /** Tiles */
+            tiles: components["schemas"]["TileOut"][];
+            /** Title */
+            title: string;
         };
         /** DatasetDetailOut */
         DatasetDetailOut: {
@@ -734,6 +904,21 @@ export interface components {
             unit: string | null;
         };
         /**
+         * DrilldownOut
+         * @description The subset a drill-down analyses, chosen from its parent's report.
+         */
+        DrilldownOut: {
+            /** Column */
+            column: string;
+            /**
+             * Parent Run Id
+             * Format: uuid
+             */
+            parent_run_id: string;
+            /** Values */
+            values: string[];
+        };
+        /**
          * EventType
          * @description What the browser is told. Payloads never carry cell values.
          * @enum {string}
@@ -791,6 +976,12 @@ export interface components {
              * @description SHA-256 of the fact's content, fixed when stored.
              */
             content_hash: string;
+            /**
+             * Exploratory
+             * @description Computed in a drill-down: a lead to check, not a conclusion.
+             * @default false
+             */
+            exploratory: boolean;
             /** Id */
             id: string;
             /** Kind */
@@ -888,6 +1079,34 @@ export interface components {
             /** Message */
             message: string;
         };
+        /** GlanceOut */
+        GlanceOut: {
+            /** Charts Verified */
+            charts_verified: number;
+            /** Charts Withheld */
+            charts_withheld: number;
+            /** Columns */
+            columns: number;
+            /** Reliable */
+            reliable: number;
+            /** Rows */
+            rows: number;
+            /** Tests */
+            tests: number;
+        };
+        /** InsightOut */
+        InsightOut: {
+            /** Analysis Id */
+            analysis_id: string;
+            chart?: components["schemas"]["ChartOut"] | null;
+            /** Facts */
+            facts: string[];
+            /** Kind Label */
+            kind_label: string;
+            map?: components["schemas"]["MapOut"] | null;
+            /** Question */
+            question: string;
+        };
         /**
          * LatestRunOut
          * @description The most recent analysis of a dataset, for lists.
@@ -909,6 +1128,73 @@ export interface components {
             stage: string | null;
             status: components["schemas"]["RunStatus"];
         };
+        /** MapOut */
+        MapOut: {
+            check: components["schemas"]["ChartCheckOut"] | null;
+            /** Country */
+            country: string | null;
+            /** Drill Column */
+            drill_column: string | null;
+            /** Height */
+            height: number;
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "country" | "state";
+            /** Note */
+            note: string | null;
+            /**
+             * Place Label
+             * @description The place column's display name.
+             * @default
+             */
+            place_label: string;
+            /** Reference Set */
+            reference_set: string;
+            /** Regions */
+            regions: components["schemas"]["MapRegionOut"][];
+            /** Title */
+            title: string;
+            /** Unit */
+            unit: string | null;
+            /**
+             * Value Format
+             * @enum {string}
+             */
+            value_format: "number" | "percent" | "count" | "strength" | "signed_percent";
+            /** Value Label */
+            value_label: string;
+            /** Width */
+            width: number;
+        };
+        /** MapRegionOut */
+        MapRegionOut: {
+            /**
+             * Code
+             * @description ISO 3166 code.
+             */
+            code: string;
+            /** Key */
+            key: string | null;
+            /** N */
+            n: number | null;
+            /** Name */
+            name: string;
+            /**
+             * Path
+             * @description SVG path data in the map's view box (fill-rule evenodd).
+             */
+            path: string;
+            /**
+             * Status
+             * @description few_rows: fewer than ten rows, drawn hatched and without a number.
+             * @enum {string}
+             */
+            status: "value" | "few_rows" | "no_rows";
+            /** Value */
+            value: number | null;
+        };
         /** MeOut */
         MeOut: {
             /**
@@ -929,14 +1215,51 @@ export interface components {
         NarrationOut: {
             /** Fallback Reason */
             fallback_reason: string | null;
+            /**
+             * Flagged
+             * @description Parts written from templates because too many sentences failed the checks.
+             */
+            flagged?: string[];
+            /**
+             * Judge
+             * @default off
+             * @enum {string}
+             */
+            judge: "off" | "on";
             /** Model */
             model: string | null;
+            /** Prompt Version */
+            prompt_version?: string | null;
             /** Provider */
             provider: string | null;
+            /**
+             * Rejected
+             * @description Rejected sentences per check: form, citation, stray_number, direction, strength, causal, condition, judge.
+             */
+            rejected?: {
+                [key: string]: number;
+            };
+            /**
+             * Retryable
+             * @description Narrating again (report:renarrate) may succeed.
+             * @default false
+             */
+            retryable: boolean;
             /** Sentences Dropped */
             sentences_dropped: number;
             /** Sentences Kept */
             sentences_kept: number;
+            /**
+             * Sentences Repaired
+             * @default 0
+             */
+            sentences_repaired: number;
+            /**
+             * Simplified
+             * @description The model was unavailable for some part, so it was written from the facts' own statements.
+             * @default false
+             */
+            simplified: boolean;
             /**
              * Source
              * @enum {string}
@@ -1166,6 +1489,12 @@ export interface components {
             /** Features */
             features?: components["schemas"]["FeatureNoteOut"][];
             /**
+             * Has Dashboard
+             * @description GET /dashboard is available.
+             * @default false
+             */
+            has_dashboard: boolean;
+            /**
              * Highlights
              * @description Fact ids of the best findings, best first.
              */
@@ -1181,6 +1510,8 @@ export interface components {
             /** Revision */
             revision: number;
             run: components["schemas"]["RunOut"];
+            /** @description Set for a drill-down: the subset, findings exploratory. */
+            scope?: components["schemas"]["ScopeOut"] | null;
             /** Sections */
             sections: components["schemas"]["ReportSectionOut"][];
             /** Summary */
@@ -1188,6 +1519,7 @@ export interface components {
             /** Title */
             title: string;
             understanding: components["schemas"]["UnderstandingOut"];
+            visuals?: components["schemas"]["VisualsOut"] | null;
         };
         /** ReportSectionOut */
         ReportSectionOut: {
@@ -1196,6 +1528,12 @@ export interface components {
             /** Answer */
             answer: components["schemas"]["SentenceOut"][];
             chart: components["schemas"]["ChartOut"] | null;
+            /**
+             * Chart Withheld
+             * @description A chart was drawn but one of its values did not match.
+             * @default false
+             */
+            chart_withheld: boolean;
             /** Columns */
             columns: components["schemas"]["ColumnRefOut"][];
             /** Facts */
@@ -1204,6 +1542,8 @@ export interface components {
             kind: string;
             /** Kind Label */
             kind_label: string;
+            /** Maps */
+            maps?: components["schemas"]["MapOut"][];
             /** Question */
             question: string;
             /** Requested By Person */
@@ -1338,6 +1678,8 @@ export interface components {
              * Format: uuid
              */
             dataset_version_id: string;
+            /** @description Set for an exploratory run of a subset of another run. */
+            drilldown?: components["schemas"]["DrilldownOut"] | null;
             /**
              * Events Url
              * @description Server-Sent Events stream of this run's progress.
@@ -1414,6 +1756,8 @@ export interface components {
              * Format: uuid
              */
             dataset_version_id: string;
+            /** @description Set for an exploratory run of a subset of another run. */
+            drilldown?: components["schemas"]["DrilldownOut"] | null;
             failure: components["schemas"]["RunFailureOut"] | null;
             /** Finished At */
             finished_at: string | null;
@@ -1450,6 +1794,22 @@ export interface components {
              */
             updated_at: string;
         };
+        /**
+         * ScopeOut
+         * @description The subset a drill-down analysed.
+         */
+        ScopeOut: {
+            /** Column */
+            column: string;
+            /** Display Name */
+            display_name: string;
+            /** Parent Run Id */
+            parent_run_id: string;
+            /** Rows */
+            rows: number;
+            /** Values */
+            values: string[];
+        };
         /** SentenceOut */
         SentenceOut: {
             /**
@@ -1459,6 +1819,11 @@ export interface components {
             citations: string[];
             /** Text */
             text: string;
+            /**
+             * Written By
+             * @description model: written by the language model and verified; engine: the fact's own statement (a template).
+             */
+            written_by?: ("model" | "engine") | null;
         };
         /** StageOut */
         StageOut: {
@@ -1492,6 +1857,20 @@ export interface components {
          * @enum {string}
          */
         StageStatus: "pending" | "running" | "succeeded" | "failed";
+        /** SuggestedQuestionOut */
+        SuggestedQuestionOut: {
+            /** Analysis Id */
+            analysis_id: string;
+            /**
+             * Answer
+             * @description The report's verified sentences.
+             */
+            answer: components["schemas"]["SentenceOut"][];
+            /** Question */
+            question: string;
+            /** Written By */
+            written_by?: ("model" | "engine") | null;
+        };
         /** TargetOut */
         TargetOut: {
             /** Column */
@@ -1508,6 +1887,29 @@ export interface components {
              * @enum {string}
              */
             source: "rules" | "model" | "person";
+        };
+        /** TileOut */
+        TileOut: {
+            /** Analysis Id */
+            analysis_id: string;
+            /** Fact Id */
+            fact_id: string;
+            /** Label */
+            label: string;
+            /** Question */
+            question: string;
+            /** Statement */
+            statement: string;
+            /**
+             * Tier
+             * @enum {string}
+             */
+            tier: "descriptive" | "strong" | "supported" | "inconclusive";
+            /**
+             * Value
+             * @description One of the fact's own numbers, as the fact writes it.
+             */
+            value: string;
         };
         /** UnderstandingOut */
         UnderstandingOut: {
@@ -1584,6 +1986,20 @@ export interface components {
             id: string;
             /** Sha256 */
             sha256: string;
+        };
+        /** VisualsOut */
+        VisualsOut: {
+            /** Charts */
+            charts: number;
+            /**
+             * Claims
+             * @description Chart and map values recomputed from the data.
+             */
+            claims: number;
+            /** Maps */
+            maps: number;
+            /** Withheld */
+            withheld: number;
         };
     };
     responses: never;
@@ -1898,6 +2314,8 @@ export interface operations {
             query?: {
                 /** @description Only runs of this dataset. */
                 dataset_id?: string | null;
+                /** @description Only drill-downs (explorations) of this run. */
+                parent_run_id?: string | null;
                 limit?: number;
                 cursor?: string | null;
             };
@@ -2216,6 +2634,177 @@ export interface operations {
             };
             /** @description Precondition Failed */
             412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_dashboard_v1_runs__run_id__dashboard_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_drilldown_v1_runs__run_id__drilldowns_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Client-generated unique key; makes retries of this request safe. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDrilldownRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2622,6 +3211,183 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    export_report_v1_runs__run_id__report_html_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The report, with no scripts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                    "text/html": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                    "text/html": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                    "text/html": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                    "text/html": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                    "text/html": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                    "text/html": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    renarrate_report_v1_runs__run_id__report_renarrate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The run's row_version (ETag) you last saw; 412 if it changed since. */
+                "If-Match"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
                 headers: {
                     [name: string]: unknown;
                 };
