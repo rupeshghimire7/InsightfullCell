@@ -97,7 +97,8 @@ class ReportStage:
                 if op.decision is Decision.ACCEPTED
             ),
             not_applied=sum(1 for op in operations if op.decision is not Decision.ACCEPTED),
-            reviewed_by_person=ctx.inputs.cleaning_policy != "auto_safe",
+            reviewed_by_person=ctx.inputs.cleaning_policy != "auto_safe"
+            and ctx.inputs.review_mode != "auto",
         )
         sections = [
             SectionInput(

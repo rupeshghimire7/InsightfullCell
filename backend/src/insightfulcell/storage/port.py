@@ -67,6 +67,10 @@ class ObjectStore(Protocol):
     async def delete(self, key: str) -> None:
         """Delete an object; deleting a missing object is not an error."""
 
+    async def delete_prefix(self, prefix: str) -> int:
+        """Delete every object whose key starts with ``prefix`` (which ends with ``/``) and
+        return how many there were."""
+
     async def download_file(self, key: str, dest: Path) -> None:
         """Stream an object to a local file (the worker reads uploads this way). Raises
         ``ObjectNotFoundError`` when there is no such object."""

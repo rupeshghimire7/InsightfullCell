@@ -2,9 +2,11 @@
 
 Two shapes:
 
-- ``ProposedPlan``: what a planner returns. The model's reply is parsed into it with lenient
-  types (no length limits), so one over-long string does not throw away a whole plan; the
-  validator then accepts or rejects each item with a reason.
+- ``ProposedPlan``: what a planner returns. The model's reply is parsed into it leniently, so
+  one bad item never throws away a whole plan: no length limits, a value left out where null
+  would do counts as null (some providers omit null properties), and an item that still does
+  not fit is dropped and counted (``dropped``). The validator then accepts or rejects each
+  remaining item with a reason.
 - ``ResolvedPlan``: the merged, validated plan a run is frozen with. Every item says where it
   came from (rules, model, person) and has a stable id, so a person's choices (a feature
   switched off) carry over to the next run of the same dataset.
@@ -18,9 +20,19 @@ from __future__ import annotations
 import hashlib
 import json
 from enum import StrEnum
+from functools import cache
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
+)
+from pydantic.json_schema import SkipJsonSchema
 
 from insightfulcell.engine.types import Meaning
 
@@ -134,7 +146,8 @@ class DictionaryProposal(_Proposal):
     display_name: str = Field(description="Short human name, no numbers unless in the column name.")
     description: str = Field(description="One sentence: what a value means. No numbers.")
     unit: str | None = Field(
-        description="Only if the column name or the values show it (for example $, %, km)."
+        default=None,
+        description="Only if the column name or the values show it (for example $, %, km).",
     )
     meaning: Meaning
     role: Role
@@ -143,7 +156,7 @@ class DictionaryProposal(_Proposal):
 class TargetProposal(_Proposal):
     column: str = Field(json_schema_extra=COLUMN)
     kind: TargetKind
-    rationale: str
+    rationale: str = ""
 
 
 class ValuePair(_Proposal):
@@ -153,35 +166,37 @@ class ValuePair(_Proposal):
 
 class CleaningProposal(_Proposal):
     kind: CleaningKind
-    column: str | None = Field(json_schema_extra=COLUMN, description="Null for drop_duplicates.")
-    value_map: list[ValuePair] | None = Field(description="merge_categories only.")
-    lower_bound: float | None = Field(description="set_invalid_to_null only.")
-    upper_bound: float | None = Field(description="set_invalid_to_null only.")
-    strategy: Literal["median", "mode"] | None = Field(description="impute only.")
-    reason: str
+    column: str | None = Field(
+        default=None, json_schema_extra=COLUMN, description="Null for drop_duplicates."
+    )
+    value_map: list[ValuePair] | None = Field(default=None, description="merge_categories only.")
+    lower_bound: float | None = Field(default=None, description="set_invalid_to_null only.")
+    upper_bound: float | None = Field(default=None, description="set_invalid_to_null only.")
+    strategy: Literal["median", "mode"] | None = Field(default=None, description="impute only.")
+    reason: str = ""
 
 
 class FeatureProposal(_Proposal):
     kind: FeatureKind
     columns: list[str] = Field(json_schema_extra=COLUMNS)
-    part: DatePart | None = Field(description="date_part only.")
-    bins: int | None = Field(description="band only, 2 to 10.")
-    reason: str
+    part: DatePart | None = Field(default=None, description="date_part only.")
+    bins: int | None = Field(default=None, description="band only, 2 to 10.")
+    reason: str = ""
 
 
 class AnalysisProposal(_Proposal):
     kind: MinerKind
     columns: list[str] = Field(json_schema_extra=COLUMNS)
     question: str = Field(description="The question this analysis answers, in plain words.")
-    priority: int = Field(description="1 (most important) to 3.")
+    priority: int = Field(default=2, description="1 (most important) to 3.")
 
 
 class ChartProposal(_Proposal):
     kind: ChartKind
     x: str = Field(json_schema_extra=COLUMN)
-    y: str | None = Field(json_schema_extra=COLUMN)
-    group: str | None = Field(json_schema_extra=COLUMN)
-    aggregate: Aggregate | None
+    y: str | None = Field(default=None, json_schema_extra=COLUMN)
+    group: str | None = Field(default=None, json_schema_extra=COLUMN)
+    aggregate: Aggregate | None = None
     title: str
 
 
@@ -209,19 +224,69 @@ class ProposedPlan(_Proposal):
     """What a planner returns: the model through the gateway, or the rule-based planner."""
 
     dataset_summary: str = Field(
-        description="Two sentences: what one row is and what the table is for."
+        default="", description="Two sentences: what one row is and what the table is for."
     )
-    domain: str = Field(description="A few words, e.g. 'subscription retention'.")
-    grain: str = Field(description="What one row represents.")
-    dictionary: list[DictionaryProposal]
-    target: TargetProposal | None
-    cleaning: list[CleaningProposal]
-    features: list[FeatureProposal]
-    analyses: list[AnalysisProposal]
-    charts: list[ChartProposal]
-    relevance: list[RelevanceProposal]
+    domain: str = Field(default="", description="A few words, e.g. 'subscription retention'.")
+    grain: str = Field(default="", description="What one row represents.")
+    dictionary: list[DictionaryProposal] = Field(default_factory=list)
+    target: TargetProposal | None = None
+    cleaning: list[CleaningProposal] = Field(default_factory=list)
+    features: list[FeatureProposal] = Field(default_factory=list)
+    analyses: list[AnalysisProposal] = Field(default_factory=list)
+    charts: list[ChartProposal] = Field(default_factory=list)
+    relevance: list[RelevanceProposal] = Field(default_factory=list)
     #: One per request of the person's, when there were requests (the model fills it).
     request_outcomes: list[RequestOutcomeProposal] = Field(default_factory=list)
+    #: Items of the answer that did not fit and were left out, per list (never sent to or
+    #: asked of the model, never stored).
+    dropped: SkipJsonSchema[dict[str, int]] = Field(default_factory=dict, exclude=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _keep_what_fits(cls, data: Any) -> Any:
+        """Drop the list items (and the target) that do not fit, instead of the whole plan."""
+        if not isinstance(data, dict):
+            return data
+        out = dict(data)
+        dropped: dict[str, int] = {}
+        for name, item_type in _ITEM_TYPES.items():
+            items = out.get(name)
+            if not isinstance(items, list):
+                continue
+            kept = [item for item in items if _fits(item_type, item)]
+            if len(kept) != len(items):
+                dropped[name] = len(items) - len(kept)
+                out[name] = kept
+        target = out.get("target")
+        if target is not None and not _fits(TargetProposal, target):
+            dropped["target"] = 1
+            out["target"] = None
+        out["dropped"] = dropped
+        return out
+
+
+_ITEM_TYPES: dict[str, type[BaseModel]] = {
+    "dictionary": DictionaryProposal,
+    "cleaning": CleaningProposal,
+    "features": FeatureProposal,
+    "analyses": AnalysisProposal,
+    "charts": ChartProposal,
+    "relevance": RelevanceProposal,
+    "request_outcomes": RequestOutcomeProposal,
+}
+
+
+@cache
+def _adapter(item_type: type[BaseModel]) -> TypeAdapter[BaseModel]:
+    return TypeAdapter(item_type)
+
+
+def _fits(item_type: type[BaseModel], item: Any) -> bool:
+    try:
+        _adapter(item_type).validate_python(item)
+    except ValidationError:
+        return False
+    return True
 
 
 # --------------------------------------------------------------------------- resolved
@@ -245,7 +310,7 @@ class ResolvedColumn(_Resolved):
 class ResolvedTarget(_Resolved):
     column: str
     kind: TargetKind
-    rationale: str
+    rationale: str = ""
     source: Source
 
 

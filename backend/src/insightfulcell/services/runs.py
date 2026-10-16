@@ -9,6 +9,7 @@ may send the ``row_version`` they last saw (``If-Match``) to refuse acting on a 
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -45,6 +46,9 @@ from insightfulcell.services.dto import RunAccepted, RunDetail, RunEventBatch, R
 logger = logging.getLogger(__name__)
 
 REPORT_STAGE = "report"
+#: A worker that has not sent a heartbeat for this long is taken to be gone (Procrastinate sends
+#: one every 10 seconds).
+WORKER_HEARTBEAT_SECONDS = 60.0
 
 _IDEMPOTENCY_PATH = "/v1/runs"
 
@@ -64,12 +68,14 @@ class RunService:
         dataset_id: UUID,
         dataset_version_id: UUID | None,
         idempotency_key: str,
+        review_mode: str = "auto",
     ) -> RunAccepted:
         require(principal, Action.RUN_CREATE)
         digest = idempotency.request_hash(
             {
                 "dataset_id": str(dataset_id),
                 "dataset_version_id": str(dataset_version_id) if dataset_version_id else None,
+                "review_mode": review_mode,
             }
         )
         async with self._db.transaction(principal) as session:
@@ -97,6 +103,7 @@ class RunService:
                     org_id=principal.org_id,
                     dataset_id=dataset_id,
                     created_at=datetime.now(UTC),
+                    review_mode=review_mode,
                 ),
             )
             session.add(run)
@@ -176,7 +183,12 @@ class RunService:
     async def get_run(self, principal: Principal, run_id: UUID) -> RunDetail:
         require(principal, Action.RUN_READ)
         async with self._db.transaction(principal) as session:
-            return await run_store.run_detail(session, principal.org_id, run_id)
+            detail = await run_store.run_detail(session, principal.org_id, run_id)
+        if detail.run.status == RunStatus.QUEUED.value:
+            alive = await self._queue.workers_alive(WORKER_HEARTBEAT_SECONDS)
+            if alive is False:
+                detail = replace(detail, waiting_for_worker=True)
+        return detail
 
     async def list_runs(
         self,

@@ -126,6 +126,15 @@ class DatasetDetailOut(_Out):
     versions: list[VersionOut]
 
 
+class DeletedOut(_Out):
+    """What a delete removed. The rows are gone already; the files follow later."""
+
+    run_ids: list[UUID] = Field(description="Every run that was deleted with it.")
+    files_removed_after: datetime = Field(
+        description="When the worker removes the files from storage (STORAGE_PURGE_AFTER_DAYS)."
+    )
+
+
 # --------------------------------------------------------------------------- runs
 
 
@@ -133,6 +142,11 @@ class CreateRunRequest(_In):
     dataset_id: UUID
     dataset_version_id: UUID | None = Field(
         default=None, description="The version to analyse. Defaults to the newest version."
+    )
+    review_mode: Literal["auto", "manual"] = Field(
+        default="auto",
+        description="auto: every change that would wait for a review is applied and the run "
+        "goes on to the report without stopping. manual: the run stops for your review.",
     )
 
 
@@ -187,11 +201,19 @@ class RunSummaryOut(_Out):
     drilldown: DrilldownOut | None = Field(
         default=None, description="Set for an exploratory run of a subset of another run."
     )
+    review_mode: Literal["auto", "manual"] = Field(
+        default="manual", description="Whether the run stops for a person's review."
+    )
 
 
 class RunOut(RunSummaryOut):
     stages: list[StageOut]
     events_url: str = Field(description="Server-Sent Events stream of this run's progress.")
+    waiting_for_worker: bool = Field(
+        default=False,
+        description="The run is queued and no worker is running, so it cannot start until "
+        "one does.",
+    )
 
 
 class RunPageOut(_Out):

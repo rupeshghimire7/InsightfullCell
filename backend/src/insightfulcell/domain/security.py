@@ -25,9 +25,11 @@ class Action(StrEnum):
     UPLOAD_CREATE = "upload:create"
     UPLOAD_READ = "upload:read"
     DATASET_READ = "dataset:read"
+    DATASET_DELETE = "dataset:delete"
     RUN_CREATE = "run:create"
     RUN_READ = "run:read"
     RUN_CANCEL = "run:cancel"
+    RUN_DELETE = "run:delete"
     CLEANING_DECIDE = "cleaning:decide"
     DRILLDOWN_CREATE = "drilldown:create"
 
@@ -39,10 +41,13 @@ POLICY: Final[dict[Action, frozenset[Role]]] = {
     Action.UPLOAD_CREATE: _WRITERS,
     Action.UPLOAD_READ: _WRITERS,
     Action.DATASET_READ: _ALL,
+    # Deleting removes the work of everyone in the organisation: the people who may add it.
+    Action.DATASET_DELETE: _WRITERS,
     # Starting, retrying and cancelling analyses is analyst work; viewers read results only.
     Action.RUN_CREATE: _WRITERS,
     Action.RUN_READ: _ALL,
     Action.RUN_CANCEL: _WRITERS,
+    Action.RUN_DELETE: _WRITERS,
     # Approving cleaning changes is analyst work; viewers read plans but never decide them.
     Action.CLEANING_DECIDE: _WRITERS,
     # Exploring a subset starts a new (exploratory) run: analyst work.

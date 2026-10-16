@@ -164,6 +164,70 @@ class TestPlan:
             assert response.status_code == 404
 
 
+class TestReviewModes:
+    """Automatic (the default) never stops; manual stops, and an approval without decisions
+    keeps every change that waited as it is (ADR-036)."""
+
+    async def test_an_automatic_run_applies_every_waiting_change_and_goes_on(
+        self,
+        client: httpx.AsyncClient,
+        auth: AuthHeaders,
+        alice: Identity,
+        executor: RunExecutor,
+        owner_sql: OwnerSql,
+    ) -> None:
+        dataset_id = (await create_dataset(client, auth(alice), data=MESSY))["dataset"]["id"]
+        started = await start_run(client, auth(alice), dataset_id, review_mode=None)
+        assert started.json()["review_mode"] == "auto"
+        run_id = started.json()["id"]
+        assert (
+            await executor.execute(UUID(run_id), alice.org_id, Phase.A) is Outcome.PHASE_COMPLETED
+        )
+        rows = owner_sql(
+            "SELECT o.decision, o.notice FROM app.cleaning_ops o "
+            "JOIN app.cleaning_plans p ON p.id = o.plan_id WHERE p.run_id = :id AND o.lossy",
+            id=run_id,
+        )
+        assert rows  # the messy sample has lossy changes, none waiting
+        assert {decision for decision, _ in rows} == {"accepted"}
+        assert ("accepted", "Applied automatically (automatic mode).") in rows
+        status = owner_sql("SELECT status FROM app.cleaning_plans WHERE run_id = :id", id=run_id)
+        assert status == [("approved",)]
+        run = (await client.get(f"/v1/runs/{run_id}", headers=auth(alice))).json()
+        assert (run["phase"], run["review_mode"]) == ("B", "auto")
+        assert run["status"] != "awaiting_review"
+        assert run["review_requested_at"] is None
+
+    async def test_approving_without_decisions_keeps_everything_as_it_is(
+        self,
+        client: httpx.AsyncClient,
+        auth: AuthHeaders,
+        alice: Identity,
+        executor: RunExecutor,
+        owner_sql: OwnerSql,
+    ) -> None:
+        run_id, _ = await reviewed_run(client, auth(alice), executor, alice.org_id)
+        plan = await plan_of(client, auth(alice), run_id)
+        assert plan["run"]["review_mode"] == "manual"
+        waiting = {d["operation_id"] for d in decisions(plan)}
+        assert waiting
+        response = await client.post(
+            f"/v1/runs/{run_id}/cleaning-plan:decide",
+            headers={**auth(alice), "If-Match": f'"{plan["run"]["row_version"]}"'},
+            json={"cleaning_revision": 1, "decisions": []},
+        )
+        assert response.status_code == 200, response.text
+        rows = owner_sql(
+            "SELECT o.op_id, o.decision, o.notice FROM app.cleaning_ops o "
+            "JOIN app.cleaning_plans p ON p.id = o.plan_id "
+            "WHERE p.run_id = :id AND p.revision = 2",
+            id=run_id,
+        )
+        kept = {op_id: (d, notice) for op_id, d, notice in rows if op_id in waiting}
+        assert set(kept.values()) == {("rejected", "Kept as is: approved without a decision.")}
+        assert len(kept) == len(waiting)
+
+
 class TestDecide:
     async def test_guards_then_a_decision_continues_the_run(
         self,
@@ -178,11 +242,6 @@ class TestDecide:
         url = f"/v1/runs/{run_id}/cleaning-plan:decide"
         version = f'"{plan["run"]["row_version"]}"'
         everything = decisions(plan)
-
-        incomplete = await client.post(
-            url, headers=auth(alice), json={"cleaning_revision": 1, "decisions": everything[1:]}
-        )
-        assert (incomplete.status_code, incomplete.json()["code"]) == (422, "decisions-incomplete")
 
         stale = await client.post(
             url, headers=auth(alice), json={"cleaning_revision": 2, "decisions": everything}

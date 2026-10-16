@@ -10,8 +10,12 @@ Per call:
    security event (never the value).
 4. **Budgets.** Per run (input tokens) and per organisation per month (all tokens).
 5. **Call** with the provider's structured output, a timeout, and up to ``max_attempts``
-   attempts with exponential backoff for transient errors.
-6. **Validate** the answer with Pydantic on our side; an invalid answer is another attempt.
+   attempts with exponential backoff for transient errors. Calls are spaced to
+   ``requests_per_minute`` when set (free tiers). A rate limit is waited out for as long as the
+   provider asks (up to ``max_retry_wait_seconds``, ``max_rate_limit_waits`` times) and does not
+   count as a failure; a quota used up for longer stops every call until it comes back.
+6. **Validate** the answer with Pydantic on our side; an invalid answer is another attempt, and
+   the log says which fields failed (never their content).
 7. **Account** every attempt in ``llm_calls`` (purpose, model, prompt version, tokens, cost,
    latency, outcome). No prompt text is stored.
 
@@ -74,7 +78,7 @@ class CallRecord:
     prompt_id: str
     prompt_version: str
     attempt: int
-    outcome: str  # ok, invalid, timeout, rate_limited, provider_error, refused, blocked
+    outcome: str  # ok, invalid, timeout, rate_limited, provider_error, refused, blocked, ...
     input_tokens: int
     output_tokens: int
     cost_usd: Decimal | None
@@ -100,6 +104,13 @@ class GatewayConfig:
     max_output_tokens: int = 16_000
     prices: Mapping[str, tuple[float, float]] | None = None
     backoff_base_seconds: float = 1.0
+    #: Spacing between calls (0: none). Free tiers allow a few requests a minute.
+    requests_per_minute: int = 0
+    #: Rate limits waited out per call, and the longest single wait worth taking.
+    max_rate_limit_waits: int = 4
+    max_retry_wait_seconds: float = 60.0
+    #: How long calls stop after a quota is used up when the provider does not say.
+    quota_pause_seconds: float = 3_600.0
 
 
 def payload_blocked(text: str, sensitive: frozenset[str]) -> str | None:
@@ -151,6 +162,9 @@ class LLMGateway:
         self._breaker = breaker
         self._sleep = sleep
         self._clock = clock
+        self._pace_lock = asyncio.Lock()
+        self._next_slot = 0.0
+        self._quota_until: float | None = None
 
     @property
     def identity(self) -> tuple[str, str] | None:
@@ -158,11 +172,14 @@ class LLMGateway:
             return None
         return self._transport.provider, self._config.models["strong"]
 
-    async def complete(self, request: ModelRequest) -> ModelReply:
+    async def complete(self, request: ModelRequest) -> ModelReply:  # noqa: PLR0912, PLR0915
+        # The whole call policy (budgets, retries, waits) reads best in one place.
         transport = self._transport
         if transport is None:
             raise ModelUnavailable("disabled", "No language model is configured.")
         model = self._config.models[TIER[request.purpose]]
+        if self._quota_until is not None and self._clock() < self._quota_until:
+            raise ModelUnavailable("quota_exhausted", "The model provider's quota is used up.")
         if not self._breaker.allow():
             raise ModelUnavailable("breaker_open", "The model provider has been failing.")
 
@@ -192,7 +209,10 @@ class LLMGateway:
             )
 
         reason = "provider_error"
-        for attempt in range(1, self._config.max_attempts + 1):
+        attempt = failures = waits = 0
+        while failures < self._config.max_attempts:
+            attempt += 1
+            await self._pace()
             started = self._clock()
             try:
                 raw = await transport.generate(
@@ -204,25 +224,48 @@ class LLMGateway:
                 )
             except TransientProviderError as exc:
                 reason = exc.reason
-                self._breaker.failure()
                 await self._record(
                     request, transport.provider, model, attempt, reason, None, started
                 )
-                if attempt < self._config.max_attempts:
-                    await self._sleep(self._backoff(attempt))
+                if reason == "rate_limited":
+                    too_long = self._config.max_retry_wait_seconds
+                    if exc.retry_after is not None and exc.retry_after > too_long:
+                        # Asked to wait longer than a run should: a quota, in all but name.
+                        self._pause_for_quota(exc.retry_after, transport.provider, model)
+                        raise ModelUnavailable(
+                            "quota_exhausted", "The model provider's quota is used up."
+                        ) from exc
+                    wait = self._rate_limit_wait(exc.retry_after, waits)
+                    if wait is None:
+                        raise ModelUnavailable(
+                            "rate_limited", "The model provider kept refusing: too many requests."
+                        ) from exc
+                    waits += 1
+                    await self._sleep(wait)
+                    continue  # the provider's limit, not a fault: no failure counted
+                self._breaker.failure()
+                failures += 1
+                if failures < self._config.max_attempts:
+                    await self._sleep(self._backoff(failures))
                 continue
             except PermanentProviderError as exc:
-                self._breaker.failure()
                 await self._record(
                     request, transport.provider, model, attempt, exc.reason, None, started
                 )
+                if exc.reason == "quota_exhausted":
+                    self._pause_for_quota(exc.retry_after, transport.provider, model)
+                    raise ModelUnavailable(
+                        "quota_exhausted", "The model provider's quota is used up."
+                    ) from exc
+                self._breaker.failure()
                 raise ModelUnavailable(
                     exc.reason, "The model provider refused the request."
                 ) from exc
 
-            parsed, cause = _parse(raw, request)
+            parsed, cause, problems = _parse(raw, request)
             if parsed is None:
                 reason = "invalid_output"
+                failures += 1
                 # Why, without any of the answer's content (it may echo the prompt).
                 logger.warning(
                     "model answer unusable",
@@ -231,6 +274,7 @@ class LLMGateway:
                         "cause": cause,
                         "attempt": attempt,
                         "output_tokens": raw.output_tokens,
+                        "errors": problems,
                     },
                 )
                 await self._record(
@@ -248,6 +292,45 @@ class LLMGateway:
                 attempts=attempt,
             )
         raise ModelUnavailable(reason, "No usable answer from the model.")
+
+    async def check(self) -> None:
+        """Prove the configured key and models work, without spending tokens. Raises the
+        transport's ``PermanentProviderError`` (bad key, unknown model) or
+        ``TransientProviderError`` (the provider could not be reached)."""
+        if self._transport is None:
+            return
+        for model in sorted(set(self._config.models.values())):
+            await self._transport.check(model)
+
+    async def _pace(self) -> None:
+        """Space calls ``60 / requests_per_minute`` seconds apart across every caller."""
+        rpm = self._config.requests_per_minute
+        if rpm <= 0:
+            return
+        async with self._pace_lock:
+            now = self._clock()
+            wait = self._next_slot - now
+            self._next_slot = max(now, self._next_slot) + 60.0 / rpm
+        if wait > 0:
+            await self._sleep(wait)
+
+    def _rate_limit_wait(self, retry_after: float | None, waits: int) -> float | None:
+        """How long to wait before trying again, or ``None`` to give up."""
+        if waits >= self._config.max_rate_limit_waits:
+            return None
+        wait = retry_after if retry_after is not None else self._backoff(waits + 1) * 4
+        if wait > self._config.max_retry_wait_seconds:
+            return None
+        return wait + random.uniform(0, 0.5)  # noqa: S311  (jitter, not security)
+
+    def _pause_for_quota(self, retry_after: float | None, provider: str, model: str) -> None:
+        pause = retry_after if retry_after is not None else self._config.quota_pause_seconds
+        pause = min(pause, self._config.quota_pause_seconds)
+        self._quota_until = self._clock() + pause
+        logger.error(
+            "model quota used up: calls stop until it resets",
+            extra={"provider": provider, "model": model, "pause_seconds": round(pause)},
+        )
 
     def _backoff(self, attempt: int) -> float:
         base = self._config.backoff_base_seconds * float(2 ** (attempt - 1))
@@ -289,18 +372,28 @@ class LLMGateway:
             logger.exception("could not record an llm call", extra={"outcome": outcome})
 
 
-def _parse(raw: RawReply, request: ModelRequest) -> tuple[BaseModel | None, str]:
-    """The validated answer, or ``None`` and why: truncated, empty, not_json or schema."""
+def _parse(raw: RawReply, request: ModelRequest) -> tuple[BaseModel | None, str, list[str]]:
+    """The validated answer, or ``None``, why (truncated, empty, not_json or schema) and, for a
+    schema mismatch, where: field paths and error kinds only, never values."""
     if raw.truncated:
-        return None, "truncated"
+        return None, "truncated", []
     if not raw.text.strip():
-        return None, "empty"
+        return None, "empty", []
     text = _FENCE.sub("", raw.text.strip())
     try:
         data = json.loads(text)
     except (json.JSONDecodeError, TypeError):
-        return None, "not_json"
+        return None, "not_json", []
     try:
-        return request.response_model.model_validate(data), "ok"
-    except ValidationError:
-        return None, "schema"
+        return request.response_model.model_validate(data), "ok", []
+    except ValidationError as exc:
+        return None, "schema", schema_problems(exc)
+
+
+def schema_problems(exc: ValidationError, limit: int = 12) -> list[str]:
+    """``"dictionary.#.unit: missing"``-style lines, list positions folded into ``#``."""
+    seen: dict[str, None] = {}
+    for error in exc.errors(include_input=False, include_url=False):
+        path = ".".join("#" if isinstance(part, int) else str(part) for part in error["loc"])
+        seen.setdefault(f"{path or '(root)'}: {error['type']}", None)
+    return list(seen)[:limit]

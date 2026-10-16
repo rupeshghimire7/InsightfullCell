@@ -275,6 +275,7 @@ class UnderstandStage:
                 "output_tokens": reply.output_tokens,
                 "card_tokens": estimate_tokens(card),
                 "rejected": len(rejected),
+                "dropped": dict(reply.data.dropped),
             },
         )
         return accepted, provenance(

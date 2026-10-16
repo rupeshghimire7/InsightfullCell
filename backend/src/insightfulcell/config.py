@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     s3_access_key_id: SecretStr | None = None
     s3_secret_access_key: SecretStr | None = None
     s3_force_path_style: bool = False
+    # Files of a deleted run or dataset stay in storage this many days (then the worker removes
+    # them); the database rows go at once (ADR-037). 0 removes them at the next hourly sweep.
+    storage_purge_after_days: int = Field(default=7, ge=0, le=3_650)
 
     # --- uploads (FR-INGEST-01)
     max_upload_bytes: int = Field(default=250 * MIB, ge=1)
@@ -73,8 +76,10 @@ class Settings(BaseSettings):
     worker_scratch_dir: Path | None = None  # default: the system temp directory
     idempotency_key_ttl_hours: int = Field(default=24, ge=1)
 
-    # --- LLM gateway (ADR-031). One provider at a time; without its API key the model is off
-    # and every run uses the rule-based planner (a complete, correct fallback).
+    # --- LLM gateway (ADR-031, ADR-036). One provider at a time. Choosing a provider in the
+    # environment (LLM_PROVIDER) requires its API key: start-up fails without it, and the
+    # worker checks the key and models before taking work. Left at the default without a key,
+    # the model is off and every run uses the rule-based planner (a complete, correct fallback).
     llm_provider: Literal["gemini", "openai", "anthropic", "deepseek", "none"] = "gemini"
     # Override the provider's default model for each tier ("strong" plans and narrates, "fast"
     # routes questions and judges). Defaults live in ``llm/providers/__init__.py``.
@@ -91,6 +96,12 @@ class Settings(BaseSettings):
     llm_run_input_token_budget: int = Field(default=120_000, ge=1_000)
     llm_breaker_failures: int = Field(default=5, ge=1, le=100)
     llm_breaker_open_seconds: float = Field(default=60.0, gt=0, le=3_600)
+    # Rate limits: calls are spaced to this many a minute (0: no spacing; set it to a free
+    # tier's limit), and a refused call waits as long as the provider asks, up to the longest
+    # wait below, this many times. A longer wait means a used-up quota: calls stop until then.
+    llm_requests_per_minute: int = Field(default=0, ge=0, le=10_000)
+    llm_rate_limit_waits: int = Field(default=4, ge=0, le=20)
+    llm_max_retry_wait_seconds: float = Field(default=60.0, gt=0, le=600)
     # Narration (Phase 5): report sections narrated at the same time, and the judge (a second
     # model that can only reject a verified sentence). The judge stays off until its spike
     # shows it catches what the verifier misses without rejecting good sentences.
@@ -149,6 +160,19 @@ class Settings(BaseSettings):
     def psycopg_conninfo(self) -> str:
         """``DATABASE_URL`` for direct psycopg connections (queue, LISTEN)."""
         return self.database_url.replace("postgresql+psycopg://", "postgresql://", 1)
+
+    @model_validator(mode="after")
+    def _chosen_provider_has_a_key(self) -> Settings:
+        if "llm_provider" not in self.model_fields_set or self.llm_provider == "none":
+            return self
+        key = self.llm_api_key
+        if key is None or not key.get_secret_value().strip():
+            name = f"{self.llm_provider.upper()}_API_KEY"
+            raise ValueError(
+                f"LLM_PROVIDER is {self.llm_provider!r} but {name} is not set: add the key, "
+                "or set LLM_PROVIDER=none to plan and write with rules only"
+            )
+        return self
 
     @model_validator(mode="after")
     def _distinct_audiences(self) -> Settings:

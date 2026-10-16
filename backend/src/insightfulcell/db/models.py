@@ -394,3 +394,16 @@ class RunReport(Base):
     prompt_version: Mapped[str | None] = mapped_column(Text, default=None)
     dashboard: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=_NOW)
+
+
+class StoragePurge(Base):
+    """Files of a deleted run or dataset, removed from storage once ``purge_after`` passes."""
+
+    __tablename__ = "storage_purges"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    org_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True))
+    key: Mapped[str] = mapped_column(Text)
+    is_prefix: Mapped[bool] = mapped_column(Boolean)
+    purge_after: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=_NOW)

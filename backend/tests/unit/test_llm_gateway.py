@@ -65,6 +65,9 @@ class FakeTransport:
             raise reply
         return reply
 
+    async def check(self, model: str) -> None:
+        del model
+
 
 @dataclass
 class FakeLedger:
@@ -126,15 +129,88 @@ class TestGateway:
 
     async def test_transient_errors_retry_with_backoff(self) -> None:
         transport = FakeTransport(
-            [TransientProviderError("rate_limited"), TransientProviderError("timeout"), ok()]
+            [TransientProviderError("provider_error"), TransientProviderError("timeout"), ok()]
         )
         gw, ledger, slept = gateway(transport)
         reply = await gw.complete(request())
         assert reply.attempts == 3
-        assert [c.outcome for c in ledger.calls] == ["rate_limited", "timeout", "ok"]
+        assert [c.outcome for c in ledger.calls] == ["provider_error", "timeout", "ok"]
         assert len(slept) == 2
         assert 1.0 <= slept[0] <= 1.5
         assert 2.0 <= slept[1] <= 3.0
+
+    async def test_a_rate_limit_waits_as_asked_and_is_not_a_failure(self) -> None:
+        limited = [TransientProviderError("rate_limited", retry_after=20.0) for _ in range(4)]
+        transport = FakeTransport([*limited, ok()])
+        gw, ledger, slept = gateway(transport)
+        reply = await gw.complete(request())
+        assert reply.attempts == 5  # four waits did not use up the three attempts
+        assert [round(s) for s in slept] == [20, 20, 20, 20]
+        assert gw._breaker.state == "closed"
+        assert [c.outcome for c in ledger.calls][-1] == "ok"
+
+    async def test_a_rate_limit_that_never_lifts_falls_back(self) -> None:
+        transport = FakeTransport([TransientProviderError("rate_limited") for _ in range(5)])
+        gw, _, slept = gateway(transport, max_rate_limit_waits=2)
+        with pytest.raises(ModelUnavailable) as caught:
+            await gw.complete(request())
+        assert caught.value.reason == "rate_limited"
+        assert len(slept) == 2
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            PermanentProviderError("quota_exhausted", retry_after=78_301.0),
+            TransientProviderError("rate_limited", retry_after=3_600.0),
+        ],
+        ids=["daily-quota", "long-wait"],
+    )
+    async def test_a_used_up_quota_stops_every_call_until_it_resets(self, error: Exception) -> None:
+        transport = FakeTransport([error, ok()])
+        now = [1_000.0]
+        gw, _, slept = gateway(transport, quota_pause_seconds=7_200.0)
+        gw._clock = lambda: now[0]
+        for _ in range(2):
+            with pytest.raises(ModelUnavailable) as caught:
+                await gw.complete(request())
+            assert caught.value.reason == "quota_exhausted"
+        assert len(transport.calls) == 1  # the second call never reached the provider
+        assert slept == []
+        now[0] += 7_201.0
+        assert (await gw.complete(request())).data == Answer(answer="yes")
+
+    async def test_calls_are_spaced_to_the_requests_per_minute(self) -> None:
+        now = [0.0]
+        gw, _, slept = gateway(FakeTransport([ok(), ok(), ok()]), requests_per_minute=30)
+        gw._clock = lambda: now[0]
+        for _ in range(3):
+            await gw.complete(request())
+        assert slept == [2.0, 4.0]  # three calls at once: 0 s, 2 s and 4 s
+
+    async def test_a_schema_mismatch_names_the_fields_not_the_values(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        transport = FakeTransport([ok('{"wrong": "secret"}')] * 3)
+        gw, _, _ = gateway(transport)
+        with (
+            caplog.at_level("WARNING", logger="insightfulcell.llm.gateway"),
+            pytest.raises(ModelUnavailable),
+        ):
+            await gw.complete(request())
+        errors = [r.errors for r in caplog.records if r.getMessage() == "model answer unusable"]  # type: ignore[attr-defined]
+        assert errors[0] == ["answer: missing"]
+        assert "secret" not in caplog.text
+
+    async def test_check_looks_up_every_model(self) -> None:
+        looked_up: list[str] = []
+
+        class Checked(FakeTransport):
+            async def check(self, model: str) -> None:
+                looked_up.append(model)
+
+        gw, _, _ = gateway(Checked([]))
+        await gw.check()
+        assert looked_up == ["gemini-3.5-flash-lite", "gemini-3.8-flash"]
 
     async def test_an_invalid_answer_is_another_attempt_then_a_fallback(
         self, caplog: pytest.LogCaptureFixture
@@ -289,8 +365,19 @@ class TestProviderRegistry:
         assert transport is not None
         assert transport.provider == provider
 
+    def test_a_chosen_provider_needs_its_key(self) -> None:
+        with pytest.raises(ValueError, match="LLM_PROVIDER is 'openai' but OPENAI_API_KEY"):
+            settings(llm_provider="openai")
+        with pytest.raises(ValueError, match="GEMINI_API_KEY is not set"):
+            settings(llm_provider="gemini", gemini_api_key=SecretStr("  "))
+        assert build_transport(settings(llm_provider="none")) is None
+
     def test_models_can_be_overridden(self) -> None:
-        chosen = settings(llm_provider="anthropic", llm_model_strong="claude-opus-5-5")
+        chosen = settings(
+            llm_provider="anthropic",
+            anthropic_api_key=SecretStr("k"),
+            llm_model_strong="claude-opus-5-5",
+        )
         assert models_for(chosen) == {"strong": "claude-opus-5-5", "fast": "claude-haiku-5-5"}
 
     def test_prices_must_be_well_formed(self) -> None:
@@ -365,6 +452,60 @@ class TestGeminiAdapter:
             with pytest.raises(error):
                 await generate(transport)
 
+    @pytest.mark.parametrize(
+        ("quota_id", "expected", "reason", "retry_after"),
+        [
+            ("GenerateRequestsPerMinutePerProjectPerModel-FreeTier", TransientProviderError,
+             "rate_limited", 35.0),
+            ("GenerateRequestsPerDayPerProjectPerModel-FreeTier", PermanentProviderError,
+             "quota_exhausted", 35.0),
+        ],
+    )  # fmt: skip
+    async def test_a_429_says_how_long_and_which_quota(
+        self, quota_id: str, expected: type[Exception], reason: str, retry_after: float
+    ) -> None:
+        body = {
+            "error": {
+                "code": 429,
+                "status": "RESOURCE_EXHAUSTED",
+                "details": [
+                    {"@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                     "violations": [{"quotaId": quota_id}]},
+                    {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "35s"},
+                ],
+            }
+        }  # fmt: skip
+
+        async def limited(**kwargs: Any) -> Any:
+            raise genai_errors.ClientError(429, body)
+
+        transport = GeminiTransport("k", timeout_seconds=5)
+        transport._client = SimpleNamespace(
+            aio=SimpleNamespace(models=SimpleNamespace(generate_content=limited))
+        )  # type: ignore[assignment]
+        with pytest.raises(expected) as caught:
+            await generate(transport)
+        assert caught.value.reason == reason  # type: ignore[attr-defined]
+        assert caught.value.retry_after == retry_after  # type: ignore[attr-defined]
+
+    async def test_check_names_a_bad_key_or_an_unknown_model(self) -> None:
+        async def rejected(**kwargs: Any) -> Any:
+            raise genai_errors.ClientError(400 if "missing" in kwargs["model"] else 401, {})
+
+        async def found(**kwargs: Any) -> Any:
+            return SimpleNamespace(name=kwargs["model"])
+
+        transport = GeminiTransport("k", timeout_seconds=5)
+        transport._client = SimpleNamespace(
+            aio=SimpleNamespace(models=SimpleNamespace(get=rejected))
+        )  # type: ignore[assignment]
+        for model, reason in (("gemini-x", "auth_failed"), ("missing-model", "model_not_found")):
+            with pytest.raises(PermanentProviderError) as caught:
+                await transport.check(model)
+            assert caught.value.reason == reason
+        transport._client = SimpleNamespace(aio=SimpleNamespace(models=SimpleNamespace(get=found)))  # type: ignore[assignment]
+        await transport.check("gemini-3.8-flash")
+
 
 def openai_completion(content: str, finish: str = "stop") -> Any:
     return SimpleNamespace(
@@ -434,7 +575,20 @@ class TestOpenAICompatibleAdapters:
                 "no", response=httpx2.Response(401, request=request_), body=None
             )
 
+        async def no_credit(**kwargs: Any) -> Any:
+            raise openai.RateLimitError(
+                "quota",
+                response=httpx2.Response(429, request=request_, headers={"retry-after": "7"}),
+                body={"code": "insufficient_quota"},
+            )
+
         transport = OpenAICompatibleTransport(provider="openai", api_key="k", timeout_seconds=5)
+        transport._client = SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=no_credit))
+        )  # type: ignore[assignment]
+        with pytest.raises(PermanentProviderError) as caught:
+            await generate(transport)
+        assert (caught.value.reason, caught.value.retry_after) == ("quota_exhausted", 7.0)
         for fake, error in (
             (limited, TransientProviderError),
             (unauthorized, PermanentProviderError),
@@ -490,3 +644,41 @@ class TestAnthropicAdapter:
         transport._client = SimpleNamespace(messages=SimpleNamespace(create=overloaded))  # type: ignore[assignment]
         with pytest.raises(TransientProviderError):
             await generate(transport)
+
+
+class TestWorkerStartupCheck:
+    @staticmethod
+    def _gateway(error: Exception | None) -> LLMGateway:
+        class Checked(FakeTransport):
+            async def check(self, model: str) -> None:
+                if error is not None:
+                    raise error
+
+        return gateway(Checked([]))[0]
+
+    @pytest.mark.parametrize(
+        ("error", "message"),
+        [
+            (PermanentProviderError("auth_failed"), "gemini rejected GEMINI_API_KEY"),
+            (PermanentProviderError("model_not_found"), "Set LLM_MODEL_STRONG"),
+        ],
+    )
+    async def test_a_bad_key_or_model_stops_the_worker(
+        self, error: Exception, message: str
+    ) -> None:
+        from insightfulcell.worker.runtime import ModelNotUsable, check_model  # noqa: PLC0415
+
+        chosen = settings(llm_provider="gemini", gemini_api_key=SecretStr("k"))
+        with pytest.raises(ModelNotUsable, match=message):
+            await check_model(self._gateway(error), chosen)
+
+    @pytest.mark.parametrize(
+        "error",
+        [None, TransientProviderError("timeout"), PermanentProviderError("quota_exhausted")],
+    )
+    async def test_otherwise_the_worker_starts(self, error: Exception | None) -> None:
+        from insightfulcell.worker.runtime import check_model  # noqa: PLC0415
+
+        chosen = settings(llm_provider="gemini", gemini_api_key=SecretStr("k"))
+        await check_model(self._gateway(error), chosen)
+        await check_model(gateway(None)[0], settings())  # the model is off: nothing to check

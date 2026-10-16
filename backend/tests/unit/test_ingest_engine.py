@@ -93,6 +93,85 @@ class TestCsv:
         assert not (tmp_path / "nodata.parquet").exists()
 
 
+class TestMalformedDelimited:
+    """One bad row used to make the reader collapse the whole file into one column, silently."""
+
+    @staticmethod
+    def _rows(bad_line: str, *, at: int = 150) -> str:
+        rows = ["id,city,amount"] + [f"{i},City{i % 4},{i * 2.5}" for i in range(200)]
+        rows[at] = bad_line
+        return "\n".join(rows) + "\n"
+
+    def test_a_row_with_an_extra_field_is_refused_with_its_line(self, tmp_path: Path) -> None:
+        src = tmp_path / "extra.csv"
+        src.write_text(self._rows("149,Secret Value,375.0,EXTRA"))
+        with pytest.raises(ParseFailure) as info:
+            ingest_file(src, FileFormat.CSV, tmp_path / "extra.parquet")
+        assert info.value.detail == "Line 151 has 4 values, but the header has 3 columns."
+        assert "separator" in (info.value.hint or "")
+        assert "Secret" not in str(info.value.detail)  # never a cell value
+        assert not (tmp_path / "extra.parquet").exists()
+
+    def test_short_rows_are_counted(self, tmp_path: Path) -> None:
+        src = tmp_path / "short.csv"
+        src.write_text("a,b,c\n1,2,3\n4,5\n6,7,8\n9\n")
+        with pytest.raises(ParseFailure) as info:
+            ingest_file(src, FileFormat.CSV, tmp_path / "short.parquet")
+        assert info.value.detail == (
+            "Line 3 has 2 values, but the header has 3 columns. 1 other line does not match either."
+        )
+
+    def test_an_unclosed_quote_is_refused(self, tmp_path: Path) -> None:
+        src = tmp_path / "quote.csv"
+        src.write_text(self._rows('149,"Darwin, NT,375.0'))
+        with pytest.raises(ParseFailure) as info:
+            ingest_file(src, FileFormat.CSV, tmp_path / "quote.parquet")
+        assert "line 151 is never closed" in str(info.value.detail)
+
+    def test_tsv_rows_are_checked_too(self, tmp_path: Path) -> None:
+        src = tmp_path / "bad.tsv"
+        src.write_text("a\tb\n1\tx\n2\ty\tz\n")
+        with pytest.raises(ParseFailure) as info:
+            ingest_file(src, FileFormat.TSV, tmp_path / "bad.parquet")
+        assert "Line 3 has 3 values" in str(info.value.detail)
+
+    def test_well_formed_files_still_read(self, tmp_path: Path) -> None:
+        src = tmp_path / "ok.csv"
+        src.write_text(
+            'name,note,n\n"Smith, J","said ""hi""\nthen left",1\n\nLee,plain,2\n'  # quoted
+        )
+        result = ingest_file(src, FileFormat.CSV, tmp_path / "ok.parquet")
+        assert result.rows == 2
+        assert [c.name for c in result.columns] == ["name", "note", "n"]
+
+    def test_the_header_decides_the_separator(self, tmp_path: Path) -> None:
+        src = tmp_path / "semi.csv"
+        src.write_text('"Price, AUD";Qty\n"1,5";2\n"2,0";3\n')
+        result = ingest_file(src, FileFormat.CSV, tmp_path / "semi.parquet")
+        assert [c.name for c in result.columns] == ["Price, AUD", "Qty"]
+
+    def test_one_column_files_need_no_separator(self, tmp_path: Path) -> None:
+        src = tmp_path / "one.csv"
+        src.write_text("value\n1\n2\n3\n")
+        assert ingest_file(src, FileFormat.CSV, tmp_path / "one.parquet").rows == 3
+
+    def test_a_table_that_still_collapses_is_refused(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        src = tmp_path / "split.csv"
+        src.write_text("a,b\n1,2\n3,4\n")
+        real = engine._open_relation
+
+        def one_column(con, source, fmt, *, all_varchar):  # type: ignore[no-untyped-def]
+            del fmt
+            return real(con, source, FileFormat.TSV, all_varchar=all_varchar)
+
+        monkeypatch.setattr(engine, "_open_relation", one_column)
+        with pytest.raises(ParseFailure) as info:
+            ingest_file(src, FileFormat.CSV, tmp_path / "split.parquet")
+        assert "could not be split" in str(info.value.detail)
+
+
 class TestTsvJsonParquet:
     def test_tsv(self, tmp_path: Path) -> None:
         src = tmp_path / "t.tsv"

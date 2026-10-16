@@ -125,12 +125,15 @@ class RunSummary:
     finished_at: datetime | None
     review_requested_at: datetime | None
     drilldown: Drilldown | None = None
+    review_mode: str = "manual"
 
 
 @dataclass(frozen=True, slots=True)
 class RunDetail:
     run: RunSummary
     stages: tuple[StageInfo, ...]
+    #: Queued while no worker is alive: nothing will happen until one starts.
+    waiting_for_worker: bool = False
 
 
 @dataclass(frozen=True, slots=True)

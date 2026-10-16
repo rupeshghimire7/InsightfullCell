@@ -149,6 +149,59 @@ class TestResponseSchema:
         column = schema["properties"]["charts"]["items"]["properties"]["x"]
         assert column == {"type": "string"}
 
+    def test_every_property_is_still_required_and_the_drop_count_is_never_asked_for(
+        self,
+    ) -> None:
+        schema = response_schema(ProposedPlan, ["a"])
+        assert "dropped" not in schema["properties"]
+        assert set(schema["required"]) == set(schema["properties"])
+        unit = schema["properties"]["dictionary"]["items"]["properties"]["unit"]
+        assert unit == {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "description": "Only if the column name or the values show it (for example $, %, km).",
+        }
+
+
+class TestLenientProposals:
+    """A model's plan keeps every item that fits: one bad item never throws the plan away."""
+
+    ENTRY = {  # noqa: RUF012
+        "column": "a",
+        "display_name": "A",
+        "description": "What a is.",
+        "meaning": "continuous",
+        "role": "measure",
+    }
+
+    def test_left_out_nulls_count_as_null(self) -> None:
+        plan = ProposedPlan.model_validate(
+            {
+                "dictionary": [self.ENTRY],  # no "unit"
+                "charts": [{"kind": "bar", "x": "a", "title": "A"}],  # no y, group, aggregate
+                "cleaning": [{"kind": "drop_duplicates"}],  # no column, bounds, reason
+            }
+        )
+        assert plan.dictionary[0].unit is None
+        assert (plan.charts[0].y, plan.charts[0].aggregate) == (None, None)
+        assert plan.cleaning[0].column is None
+        assert plan.target is None
+        assert plan.dropped == {}
+
+    def test_items_that_do_not_fit_are_dropped_and_counted(self) -> None:
+        plan = ProposedPlan.model_validate(
+            {
+                "dataset_summary": "Jobs.",
+                "dictionary": [self.ENTRY, {"column": "b", "meaning": "not-a-meaning"}],
+                "analyses": [{"kind": "trend", "columns": ["a"]}],  # no question
+                "target": {"column": "a", "kind": "sideways"},
+            }
+        )
+        assert [d.column for d in plan.dictionary] == ["a"]
+        assert plan.analyses == []
+        assert plan.target is None
+        assert plan.dropped == {"dictionary": 1, "analyses": 1, "target": 1}
+        assert "dropped" not in plan.model_dump()  # never stored or cached
+
 
 class TestValidator:
     def test_rejects_items_one_by_one_with_reasons(

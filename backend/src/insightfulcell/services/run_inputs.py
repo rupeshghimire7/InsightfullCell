@@ -15,7 +15,12 @@ from insightfulcell.pipeline.stage import RunInputs
 
 
 async def snapshot(
-    session: AsyncSession, *, org_id: UUID, dataset_id: UUID, created_at: datetime
+    session: AsyncSession,
+    *,
+    org_id: UUID,
+    dataset_id: UUID,
+    created_at: datetime,
+    review_mode: str = "manual",
 ) -> dict[str, Any]:
     name = (
         await session.execute(
@@ -38,6 +43,7 @@ async def snapshot(
         "cleaning_policy": policy or "review_lossy",
         "annotations": preferences or {},
         "today": created_at.date().isoformat(),
+        "review_mode": review_mode,
     }
 
 
@@ -52,4 +58,5 @@ def from_snapshot(data: dict[str, Any]) -> RunInputs:
             str(k): bool(v) for k, v in dict(data.get("cleaning_decisions") or {}).items()
         },
         drilldown=Subset.model_validate(data["drilldown"]) if data.get("drilldown") else None,
+        review_mode="auto" if data.get("review_mode") == "auto" else "manual",
     )

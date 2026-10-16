@@ -33,6 +33,7 @@ from insightfulcell.api.schemas import (
     CreateRunRequest,
     DashboardOut,
     DecideCleaningRequest,
+    DeletedOut,
     PlanColumnOut,
     PlanOut,
     ReportOut,
@@ -54,7 +55,7 @@ from insightfulcell.exports.html import CONTENT_SECURITY_POLICY
 from insightfulcell.services.datasets import MAX_PAGE_SIZE
 from insightfulcell.services.dto import RunDetail, RunEventInfo
 from insightfulcell.services.plans import ColumnEdit, PlanDecision, PlanView
-from insightfulcell.services.reports import ReportView
+from insightfulcell.services.reports import ExportFormat, ReportView
 from insightfulcell.services.run_store import EVENT_BATCH
 
 logger = logging.getLogger(__name__)
@@ -86,6 +87,7 @@ def to_run_out(detail: RunDetail) -> RunOut:
         **summary.model_dump(),
         stages=[StageOut.model_validate(stage) for stage in detail.stages],
         events_url=events_url(detail.run.id),
+        waiting_for_worker=detail.waiting_for_worker,
     )
 
 
@@ -124,12 +126,14 @@ async def create_run(
 ) -> RunOut:
     """Queues a run of the dataset's newest version (or ``dataset_version_id``) and returns at
     once; follow ``events_url`` for progress. Replaying with the same ``Idempotency-Key`` returns
-    the same run instead of starting another."""
+    the same run instead of starting another. ``review_mode`` (default ``auto``) decides whether
+    the run stops for your review."""
     accepted = await services.runs.create_run(
         principal,
         dataset_id=body.dataset_id,
         dataset_version_id=body.dataset_version_id,
         idempotency_key=idempotency_key,
+        review_mode=body.review_mode,
     )
     response.headers["Location"] = f"/v1/runs/{accepted.detail.run.id}"
     response.headers["ETag"] = etag(accepted.detail.run.row_version)
@@ -160,6 +164,21 @@ async def get_run(
     detail = await services.runs.get_run(principal, run_id)
     response.headers["ETag"] = etag(detail.run.row_version)
     return to_run_out(detail)
+
+
+@router.delete(
+    "/{run_id}",
+    response_model=DeletedOut,
+    summary="Delete a run, its explorations and everything they produced",
+    responses={409: problem_response()},
+)
+async def delete_run(
+    run_id: UUID, principal: CurrentPrincipal, services: ServicesDep
+) -> DeletedOut:
+    """Removes the run (with its drill-downs) from the database at once; its files leave
+    storage after ``files_removed_after``. ``409`` ``still-running`` while it runs (cancel it
+    first)."""
+    return DeletedOut.model_validate(await services.deletion.delete_run(principal, run_id))
 
 
 @router.post(
@@ -470,6 +489,76 @@ async def export_report(
             "Cache-Control": "no-store",
         },
     )
+
+
+async def _export(
+    run_id: UUID, principal: CurrentPrincipal, services: ServicesDep, fmt: ExportFormat
+) -> Response:
+    name, content, media_type = await services.reports.export_file(principal, run_id, fmt)
+    return Response(
+        content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{name}"',
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.get(
+    "/{run_id}/report.md",
+    response_class=Response,
+    summary="Download the report as Markdown",
+    responses={
+        200: {"content": {"text/markdown": {}}, "description": "The report as Markdown."},
+        409: problem_response(),
+    },
+)
+async def export_report_markdown(
+    run_id: UUID, principal: CurrentPrincipal, services: ServicesDep
+) -> Response:
+    """The same report as the HTML export, as Markdown: every chart as the table of its numbers
+    (and an inline SVG image), every fact with its test and content hash."""
+    return await _export(run_id, principal, services, "md")
+
+
+@router.get(
+    "/{run_id}/report.docx",
+    response_class=Response,
+    summary="Download the report as a Word document",
+    responses={
+        200: {
+            "content": {
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {}
+            },
+            "description": "The report as .docx.",
+        },
+        409: problem_response(),
+    },
+)
+async def export_report_docx(
+    run_id: UUID, principal: CurrentPrincipal, services: ServicesDep
+) -> Response:
+    """The same report as a Word document: headings, answers, charts and maps as pictures with
+    their numbers, and every fact."""
+    return await _export(run_id, principal, services, "docx")
+
+
+@router.get(
+    "/{run_id}/report.pdf",
+    response_class=Response,
+    summary="Download the report as a PDF",
+    responses={
+        200: {"content": {"application/pdf": {}}, "description": "The report as PDF."},
+        409: problem_response(),
+    },
+)
+async def export_report_pdf(
+    run_id: UUID, principal: CurrentPrincipal, services: ServicesDep
+) -> Response:
+    """The same report as an A4 PDF, made on the server (no printing needed)."""
+    return await _export(run_id, principal, services, "pdf")
 
 
 @router.post(

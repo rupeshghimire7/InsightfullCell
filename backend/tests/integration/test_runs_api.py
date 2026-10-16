@@ -206,7 +206,8 @@ class TestRead:
         created = (await start_run(client, auth(alice), dataset_id)).json()
         response = await client.get(f"/v1/runs/{created['id']}", headers=auth(alice))
         assert response.status_code == 200
-        assert response.json() == created
+        # No worker runs in these tests: a read of a queued run says so.
+        assert response.json() == {**created, "waiting_for_worker": True}
         assert response.headers["etag"] == f'"{created["row_version"]}"'
 
     async def test_list_is_keyset_paginated_and_filterable(

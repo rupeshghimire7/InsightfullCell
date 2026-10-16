@@ -12,7 +12,7 @@ import sys
 
 from insightfulcell.config import get_settings
 from insightfulcell.logging_config import configure_logging
-from insightfulcell.worker.runtime import ALL_QUEUES, build_worker
+from insightfulcell.worker.runtime import ALL_QUEUES, ModelNotUsable, build_worker, check_model
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -39,11 +39,16 @@ async def _main(args: argparse.Namespace) -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
     async with build_worker(settings) as runtime:
+        await check_model(runtime.model, settings)
         await runtime.run(queues=args.queues, concurrency=args.concurrency, name=args.name)
 
 
 def main(argv: list[str] | None = None) -> int:
-    asyncio.run(_main(parse_args(argv)))
+    try:
+        asyncio.run(_main(parse_args(argv)))
+    except ModelNotUsable as exc:
+        sys.stderr.write(f"The worker did not start: {exc}\n")
+        return 2
     return 0
 
 

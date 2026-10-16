@@ -80,6 +80,9 @@ class RunInputs:
     #: A drill-down's subset. Not part of ``fingerprint``: a drill-down reuses its parent's
     #: Phase A checkpoints, and only stages that set ``uses_subset`` are keyed by it.
     drilldown: Subset | None = None
+    #: ``auto``: changes that would wait for a review are applied and the run never stops;
+    #: ``manual``: the run stops at the review gate.
+    review_mode: str = "manual"
 
     def fingerprint(self) -> dict[str, Any]:
         return {
@@ -88,6 +91,9 @@ class RunInputs:
             "cleaning_policy": self.cleaning_policy,
             "annotations": dict(self.annotations),
             "cleaning_decisions": dict(sorted(self.cleaning_decisions.items())),
+            # Only when it differs from what every earlier run did, so their checkpoints still
+            # match their keys.
+            **({"review_mode": "auto"} if self.review_mode == "auto" else {}),
         }
 
 

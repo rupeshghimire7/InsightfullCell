@@ -13,7 +13,12 @@ from typing import Any
 
 import openai
 
-from insightfulcell.llm.transport import PermanentProviderError, RawReply, TransientProviderError
+from insightfulcell.llm.transport import (
+    PermanentProviderError,
+    RawReply,
+    TransientProviderError,
+    parse_retry_after,
+)
 
 SCHEMA_INSTRUCTION = (
     "\n\nRespond with one JSON object that validates against this JSON Schema. Every property "
@@ -73,11 +78,9 @@ class OpenAICompatibleTransport:
                 "timeout" if isinstance(exc, openai.APITimeoutError) else "provider_error"
             ) from exc
         except openai.RateLimitError as exc:
-            raise TransientProviderError("rate_limited") from exc
+            raise rate_limit_error(exc) from exc
         except openai.APIStatusError as exc:
-            if exc.status_code >= 500 or exc.status_code in {408, 409}:
-                raise TransientProviderError("provider_error") from exc
-            raise PermanentProviderError("provider_error") from exc
+            raise status_error(exc) from exc
 
         choice = response.choices[0] if response.choices else None
         if choice is None:
@@ -92,3 +95,36 @@ class OpenAICompatibleTransport:
             request_id=response.id,
             truncated=choice.finish_reason == "length",
         )
+
+    async def check(self, model: str) -> None:
+        """Lists the models the key may use (free) and looks for ``model``."""
+        try:
+            page = await self._client.models.list()
+        except (openai.APITimeoutError, openai.APIConnectionError) as exc:
+            raise TransientProviderError("timeout") from exc
+        except openai.RateLimitError as exc:
+            raise rate_limit_error(exc) from exc
+        except openai.APIStatusError as exc:
+            raise status_error(exc) from exc
+        if model not in {m.id async for m in page}:
+            raise PermanentProviderError("model_not_found")
+
+
+def rate_limit_error(exc: openai.RateLimitError) -> TransientProviderError | PermanentProviderError:
+    """A 429: a used-up quota or credit (``insufficient_quota``) is not worth waiting for."""
+    body = exc.body if isinstance(exc.body, dict) else {}
+    code = str(body.get("code") or (body.get("error") or {}).get("code") or "")
+    retry_after = parse_retry_after(exc.response.headers.get("retry-after"))
+    if code == "insufficient_quota":
+        return PermanentProviderError("quota_exhausted", retry_after=retry_after)
+    return TransientProviderError("rate_limited", retry_after=retry_after)
+
+
+def status_error(exc: openai.APIStatusError) -> TransientProviderError | PermanentProviderError:
+    if exc.status_code >= 500 or exc.status_code in {408, 409}:
+        return TransientProviderError("provider_error")
+    if exc.status_code in {401, 403}:
+        return PermanentProviderError("auth_failed")
+    if exc.status_code == 402:
+        return PermanentProviderError("quota_exhausted")
+    return PermanentProviderError("provider_error")

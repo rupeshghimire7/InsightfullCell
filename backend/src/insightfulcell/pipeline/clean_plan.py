@@ -2,8 +2,10 @@
 lossy, measured on every row, with a starting decision under the organisation's policy.
 
 The run then pauses at the review gate, where a person checks the cleaning and the plan (and
-may ask for changes), unless the organisation's policy is ``auto_safe``: then lossy changes
-are simply not applied and the run goes on. Decisions a person already made in this run (before
+may ask for changes), unless the run was started in **automatic** mode (ADR-036): then every
+change that would wait for a decision is applied and the run goes on to the report. An
+organisation whose policy is ``auto_safe`` never pauses either: lossy changes are simply not
+applied. Decisions a person already made in this run (before
 asking for the plan to be revised) are kept. Nothing is applied here: Phase B's
 ``clean_apply`` applies the approved plan to the original bytes.
 """
@@ -53,9 +55,12 @@ class CleanPlanStage:
         operations = _keep_decisions(
             await asyncio.to_thread(compute), ctx.inputs.cleaning_decisions
         )
-        # Every plan is reviewed (the person may add or remove questions), unless the
-        # organisation applies safe changes automatically and never pauses.
-        review = policy is not Policy.AUTO_SAFE
+        automatic = ctx.inputs.review_mode == "auto"
+        if automatic:
+            operations = _apply_pending(operations)
+        # A manual run stops for review (the person may also add or remove questions), unless
+        # the organisation applies safe changes automatically and never pauses.
+        review = not automatic and policy is not Policy.AUTO_SAFE
         dumped = [op.model_dump(mode="json") for op in operations]
         await ctx.repository.save_cleaning_plan(
             CleaningRecord(
@@ -82,6 +87,21 @@ class CleanPlanStage:
             artifacts={"cleaning_plan": key},
             needs_review=review,
         )
+
+
+def _apply_pending(operations: list[Operation]) -> list[Operation]:
+    """Automatic mode: every change that would wait for a person's decision is applied."""
+    return [
+        op.model_copy(
+            update={
+                "decision": Decision.ACCEPTED,
+                "notice": "Applied automatically (automatic mode).",
+            }
+        )
+        if op.decision is Decision.PENDING
+        else op
+        for op in operations
+    ]
 
 
 def _keep_decisions(operations: list[Operation], decided: Mapping[str, bool]) -> list[Operation]:

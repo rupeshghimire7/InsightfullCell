@@ -18,6 +18,7 @@ from insightfulcell.engine.ports import LanguageModel
 from insightfulcell.llm.breaker import CircuitBreaker
 from insightfulcell.llm.gateway import GatewayConfig, LLMGateway
 from insightfulcell.llm.providers import build_transport, models_for
+from insightfulcell.llm.transport import PermanentProviderError, TransientProviderError
 from insightfulcell.pipeline.definition import Pipeline, default_pipeline
 from insightfulcell.queue.procrastinate_queue import ProcrastinateQueue, create_procrastinate_app
 from insightfulcell.services.llm_ledger import DbUsageLedger
@@ -42,6 +43,7 @@ class WorkerRuntime:
     executor: RunExecutor
     maintenance: Maintenance
     owns_engine: bool = True
+    model: LanguageModel | None = None
 
     async def __aenter__(self) -> WorkerRuntime:
         await self.queue.open()
@@ -99,12 +101,56 @@ def build_gateway(settings: Settings, db: TenantDatabase) -> LLMGateway:
             run_input_token_budget=settings.llm_run_input_token_budget,
             max_output_tokens=settings.llm_max_output_tokens,
             prices=settings.llm_prices,
+            requests_per_minute=settings.llm_requests_per_minute,
+            max_rate_limit_waits=settings.llm_rate_limit_waits,
+            max_retry_wait_seconds=settings.llm_max_retry_wait_seconds,
         ),
         CircuitBreaker(
             threshold=settings.llm_breaker_failures,
             open_seconds=settings.llm_breaker_open_seconds,
         ),
     )
+
+
+class ModelNotUsable(RuntimeError):
+    """The configured language model cannot work: the worker must not start pretending."""
+
+
+async def check_model(model: LanguageModel | None, settings: Settings) -> None:
+    """Before taking work, prove the configured key and models work (a free lookup, no tokens).
+
+    A rejected key or an unknown model stops the worker with a message saying what to fix; a
+    provider that cannot be reached right now, or a quota used up for today, only warns (runs
+    then fall back until it is back).
+    """
+    if not isinstance(model, LLMGateway) or model.identity is None:
+        return
+    provider = settings.llm_provider
+    models = models_for(settings)
+    try:
+        await model.check()
+    except PermanentProviderError as exc:
+        if exc.reason == "quota_exhausted":
+            logger.warning("language model quota used up at start-up", extra={"provider": provider})
+            return
+        key = f"{provider.upper()}_API_KEY"
+        if exc.reason == "auth_failed":
+            message = f"{provider} rejected {key}. Check the key, or set LLM_PROVIDER=none."
+        elif exc.reason == "model_not_found":
+            message = (
+                f"{provider} has no model {models['strong']!r} or {models['fast']!r} for this "
+                "key. Set LLM_MODEL_STRONG and LLM_MODEL_FAST to models the key can use."
+            )
+        else:
+            message = f"{provider} refused the start-up check ({exc.reason})."
+        raise ModelNotUsable(message) from exc
+    except TransientProviderError:
+        logger.warning(
+            "could not reach the language model at start-up; runs will try it",
+            extra={"provider": provider},
+        )
+        return
+    logger.info("language model ready", extra={"provider": provider, "models": models})
 
 
 def build_worker(
@@ -139,4 +185,5 @@ def build_worker(
         executor=executor,
         maintenance=maintenance,
         owns_engine=owns_engine,
+        model=model,
     )

@@ -25,6 +25,7 @@ from insightfulcell.storage.port import (
 
 if TYPE_CHECKING:
     from mypy_boto3_s3 import S3Client
+    from mypy_boto3_s3.type_defs import ObjectIdentifierTypeDef
 
 T = TypeVar("T")
 
@@ -159,6 +160,27 @@ class S3ObjectStore:
 
     async def delete(self, key: str) -> None:
         await self._call(lambda: self._client.delete_object(Bucket=self._bucket, Key=key))
+
+    async def delete_prefix(self, prefix: str) -> int:
+        if not prefix.endswith("/") or prefix.count("/") < 3:
+            # Never a whole zone or organisation: ``{zone}/{org}/{id}/`` at the least.
+            raise ValueError("refusing to delete a prefix shallower than zone/org/id/")
+
+        def _delete_all() -> int:
+            deleted = 0
+            paginator = self._client.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=self._bucket, Prefix=prefix):
+                keys: list[ObjectIdentifierTypeDef] = [
+                    {"Key": item["Key"]} for item in page.get("Contents", [])
+                ]
+                if keys:  # a page holds at most 1,000 keys, the most one request may delete
+                    self._client.delete_objects(
+                        Bucket=self._bucket, Delete={"Objects": keys, "Quiet": True}
+                    )
+                    deleted += len(keys)
+            return deleted
+
+        return await self._call(_delete_all)
 
     async def download_file(self, key: str, dest: Path) -> None:
         try:

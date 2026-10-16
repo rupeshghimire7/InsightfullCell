@@ -30,6 +30,7 @@ from insightfulcell.engine.planning.language import (
 )
 from insightfulcell.engine.subset import Subset, explorable, keep
 from insightfulcell.engine.types import Meaning, PersonalData
+from insightfulcell.exports.document import Document, build_document
 from insightfulcell.exports.html import filename, render_report
 from insightfulcell.exports.svg import chart_svg, format_value, map_svg
 from tests.unit.engine_support import table
@@ -352,12 +353,79 @@ def test_the_html_export_escapes_everything_and_runs_nothing() -> None:
     assert "11 October 2026" in html
 
 
+def _document() -> Document:
+    report, facts = _report()
+    board = dashboard_doc.build(report, facts)
+    fact_rows = [
+        {**f.model_dump(mode="json"), "columns": [{"name": "x", "display_name": "X <u>"}],
+         "test": {"method": "Welch's t-test", "effect_name": "eta", "effect": 0.42,
+                  "ci_low": 0.1, "ci_high": 0.6, "p_value": 0.001, "q_value": 0.004},
+         "check": None, "content_hash": "0" * 64, "exploratory": False}
+        for f in facts.values()
+    ]  # fmt: skip
+    return build_document(
+        report=report,
+        dashboard=board,
+        facts=fact_rows,
+        run_id="0192f3a4-0000-7000-8000-000000000000",
+        written_at=datetime(2026, 10, 11, 9, 30, tzinfo=UTC),
+    )
+
+
+def test_the_markdown_export_escapes_everything() -> None:
+    from insightfulcell.exports.markdown import escape, render_markdown  # noqa: PLC0415
+
+    text = render_markdown(_document())
+    for tag in ("<b>", "<img", "<i>"):
+        assert tag not in text
+    assert "&lt;b&gt;North&lt;/b&gt;" in text
+    assert "Does &lt;i&gt;sales&lt;/i&gt; differ?" in text
+    assert "\\[F1\\]" in text  # source tags, escaped so they never become links
+    assert ":--- |" in text  # the numbers behind each chart
+    assert "data:image/svg+xml;base64," in text
+    assert "Content hash 0000" in text
+    assert "11 October 2026" in text
+    # A value can neither start a block nor format text, and stays on one line.
+    assert escape("# 1. *bold* [x](y)\nnext") == "\\# 1. \\*bold\\* \\[x\\](y) next"
+
+
+def test_the_word_export_is_a_document_with_the_report_in_it() -> None:
+    import io  # noqa: PLC0415
+
+    import docx  # noqa: PLC0415
+
+    from insightfulcell.exports.word import clean, render_docx  # noqa: PLC0415
+
+    content = render_docx(_document())
+    assert content[:2] == b"PK"  # a zip package
+    opened = docx.Document(io.BytesIO(content))
+    text = "\n".join(p.text for p in opened.paragraphs)
+    assert "Does <i>sales</i> differ?" in text  # text, never markup
+    assert "Facts" in text
+    assert len(opened.inline_shapes) >= 1  # the chart, as a picture
+    cells = [c.text for t in opened.tables for row in t.rows for c in row.cells]
+    assert "<b>North</b>" in cells
+    assert opened.core_properties.title == _document().title
+    assert clean("a\x00b\x0bc") == "a b c"
+
+
+def test_the_pdf_export_lays_out_pages() -> None:
+    from insightfulcell.exports.pdf import render_pdf  # noqa: PLC0415
+
+    content = render_pdf(_document())
+    assert content.startswith(b"%PDF-")
+    assert content.rstrip().endswith(b"%%EOF")
+    assert b"/Subtype /Image" in content  # the chart
+    assert b"DejaVu" in content  # the bundled font, so every character prints
+
+
 def test_export_file_names_and_values() -> None:
     assert (
         filename('Sales "Q3" <x>/../é.csv', "0192f3a4-aaaa")
         == "report-sales-q3-x-e-csv-0192f3a4.html"
     )
     assert filename("", "abcdef12-3") == "report-dataset-abcdef12.html"
+    assert filename("Sales", "abcdef12-3", "pdf") == "report-sales-abcdef12.pdf"
     assert format_value(0.4167, "percent", None) == "42%"
     assert format_value(-0.05, "signed_percent", None) == "-5.0%"
     assert format_value(1234.5, "number", "$") == "$1,234"

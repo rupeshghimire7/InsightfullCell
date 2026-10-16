@@ -207,7 +207,13 @@ def to_summary(run: Run, dataset_name: str) -> RunSummary:
         finished_at=run.finished_at,
         review_requested_at=run.review_requested_at,
         drilldown=_drilldown(run),
+        review_mode=review_mode(run.inputs),
     )
+
+
+def review_mode(inputs: dict[str, Any] | None) -> str:
+    """``auto`` or ``manual``; runs created before modes existed stopped for review."""
+    return "auto" if (inputs or {}).get("review_mode") == "auto" else "manual"
 
 
 def _drilldown(run: Run) -> Drilldown | None:

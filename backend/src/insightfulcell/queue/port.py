@@ -48,3 +48,11 @@ class JobQueue(Protocol):
 
     async def abandon_stalled(self, job_id: int) -> None:
         """Mark a stalled job as failed so it is never picked up again."""
+
+    async def discard_phase_jobs(self, run_ids: Sequence[UUID]) -> int:
+        """Delete the waiting (not yet started) phase jobs of these runs, after the runs
+        themselves were deleted. Returns how many were waiting."""
+
+    async def workers_alive(self, within_seconds: float) -> bool | None:
+        """Whether any worker has sent a heartbeat in the last ``within_seconds``; ``None``
+        when the queue cannot be asked right now."""

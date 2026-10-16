@@ -75,6 +75,11 @@ def register_tasks(app: procrastinate.App, executor: RunExecutor, maintenance: M
     async def expire_abandoned_uploads(timestamp: int) -> int:
         return await maintenance.expire_abandoned_uploads()
 
+    @app.periodic(cron="29 * * * *", periodic_id="purges")
+    @app.task(name="insightfulcell.purge_deleted_files", queue=MAINTENANCE, queueing_lock="purges")
+    async def purge_deleted_files(timestamp: int) -> int:
+        return await maintenance.purge_deleted_files()
+
     @app.periodic(cron="23 4 * * *", periodic_id="idempotency")
     @app.task(
         name="insightfulcell.purge_idempotency_keys",

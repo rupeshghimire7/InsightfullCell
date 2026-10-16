@@ -46,6 +46,15 @@ if TYPE_CHECKING:
 _HASH_CHUNK: Final = 1024 * 1024
 _ENCODING_PROBE_BYTES: Final = 64 * 1024
 _CSV_SAMPLE_ROWS: Final = 100_000
+#: Separators a delimited file may use; the header decides which one (see ``_delimiter``).
+_DELIMITERS: Final = (",", ";", "\t", "|")
+#: Records read to choose the separator.
+_DELIMITER_SAMPLE_RECORDS: Final = 200
+#: A quoted value may span lines; past this size it is an unclosed quote, not a value.
+_MAX_FIELD_CHARS: Final = 16 * 1024 * 1024
+# Process-wide (the csv module has no per-reader limit); set once rather than per call, so
+# concurrent ingests never see each other's setting.
+csv.field_size_limit(max(csv.field_size_limit(), _MAX_FIELD_CHARS))
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +131,7 @@ def ingest_file(
     try:
         with _workdir(dest) as workdir:
             parse_source, parse_fmt = source, fmt
+            header_fields = 0
             if fmt in {FileFormat.CSV, FileFormat.TSV}:
                 encoding = _detect_encoding(source)
                 if encoding != "utf-8":
@@ -132,6 +142,7 @@ def ingest_file(
                     warnings.append(
                         f"The file was not UTF-8; it was read as {encoding.upper()} text."
                     )
+                header_fields = _check_structure(parse_source, fmt, limits)
             if fmt is FileFormat.XLSX:
                 check_zip_archive(source, limits)
                 parse_source = workdir / "sheet.csv"
@@ -139,6 +150,15 @@ def ingest_file(
                 parse_fmt = FileFormat.CSV
             job = _ParseJob(parse_source, parse_fmt, tmp_dest, limits, warnings)
             rows, columns = _parse_to_parquet(job)
+            if fmt in {FileFormat.CSV, FileFormat.TSV} and header_fields > 1 and len(columns) == 1:
+                # The rows are consistent, yet the reader did not split them: never analyse
+                # a table that silently became one column.
+                raise ParseFailure(
+                    f"The file's header has {header_fields} columns, but it could not be split "
+                    "into them.",
+                    hint="Save it again as a standard CSV (comma separated, double quotes) and "
+                    "upload it again.",
+                )
         tmp_dest.replace(dest)
     finally:
         with suppress(FileNotFoundError):
@@ -300,6 +320,103 @@ def _detect_encoding(source: Path) -> str:
             continue
         return "utf-8"
     return "cp1252"
+
+
+def _check_structure(source: Path, fmt: FileFormat, limits: IngestLimits) -> int:
+    """Refuse a delimited file whose rows do not line up with its header; returns the header's
+    field count.
+
+    A reader that meets a row with too many or too few fields, or a quote that never closes,
+    may silently read the whole file as one column (DuckDB's sniffer does). That table would
+    be analysed as if it were fine, so the file is checked first, row by row, and refused with
+    the line to fix. Messages name lines and counts, never values.
+    """
+    delimiter = "\t" if fmt is FileFormat.TSV else _delimiter(source)
+    if delimiter is None:
+        return 1  # one column: nothing to line up
+    return _scan_rows(source, delimiter, limits.max_rows)
+
+
+def _scan_rows(source: Path, delimiter: str, max_rows: int) -> int:
+    expected = 0
+    first_bad: tuple[int, int] | None = None  # (line, fields)
+    bad = 0
+    records = 0
+    with source.open("r", encoding="utf-8", errors="replace", newline="") as handle:
+        reader = csv.reader(handle, delimiter=delimiter, strict=True)
+        start = 1
+        while True:
+            try:
+                row = next(reader)
+            except StopIteration:
+                break
+            except csv.Error as exc:
+                if first_bad is not None:
+                    break  # the earlier line is the one to fix first
+                raise ParseFailure(
+                    f"A quote opened on line {start:,} is never closed, or a value there has a "
+                    "quote in the wrong place.",
+                    hint="Fix the quotes on that line (a quote inside a value is written twice: "
+                    '""), then upload the file again.',
+                ) from exc
+            line, start = start, reader.line_num + 1
+            if not row:
+                continue  # a blank line
+            if not expected:
+                expected = len(row)
+                continue
+            records += 1
+            if len(row) != expected:
+                bad += 1
+                first_bad = first_bad or (line, len(row))
+            if records > max_rows:
+                break  # the row cap is reported by the parse itself
+    if first_bad is not None:
+        line, fields = first_bad
+        others = bad - 1
+        more = (
+            f" {others:,} other line{'s' if others != 1 else ''} do{'' if others != 1 else 'es'}"
+            " not match either."
+            if others
+            else ""
+        )
+        raise ParseFailure(
+            f"Line {line:,} has {fields} value{'s' if fields != 1 else ''}, but the header has "
+            f"{expected} columns.{more}",
+            hint="Every row needs the same number of columns. Check that line for an extra or "
+            "missing separator or an unclosed quote, then upload the file again.",
+        )
+    return expected
+
+
+def _delimiter(source: Path) -> str | None:
+    """The separator the header uses, or ``None`` for a one-column file.
+
+    Each candidate splits the first records; the one that gives the header more than one field
+    and agrees with the most rows wins (a semicolon file with commas inside quoted names still
+    reads as semicolons), then the one with more fields.
+    """
+    with source.open("r", encoding="utf-8", errors="replace", newline="") as handle:
+        sample = handle.read(_ENCODING_PROBE_BYTES)
+    lines = sample.splitlines(keepends=True)
+    if len(sample) == _ENCODING_PROBE_BYTES and len(lines) > 1:
+        lines = lines[:-1]  # the last line may be cut short
+    best: tuple[float, int, str] | None = None
+    for candidate in _DELIMITERS:
+        try:
+            rows = [r for r in csv.reader(lines, delimiter=candidate) if r]
+        except csv.Error:
+            continue
+        rows = rows[:_DELIMITER_SAMPLE_RECORDS]
+        if not rows or len(rows[0]) < 2:
+            continue
+        width = len(rows[0])
+        body = rows[1:]
+        agreement = sum(1 for r in body if len(r) == width) / len(body) if body else 1.0
+        score = (agreement, width, candidate)
+        if best is None or score[:2] > best[:2]:
+            best = score
+    return best[2] if best else None
 
 
 def _transcode_to_utf8(source: Path, dest: Path, encoding: str) -> None:

@@ -12,6 +12,7 @@ security still applies to every change.
 - **Review gate**: a reminder event after 24 hours, ``expired`` after 7 days.
 - **Housekeeping**: monthly event partitions ahead of time, abandoned uploads (their multipart
   parts are aborted in storage), expired idempotency keys and old finished jobs.
+- **Purges**: files of deleted runs and datasets, once their grace period is over (ADR-037).
 """
 
 from __future__ import annotations
@@ -21,10 +22,11 @@ from dataclasses import dataclass
 from datetime import timedelta
 from uuid import UUID
 
-from sqlalchemy import func, select, text, update
+from sqlalchemy import delete, exists, func, select, text, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from insightfulcell.config import Settings
-from insightfulcell.db.models import Run, Upload
+from insightfulcell.db.models import DatasetVersion, Run, StoragePurge, Upload
 from insightfulcell.db.tenant import TenantDatabase
 from insightfulcell.domain.runs import EventType, Phase, Queue, RunStatus
 from insightfulcell.logging_config import exception_summary
@@ -36,6 +38,7 @@ from insightfulcell.storage.port import ObjectStore
 logger = logging.getLogger(__name__)
 
 EVENT_PARTITION_MONTHS_AHEAD = 2
+PURGE_BATCH = 500
 
 
 @dataclass(frozen=True, slots=True)
@@ -237,6 +240,46 @@ class Maintenance:
             ).scalar_one()
         return int(purged)
 
+    async def purge_deleted_files(self) -> int:
+        """Remove from storage the files of deleted runs and datasets whose time has come. A
+        file that a new upload of the same content uses again is kept. A purge that fails
+        stays scheduled and is tried again at the next sweep."""
+        async with self._db.unscoped_transaction() as session:
+            rows = (
+                await session.execute(
+                    text("SELECT org_id, purge_id FROM app.storage_purges_due(:max_rows)"),
+                    {"max_rows": PURGE_BATCH},
+                )
+            ).all()
+        purged = 0
+        for org_id, purge_id in rows:
+            try:
+                # The row is deleted first and the files after: if storage fails, the
+                # transaction rolls back and the purge stays scheduled.
+                async with self._db.system_transaction(org_id) as session:
+                    purge = (
+                        await session.execute(
+                            delete(StoragePurge)
+                            .where(StoragePurge.id == purge_id, StoragePurge.org_id == org_id)
+                            .returning(StoragePurge.key, StoragePurge.is_prefix)
+                        )
+                    ).one_or_none()
+                    if purge is None:
+                        continue
+                    key, is_prefix = purge
+                    if is_prefix:
+                        await self._store.delete_prefix(key)
+                    elif not await _file_in_use(session, org_id, key):
+                        await self._store.delete(key)
+            except Exception as exc:
+                logger.warning(
+                    "could not purge the files of a deleted item; will try again",
+                    extra={"purge_id": str(purge_id), **exception_summary(exc)},
+                )
+                continue
+            purged += 1
+        return purged
+
     # ------------------------------------------------------------------ helpers
 
     async def _run_queue(self, org_id: UUID, run_id: UUID) -> Queue:
@@ -247,3 +290,18 @@ class Maintenance:
                 )
             ).scalar_one_or_none()
         return Queue(queue) if queue else Queue.STANDARD
+
+
+async def _file_in_use(session: AsyncSession, org_id: UUID, key: str) -> bool:
+    """An original file is stored once per content: another version may still name it."""
+    return bool(
+        (
+            await session.execute(
+                select(
+                    exists().where(
+                        DatasetVersion.org_id == org_id, DatasetVersion.bronze_key == key
+                    )
+                )
+            )
+        ).scalar_one()
+    )

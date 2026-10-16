@@ -11,7 +11,12 @@ from typing import Any
 
 import anthropic
 
-from insightfulcell.llm.transport import PermanentProviderError, RawReply, TransientProviderError
+from insightfulcell.llm.transport import (
+    PermanentProviderError,
+    RawReply,
+    TransientProviderError,
+    parse_retry_after,
+)
 
 _TRANSIENT = (
     anthropic.RateLimitError,
@@ -51,11 +56,17 @@ class AnthropicTransport:
             )
         except anthropic.APITimeoutError as exc:
             raise TransientProviderError("timeout") from exc
+        except anthropic.RateLimitError as exc:
+            raise TransientProviderError(
+                "rate_limited",
+                retry_after=parse_retry_after(exc.response.headers.get("retry-after")),
+            ) from exc
         except _TRANSIENT as exc:
-            reason = (
-                "rate_limited" if isinstance(exc, anthropic.RateLimitError) else "provider_error"
-            )
-            raise TransientProviderError(reason) from exc
+            raise TransientProviderError("provider_error") from exc
+        except anthropic.AuthenticationError as exc:
+            raise PermanentProviderError("auth_failed") from exc
+        except anthropic.PermissionDeniedError as exc:
+            raise PermanentProviderError("auth_failed") from exc
         except anthropic.APIStatusError as exc:
             raise PermanentProviderError("provider_error") from exc
 
@@ -71,3 +82,18 @@ class AnthropicTransport:
             request_id=getattr(response, "_request_id", None),
             truncated=response.stop_reason == "max_tokens",
         )
+
+    async def check(self, model: str) -> None:
+        """Looks the model up with the key (free: no tokens)."""
+        try:
+            await self._client.models.retrieve(model)
+        except anthropic.APITimeoutError as exc:
+            raise TransientProviderError("timeout") from exc
+        except _TRANSIENT as exc:
+            raise TransientProviderError("provider_error") from exc
+        except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as exc:
+            raise PermanentProviderError("auth_failed") from exc
+        except anthropic.NotFoundError as exc:
+            raise PermanentProviderError("model_not_found") from exc
+        except anthropic.APIStatusError as exc:
+            raise PermanentProviderError("provider_error") from exc

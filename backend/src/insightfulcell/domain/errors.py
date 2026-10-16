@@ -181,6 +181,14 @@ class RunNotInState(DomainError):
     title = "The run is not in a state that allows this"
 
 
+class StillRunning(DomainError):
+    """A run (or a run of the dataset) is running, so it cannot be deleted yet."""
+
+    kind = ErrorKind.CONFLICT
+    code = "still-running"
+    title = "An analysis is still running"
+
+
 class RunChanged(DomainError):
     """``If-Match`` named a version of the run that is no longer current."""
 
@@ -261,12 +269,6 @@ class CleaningPlanChanged(DomainError):
     kind = ErrorKind.PRECONDITION_FAILED
     code = "cleaning-plan-changed"
     title = "The cleaning plan changed since you loaded it"
-
-
-class DecisionsIncomplete(DomainError):
-    kind = ErrorKind.UNPROCESSABLE
-    code = "decisions-incomplete"
-    title = "Some changes still need a decision"
 
 
 class InvalidDecision(DomainError):

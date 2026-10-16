@@ -26,6 +26,8 @@ class RecordingQueue:
     stalled: list[StalledJob] = field(default_factory=list)
     retried: list[tuple[int, Queue]] = field(default_factory=list)
     abandoned: list[int] = field(default_factory=list)
+    discarded: list[UUID] = field(default_factory=list)
+    alive: bool | None = True
     fail_defer: bool = False
 
     async def defer_phase(self, job: PhaseJob, *, delay_seconds: int = 0) -> None:
@@ -41,6 +43,13 @@ class RecordingQueue:
 
     async def abandon_stalled(self, job_id: int) -> None:
         self.abandoned.append(job_id)
+
+    async def discard_phase_jobs(self, run_ids: Sequence[UUID]) -> int:
+        self.discarded.extend(run_ids)
+        return len(run_ids)
+
+    async def workers_alive(self, within_seconds: float) -> bool | None:
+        return self.alive
 
 
 Behaviour = Callable[[StageContext, int], Any]
@@ -102,8 +111,13 @@ async def start_run(
     *,
     key: str | None = None,
     version_id: str | None = None,
+    review_mode: str | None = "manual",
 ) -> httpx.Response:
+    """Start a run; ``manual`` unless asked (these tests are about the review gate), ``None``
+    sends no mode (the API's default, automatic)."""
     payload: dict[str, Any] = {"dataset_id": dataset_id}
+    if review_mode is not None:
+        payload["review_mode"] = review_mode
     if version_id is not None:
         payload["dataset_version_id"] = version_id
     return await client.post(

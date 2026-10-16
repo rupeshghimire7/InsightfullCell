@@ -60,6 +60,9 @@ _FALLBACKS: Final = {
     "payload_blocked": "the request would have held personal data",
     "timeout": "the model did not answer in time",
     "rate_limited": "the model provider was busy",
+    "quota_exhausted": "the model provider's quota is used up for now",
+    "auth_failed": "the model provider rejected the API key",
+    "model_not_found": "the configured model is not available to this API key",
     "provider_error": "the model provider returned an error",
     "invalid_output": "the model's answer did not fit what was asked",
     "refused": "the model declined the request",
@@ -136,11 +139,11 @@ def render_report(
     )
 
 
-def filename(dataset_name: str, run_id: str) -> str:
-    """``report-{dataset}-{run}.html``: ASCII letters, digits and dashes only, so the
+def filename(dataset_name: str, run_id: str, extension: str = "html") -> str:
+    """``report-{dataset}-{run}.{extension}``: ASCII letters, digits and dashes only, so the
     ``Content-Disposition`` header needs no quoting rules."""
     ascii_name = (
         unicodedata.normalize("NFKD", dataset_name).encode("ascii", "ignore").decode().lower()
     )
     slug = _SLUG.sub("-", ascii_name).strip("-")[:60].strip("-") or "dataset"
-    return f"report-{slug}-{run_id[:8]}.html"
+    return f"report-{slug}-{run_id[:8]}.{extension}"

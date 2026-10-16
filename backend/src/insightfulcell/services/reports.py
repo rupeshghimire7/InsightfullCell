@@ -3,9 +3,11 @@ each with its test (after the run's false-discovery control) and its sensitivity
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Final, Literal
 from uuid import UUID
 
 from sqlalchemy import select
@@ -17,9 +19,25 @@ from insightfulcell.domain.security import Action, Principal, require
 from insightfulcell.engine.analysis.dashboard import Dashboard
 from insightfulcell.engine.analysis.report import Report
 from insightfulcell.engine.analysis.sensitivity import NOTES
+from insightfulcell.exports.document import Document, build_document
 from insightfulcell.exports.html import filename, render_report
+from insightfulcell.exports.markdown import render_markdown
+from insightfulcell.exports.pdf import render_pdf
+from insightfulcell.exports.word import render_docx
 from insightfulcell.services import run_store
 from insightfulcell.services.dto import RunDetail
+
+ExportFormat = Literal["md", "docx", "pdf"]
+
+#: Media type and renderer per downloadable format (HTML has its own path: a template).
+EXPORTS: Final[dict[str, tuple[str, Callable[[Document], bytes]]]] = {
+    "md": ("text/markdown; charset=utf-8", lambda doc: render_markdown(doc).encode("utf-8")),
+    "docx": (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        render_docx,
+    ),
+    "pdf": ("application/pdf", render_pdf),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +79,26 @@ class ReportService:
             written_at=view.created_at,
         )
         return filename(report.dataset_name, str(view.run.run.id)), html
+
+    async def export_file(
+        self, principal: Principal, run_id: UUID, fmt: ExportFormat
+    ) -> tuple[str, bytes, str]:
+        """The report as Markdown, Word or PDF: ``(filename, content, media type)``. Built from
+        the same stored documents as the HTML export (``exports.document``)."""
+        view = await self.get_report(principal, run_id)
+        report = Report.model_validate(view.document)
+        board = Dashboard.model_validate(view.dashboard) if view.dashboard is not None else None
+        doc = build_document(
+            report=report,
+            dashboard=board,
+            facts=view.facts,
+            run_id=str(view.run.run.id),
+            written_at=view.created_at,
+        )
+        media_type, render = EXPORTS[fmt]
+        # Charts become images and pages are laid out: CPU work, kept off the event loop.
+        content = await asyncio.to_thread(render, doc)
+        return filename(report.dataset_name, str(view.run.run.id), fmt), content, media_type
 
     async def get_report(self, principal: Principal, run_id: UUID) -> ReportView:
         require(principal, Action.RUN_READ)

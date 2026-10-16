@@ -95,3 +95,31 @@ class ProcrastinateQueue:
         await self.app.job_manager.finish_job_by_id_async(
             job_id=job_id, status=Status.FAILED, delete_job=False
         )
+
+    async def discard_phase_jobs(self, run_ids: Sequence[UUID]) -> int:
+        discarded = 0
+        for run_id in run_ids:
+            jobs = await self.app.job_manager.list_jobs_async(
+                task=PHASE_TASK, lock=str(run_id), status=Status.TODO.value
+            )
+            for job in jobs:
+                # Only a job still waiting is deleted; one a worker just took finds no run.
+                if job.id is not None and await self.app.job_manager.cancel_job_by_id_async(
+                    job.id, delete_job=True
+                ):
+                    discarded += 1
+        return discarded
+
+    async def workers_alive(self, within_seconds: float) -> bool | None:
+        try:
+            row = await self.app.connector.execute_query_one_async(
+                "SELECT EXISTS (SELECT 1 FROM procrastinate_workers WHERE last_heartbeat > "
+                "now() - make_interval(secs => %(seconds)s)) AS alive",
+                seconds=within_seconds,
+            )
+        except Exception as exc:  # the answer is a hint for people; never fail a read on it
+            logger.warning(
+                "could not ask whether workers are alive", extra={"error": type(exc).__name__}
+            )
+            return None
+        return bool(row["alive"])

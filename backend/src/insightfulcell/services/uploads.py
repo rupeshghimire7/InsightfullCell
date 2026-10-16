@@ -21,11 +21,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select, text, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from insightfulcell.config import Settings
-from insightfulcell.db.models import Dataset, DatasetVersion, Upload
+from insightfulcell.db.models import Dataset, DatasetVersion, StoragePurge, Upload
 from insightfulcell.db.tenant import TenantDatabase
 from insightfulcell.domain.errors import (
     ContentMismatch,
@@ -319,6 +319,14 @@ class UploadService:
             await session.flush()
 
         bronze_key = f"bronze/{principal.org_id}/{digest.hex()}"
+        # The same file may belong to a deleted dataset whose files wait to be purged: keep
+        # it. Cancelling first (the row lock waits for a purge in progress) means the check
+        # below sees whether the file is still there.
+        await session.execute(
+            delete(StoragePurge).where(
+                StoragePurge.org_id == principal.org_id, StoragePurge.key == bronze_key
+            )
+        )
         if await self._store.head(bronze_key) is None:
             await self._store.copy(upload.staging_key, bronze_key)
         version = DatasetVersion(

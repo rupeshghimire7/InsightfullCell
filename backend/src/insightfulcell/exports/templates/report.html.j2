@@ -188,7 +188,7 @@
     </div>
     <div>
       <h3>Cleaning</h3>
-      <p class="small">{{ report.preparation.applied | length }} change{{ "" if report.preparation.applied | length == 1 else "s" }} applied {{ "after review" if report.preparation.reviewed_by_person else "by the organisation's policy" }}; {{ report.preparation.rows_before | count }} rows went in and {{ report.preparation.rows_after | count }} were analysed.</p>
+      <p class="small">{{ report.preparation.applied | length }} change{{ "" if report.preparation.applied | length == 1 else "s" }} applied {{ "after review" if report.preparation.reviewed_by_person else "automatically" }}; {{ report.preparation.rows_before | count }} rows went in and {{ report.preparation.rows_after | count }} were analysed.</p>
       {% if report.preparation.applied %}<ul class="small">{% for step in report.preparation.applied %}<li>{{ step.label }}: {{ step.column or "all rows" }}</li>{% endfor %}</ul>{% endif %}
     </div>
     <div>

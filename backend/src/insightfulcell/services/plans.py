@@ -38,7 +38,6 @@ from insightfulcell.db.models import (
 from insightfulcell.db.tenant import TenantDatabase
 from insightfulcell.domain.errors import (
     CleaningPlanChanged,
-    DecisionsIncomplete,
     InvalidDecision,
     PlanNotReady,
     RunChanged,
@@ -652,22 +651,14 @@ def _apply_decisions(
             "The decision names changes that are not in this cleaning plan.",
             hint="Reload the page and decide again.",
         )
-    missing = [
-        op.op_id
-        for op in ops
-        if op.decision == Decision.PENDING.value and op.op_id not in decisions
-    ]
-    if missing:
-        count = len(missing)
-        raise DecisionsIncomplete(
-            f"{count} change{'s still need' if count != 1 else ' still needs'} a decision.",
-            hint="Accept or reject every change marked 'Needs your decision'.",
-            extra={"operations": missing},
-        )
     out = []
     for op in ops:
         data = _op_dict(op)
-        if op.op_id in decisions:
+        if op.op_id not in decisions and op.decision == Decision.PENDING.value:
+            # Approved without a decision: the change is not made (the data stays as it is).
+            data["decision"] = Decision.REJECTED.value
+            data["notice"] = "Kept as is: approved without a decision."
+        elif op.op_id in decisions:
             accept = decisions[op.op_id]
             personal_exclusion = (
                 op.kind == CleaningKind.EXCLUDE_COLUMN.value and op.column_name in personal

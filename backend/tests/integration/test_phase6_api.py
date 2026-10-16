@@ -187,6 +187,40 @@ class TestDashboardAndExport:
         other = await client.get(f"/v1/runs/{run_id}/report.html", headers=auth(bob))
         assert other.status_code == 404
 
+    async def test_the_report_downloads_as_markdown_word_and_pdf(
+        self,
+        client: httpx.AsyncClient,
+        auth: AuthHeaders,
+        alice: Identity,
+        bob: Identity,
+        executor: RunExecutor,
+    ) -> None:
+        run_id = await finished(client, auth(alice), executor, alice.org_id, MESSY)
+        expected = {
+            "md": "text/markdown",
+            "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "pdf": "application/pdf",
+        }
+        for ext, media_type in expected.items():
+            url = f"/v1/runs/{run_id}/report.{ext}"
+            response = await client.get(url, headers=auth(alice))
+            assert response.status_code == 200, response.text
+            assert response.headers["content-type"].startswith(media_type)
+            assert response.headers["content-disposition"].endswith(f'-{run_id[:8]}.{ext}"')
+            assert response.headers["x-content-type-options"] == "nosniff"
+            assert (await client.get(url, headers=auth(bob))).status_code == 404
+            if ext == "md":
+                text = response.text
+                assert text.startswith("# ")
+                assert "example.com" not in text  # personal data never reaches an export
+                report = (await client.get(f"/v1/runs/{run_id}/report", headers=auth(alice))).json()
+                for fact in report["facts"]:
+                    assert f"\\[{fact['id']}\\]" in text or f"{fact['id']}" in text
+            elif ext == "docx":
+                assert response.content[:2] == b"PK"
+            else:
+                assert response.content.startswith(b"%PDF-")
+
     async def test_a_report_written_before_dashboards_has_none(
         self,
         client: httpx.AsyncClient,
