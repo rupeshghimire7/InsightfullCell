@@ -226,7 +226,7 @@ Decision record: ADR-035. Verified in iteration 11 (see "Last check run"). Phase
 | Staging on AWS (ECS Fargate, RDS single-AZ, S3) + Vercel, from Sprint 4 | ⬜ |
 | OpenTelemetry traces across web, API, queue and worker; Sentry | 🟡 structured JSON logs only |
 | Metrics: endpoint RED, queue depth/age, stage durations, model cost, verifier rejection rate | ⬜ (rejections are stored per sentence in `verification_results`; no metrics pipeline yet) |
-| Retention: bronze 90 days, lifecycle rules, partition dropping | ⬜ |
+| Retention: bronze 90 days, lifecycle rules, partition dropping | 🟡 deleting a run or dataset purges its files after `STORAGE_PURGE_AFTER_DAYS` (ADR-037); no age-based retention yet |
 | Audit log (append-only) | ⬜ |
 | Release flow: tagged release with manual approval | ⬜ |
 
@@ -443,7 +443,78 @@ Not changed (noted for later): the dedup path ignores `dataset_id` when the same
 
 **Not changed (noted):** rates per resident, small-area smoothing and spatial clustering (no population data); unattended PDFs; the judge's spike; question data (Phase 7). `graphify update` not run (graphify is not installed).
 
+### Iteration 12a · 2026-10-16 · Practical test, usage guide, security check (no code changed)
+
+**Why:** check in a real browser that everything built through Phase 6 works on real files, document it with screenshots, and look for key or data leaks and vulnerabilities.
+
+**Done:** isolated stack (fresh database `ic_live_test`, API :8200, production web build :3200, real worker, RustFS), driven by Playwright + Chromium (the Playwright MCP needs Google Chrome, not installed). One live Gemini run (`field_service_jobs`); everything else with `LLM_PROVIDER=none`. Test database and test objects deleted afterwards. Written (local, `docs/` is ignored): `docs/usage/USAGE.md` (guide, 38 screenshots in `docs/usage/screenshots/`) and `docs/usage/TEST_REPORT.md` (results and findings).
+
+**Passed:** every upload format, dedup, empty and fake files, Latin-1 and semicolon CSVs, live progress, review gate, requests without a model, Phase B, chart checks, exploration, cancel, integrity mismatch on a tampered object, HTML export, recipe rerun, phone and dark layouts. First model-written report: 38 sentences accepted, 1 rightly rejected. Security: no keys in the bundle, git history or logs; no personal values in pages, API responses or exports; tenant isolation (all 404); forged tokens 401; CSRF 403; traversal 404; storage anonymous 403; XSS and recipe injection neutralised; sign-in rate limit.
+
+| Found (not fixed, details in TEST_REPORT.md) | Severity |
+|---|---|
+| One malformed CSV row makes DuckDB read the whole file as one column, with no warning | High |
+| Gemini planner answers always fail validation (`cause: schema`), so every run uses the rules planner, which picks no outcome and only the first measures | High |
+| Browser can get the API JWT: `GET /api/auth/token` and the `set-auth-jwt` header (Better Auth `jwt()`); breaks "browser never receives the API token" | Medium |
+| Signed-out session works for up to 5 minutes (`cookieCache`) | Low–Medium |
+| React #418 hydration error on live run pages (`run-progress.tsx:423`, `Date.now()` in state) | Low |
+| Events ticket minted for another workspace's run (API refuses the stream) | Low |
+
+### Iteration 12b · 2026-10-16 · Fixes from the test, review modes, report exports (ADR-036)
+
+**Why:** the person asked to fix findings 1–4 of the practical test (malformed CSV, the model must work when configured, hide the API token, end sessions on sign-out), to add automatic and manual review modes (automatic by default), "Apply all" / "Keep all as is" with undecided changes kept as is, and to download the report as Markdown, Word and PDF.
+
+**Built (ADR-036):** structural CSV/TSV check in `ingestion/engine.py`; `review_mode` on `POST /v1/runs`, run inputs, `clean_plan` (auto applies pending changes, no pause), `RunOut`, report wording; `cleaning-plan:decide` treats missing decisions as "keep as is" (`DecisionsIncomplete` removed); exports `exports/document.py` (shared blocks), `markdown.py`, `word.py` (python-docx), `pdf.py` (fpdf2), `images.py` (resvg-py, bundled DejaVu Sans) and `GET /v1/runs/{id}/report.{md,docx,pdf}`; LLM: `retry_after`/`quota_exhausted`/`auth_failed` in the adapters, gateway waits and quota pause, `LLM_REQUESTS_PER_MINUTE`, `LLM_RATE_LIMIT_WAITS`, `LLM_MAX_RETRY_WAIT_SECONDS`, schema problems logged, lenient `ProposedPlan`, `LLM_PROVIDER` requires its key, worker start-up check (`check_model`); auth: `disabledPaths: ["/token"]`, `disableSettingJwtHeader`, cookie cache off. UI: Automatic / Manual on the start control and "Review" on the run page, "Apply all" / "Keep all as is" on the review, a Download menu (PDF, Word, Markdown, HTML), "Print". Docs: ADR-036, CHANGELOG, `.env.example`, `docs/usage/TEST_REPORT.md` status.
+
+| Found while building | Fix |
+|---|---|
+| The Gemini key's free tier allows 20 requests a day for `gemini-3.8-flash`; it was used up, and other models answered 503 "high demand" | Quota exhaustion is now recognised and named; the lenient parser could not be confirmed on a live answer this iteration |
+| Changing the mode after a failed start would have replayed the old Idempotency-Key with a different body | The key is reset when the mode changes (component test) |
+
+**For your local setup:** `cd backend && uv sync` (three new packages), `make contract` is already applied; restart `make api`, `make worker` and `make web`. No migration. Your `backend/.env` sets `LLM_PROVIDER=gemini` with a key, so the worker now checks that key at start-up. For the free tier, consider `LLM_REQUESTS_PER_MINUTE=5` and `LLM_NARRATION_CONCURRENCY=1`.
+
+### Iteration 13 · 2026-10-16 · Deleting runs and datasets; analyses stuck in "queued" (ADR-037)
+
+**Why:** the person asked to delete runs and datasets (gone from the database at once, from storage after X days, never shown again), and why an analysis started from a dataset stayed "queued" with every step waiting.
+
+**Diagnosis of "queued forever":** no worker was running. Only `make api` (uvicorn) and `make web` (next dev) were up; the last worker heartbeat in `procrastinate_workers` was 2026-10-10; the run's phase job sat in `procrastinate_jobs` as `todo`. The API only queues work; the worker runs it. The worker's start-up check (`check_model`) was run on its own against the configured Gemini key and passed, so a worker would start. Fix: the run page says so (`RunOut.waiting_for_worker`, no heartbeat for 60 s) and `make dev` starts all three.
+
+**Built (ADR-037):** migration 0010 (`storage_purges`, `app.delete_run`, `app.delete_dataset`, `app.erase_runs`, `app.storage_purges_due`, append-only triggers allow deletes while `app.erasing` is on); `services/deletion.py`; `DELETE /v1/runs/{id}` and `DELETE /v1/datasets/{id}` (`200 DeletedOut`, `409 still-running`); `ObjectStore.delete_prefix`; queue port `discard_phase_jobs` and `workers_alive`; worker task `purge_deleted_files` (hourly, minute 29); `STORAGE_PURGE_AFTER_DAYS` (default 7); uploads cancel a pending purge of the same original file; actions `run:delete` / `dataset:delete` (analysts and above). UI: `DeleteAction` (in-place confirmation, focus on "Keep it") on the run page (not while running) and the dataset page; "Waiting for a worker" notice; danger button style; the BFF forwards `DELETE`. `scripts/dev.sh` / `make dev`. Docs: ADR-037, CHANGELOG, README, `.env.example`.
+
+| Found while building | Fix |
+|---|---|
+| Procrastinate's delete trigger uses unqualified table names, so jobs cannot be deleted from a definer function with a pinned `search_path` | Waiting jobs are removed through Procrastinate's own API after the commit |
+| `SELECT … FOR UPDATE` on `storage_purges` needs `UPDATE`, which the app role does not have | The sweep deletes the row with `RETURNING` and removes the files in the same transaction (rolled back if storage fails) |
+| The browser test's delete showed "Something went wrong" | The BFF route exported only GET and POST; it now exports DELETE |
+
+**For your local setup:** migration 0010 was applied to your dev database (`make migrate`). Start the worker (`make worker`, or stop the others and use `make dev`): your queued run `01a14463…` then starts on its own. The three older queued jobs belong to cancelled runs and finish as `skipped`.
+
+### Iteration 14 · 2026-10-16 · Test-suite datasets (no app code changed)
+
+**Why:** the person asked for many tabular files of different shapes to test every feature and judge result quality.
+
+**Built:** `sample_data/generate_test_suite.py` (seeded) writes 33 files to `sample_data/4_analysis` (13 files with planted, documented patterns, among them pure noise, Simpson's paradox, leakage, a rare target, nested JSON, long format and 150k rows), `5_shapes` (3×2 up to 60×500, plus 501 columns) and `6_ingestion_edge_cases` (cp1252 with `;`, pipe, UTF-8 BOM, UTF-16, duplicate headers, ragged rows, tricky values, xlsx, empty files). `sample_data/TEST_SUITE.md` is the answer key. Every file was run through `ingest_file`.
+
+| Found while building | Status |
+|---|---|
+| An xlsx with title rows above the header ingests as 9 × 1: the title becomes the only column | Open: no header-row detection for Excel |
+| A 0-byte file says "The file has a header but no data rows." | Open: misleading message |
+
 ## Last check run
+
+**Iteration 12b (2026-10-16), PostgreSQL 18 + RustFS running. Run on the final code.**
+
+| Step | Result |
+|---|---|
+| `scripts/check.sh` backend: ruff, mypy strict (195 files), import-linter (6 contracts), pytest unit + integration, migrations up/down/up, OpenAPI contract, pip-audit (with fpdf2, python-docx, resvg-py) | pass: 652 tests, 92.92% coverage (minimum 85%) |
+| `scripts/check.sh` frontend: prettier, eslint, tsc strict, vitest + axe, API types match the contract, `next build`, pnpm audit | pass: 365 tests |
+| Secret scan | pass (built-in patterns) |
+| `scripts/e2e.sh` on 8100/3100 (`LLM_PROVIDER=none`) | pass: 5/5 journeys, now also: automatic by default, manual with Keep all / Apply all, `/api/auth/token` 404 and no `set-auth-jwt`, cookies replayed after sign-out → 401, PDF/Word/Markdown/HTML downloads |
+| Browser check on an isolated stack (no model) | new screens captured for `docs/usage/USAGE.md`; a real report exported as a 23-page PDF, a Word file (21 pictures, 22 tables) and Markdown; a malformed CSV refused with its line |
+| Live Gemini | not run: today's free quota (20 requests) was used up; other models answered 503 |
+| GitHub CI | not run: nothing pushed |
+
+**Iteration 12a (2026-10-16):** practical browser test only; no code changed, so the unit, integration and e2e suites were not re-run. Built-in secret scan: pass.
 
 **Iteration 11 (2026-10-11), PostgreSQL 18 + RustFS running. Release candidate v0.6.0. Run on the final code.**
 
