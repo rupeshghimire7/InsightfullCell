@@ -7,7 +7,7 @@ OWNER_URL := $(subst /postgres,/$(DB),$(ADMIN_URL))
 # uv manages backend/.venv itself; an activated venv elsewhere only produces warnings.
 unexport VIRTUAL_ENV
 
-.PHONY: help bootstrap up down migrate api worker web check check-fast fix e2e contract hooks clean
+.PHONY: help bootstrap up down migrate dev api worker web check check-fast fix e2e contract hooks clean
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[1m%-12s\033[0m %s\n", $$1, $$2}'
@@ -30,10 +30,13 @@ migrate: ## Create or update the database schema (API tables and Better Auth tab
 	cd backend && uv run python ../scripts/db_bootstrap.py create-logins --database $(DB) --admin-url $(ADMIN_URL)
 	cd frontend && pnpm auth:migrate
 
+dev: ## Run the API, the worker and the web app together (Ctrl-C stops all three)
+	scripts/dev.sh
+
 api: ## Run the API with auto-reload on :8000
 	cd backend && uv run uvicorn insightfulcell.api.main:app --reload --port 8000 --timeout-graceful-shutdown 2
 
-worker: ## Run the worker (analysis runs and upkeep from the job queue)
+worker: ## Run the worker: analyses stay queued until one runs (and upkeep)
 	cd backend && uv run python -m insightfulcell.worker
 
 web: ## Run the web app on :3000
