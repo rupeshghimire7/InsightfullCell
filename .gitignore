@@ -44,3 +44,5 @@ CLAUDE.md
 SETUP_MANUAL.md
 docs/
 .claude/
+review_cr.jsonl
+sample_data/
