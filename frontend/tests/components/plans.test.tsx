@@ -105,24 +105,52 @@ describe("PlanOverview", { timeout: 30_000 }, () => {
 // The form re-renders on every keystroke and click; under a full parallel run these
 // interaction-heavy tests can exceed the 5 s default, so they get a wider budget.
 describe("ReviewForm", { timeout: 30_000 }, () => {
-  it("holds approval until every lossy change is decided", async () => {
+  it("approves at once with undecided changes kept as they are", async () => {
     const user = userEvent.setup();
     const decide = vi.fn().mockResolvedValue({});
     const { container } = render(<ReviewForm plan={plan()} orgId="org-1" api={fakeApi(decide)} />);
     const progress = screen.getByRole("region", { name: "Approve the plan" });
-    expect(progress).toHaveTextContent("0 of 2 decided");
+    expect(progress).toHaveTextContent("0 of 2 to apply · 2 undecided, kept as is");
+    expect(await axe(container)).toHaveNoViolations();
 
     await user.click(screen.getByRole("button", { name: "Approve and continue" }));
-    expect(decide).not.toHaveBeenCalled();
-    expect(screen.getByText("Decide every change first.")).toBeInTheDocument();
-    const first = screen.getByRole("radiogroup", { name: /Set impossible values to empty/ });
-    expect(within(first).getAllByRole("radio")[0]).toHaveFocus();
+    await waitFor(() => expect(decide).toHaveBeenCalledTimes(1));
+    const pendingIds = plan()
+      .cleaning!.operations.filter((o) => o.decision === "pending")
+      .map((o) => o.id);
+    const sent = decide.mock.calls[0]![2].decisions as { operation_id: string; accept: boolean }[];
+    for (const id of pendingIds) {
+      expect(sent).toContainEqual({ operation_id: id, accept: false });
+    }
+  });
 
+  it("applies or keeps every change at once", async () => {
+    const user = userEvent.setup();
+    render(<ReviewForm plan={plan()} orgId="org-1" api={fakeApi(vi.fn())} />);
+    const progress = screen.getByRole("region", { name: "Approve the plan" });
+    const all = screen.getByRole("group", { name: "Decide every change at once" });
+
+    await user.click(within(all).getByRole("button", { name: "Apply all" }));
+    expect(progress).toHaveTextContent("2 of 2 to apply");
+    expect(within(all).getByRole("button", { name: "Apply all" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    for (const group of screen.getAllByRole("radiogroup")) {
+      expect(within(group).getByRole("radio", { name: "Apply" })).toBeChecked();
+    }
+
+    await user.click(within(all).getByRole("button", { name: "Keep all as is" }));
+    expect(progress).toHaveTextContent("0 of 2 to apply");
+    expect(progress).not.toHaveTextContent("undecided");
+    for (const group of screen.getAllByRole("radiogroup")) {
+      expect(within(group).getByRole("radio", { name: "Keep as is" })).toBeChecked();
+    }
+
+    // One change switched back by hand.
+    const first = screen.getByRole("radiogroup", { name: /Set impossible values to empty/ });
     await user.click(within(first).getByText("Apply"));
-    const second = screen.getByRole("radiogroup", { name: /Drop exact duplicate rows/ });
-    await user.click(within(second).getByText("Keep as is"));
-    expect(progress).toHaveTextContent("2 of 2 decided");
-    expect(await axe(container)).toHaveNoViolations();
+    expect(progress).toHaveTextContent("1 of 2 to apply");
   });
 
   it("sends every decision, the outcome, names and features, then opens the run", async () => {

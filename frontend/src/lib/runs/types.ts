@@ -2,6 +2,9 @@ import type { components } from "@/lib/api/schema";
 
 /** Run types, straight from the generated API contract. */
 export type Run = components["schemas"]["RunOut"];
+/** auto: every change that would wait for a review is applied and the run goes on to the
+ *  report; manual: the run stops for the person's review. */
+export type ReviewMode = components["schemas"]["CreateRunRequest"]["review_mode"];
 export type RunSummary = components["schemas"]["RunSummaryOut"];
 export type RunPage = components["schemas"]["RunPageOut"];
 export type Stage = components["schemas"]["StageOut"];
@@ -10,6 +13,8 @@ export type StageStatus = components["schemas"]["StageStatus"];
 export type RunEvent = components["schemas"]["RunEventOut"];
 export type EventType = components["schemas"]["EventType"];
 export type LatestRun = components["schemas"]["LatestRunOut"];
+/** What a delete removed; the files follow at `files_removed_after`. */
+export type Deleted = components["schemas"]["DeletedOut"];
 
 /** What the ingest stage reports (`StageOut.output` for `ingest`). Never cell values. */
 export interface IngestOutput {

@@ -29,14 +29,29 @@ describe("runsApi", () => {
     expect(url).toBe("/api/backend/v1/runs");
     expect(init.method).toBe("POST");
     expect(headers["Idempotency-Key"]).toBe("key-12345678");
-    expect(JSON.parse(String(init.body))).toEqual({ dataset_id: "d1", dataset_version_id: "v1" });
+    expect(JSON.parse(String(init.body))).toEqual({
+      dataset_id: "d1",
+      dataset_version_id: "v1",
+      review_mode: "auto",
+    });
     expect(init.credentials).toBe("same-origin");
   });
 
   it("omits the version when the newest one is meant", async () => {
     const fetchMock = mockFetch(202, { id: "r1" });
     await runsApi.start({ datasetId: "d1", idempotencyKey: "key-12345678" });
-    expect(JSON.parse(String(lastCall(fetchMock).init.body))).toEqual({ dataset_id: "d1" });
+    expect(JSON.parse(String(lastCall(fetchMock).init.body))).toEqual({
+      dataset_id: "d1",
+      review_mode: "auto",
+    });
+  });
+
+  it("asks for a manual review when chosen", async () => {
+    const fetchMock = mockFetch(202, { id: "r1" });
+    await runsApi.start({ datasetId: "d1", idempotencyKey: "key-12345678", reviewMode: "manual" });
+    expect(JSON.parse(String(lastCall(fetchMock).init.body))).toMatchObject({
+      review_mode: "manual",
+    });
   });
 
   it.each([

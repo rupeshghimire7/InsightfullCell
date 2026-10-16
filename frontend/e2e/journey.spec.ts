@@ -141,16 +141,11 @@ test("sign in, upload, deduplicate, sign out", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Home sales 2026", level: 1 })).toBeVisible();
   await expect(page.getByText("Not analysed yet")).toBeVisible();
   await expectNoAxeViolations(page);
+  // Automatic is the default: the run applies its changes and never stops for a review.
+  await expect(page.getByRole("radio", { name: "Automatic" })).toBeChecked();
   await page.getByRole("button", { name: "Analyse newest version" }).click();
   await expect(page).toHaveURL(/\/o\/[0-9a-f-]{36}\/runs\/[0-9a-f-]{36}$/);
   await expect(page.getByRole("heading", { name: "Analysis of Home sales 2026" })).toBeVisible();
-  // Every plan is reviewed (review_lossy): nothing here needs a decision, so approve it as is.
-  await expect(page.getByRole("heading", { name: "Your review is needed" })).toBeVisible({
-    timeout: 90_000,
-  });
-  await page.getByRole("link", { name: "Review changes" }).click();
-  await page.getByRole("button", { name: "Approve and continue" }).click();
-  await expect(page).toHaveURL(/\/runs\/[0-9a-f-]{36}$/);
   await expect(page.getByText("Your report is ready")).toBeVisible({
     timeout: 90_000,
   });
@@ -210,11 +205,24 @@ test("sign in, upload, deduplicate, sign out", async ({ page }) => {
   await page.getByRole("link", { name: "Home", exact: true }).click();
   await expect(page.getByRole("row", { name: /Home sales 2026.*Succeeded/ })).toBeVisible();
 
-  // --- sign out returns to sign-in and protects the app again
+  // --- the API token never reaches the browser: no token route, no token header
+  expect((await page.request.get("/api/auth/token")).status()).toBe(404);
+  const session = await page.request.get("/api/auth/get-session");
+  expect(session.status()).toBe(200);
+  expect(session.headers()["set-auth-jwt"]).toBeUndefined();
+  expect(await session.text()).not.toMatch(/eyJ[\w-]+\.eyJ/);
+
+  // --- sign out returns to sign-in and protects the app again, at once: the old cookies
+  // are refused (no cached session outlives a sign-out)
+  const cookies = await page.context().cookies();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/sign-in$/);
   await page.goto("/");
   await expect(page).toHaveURL(/\/sign-in$/);
+  const replay = await page.context().browser()!.newContext({ baseURL: page.url() });
+  await replay.addCookies(cookies);
+  expect((await replay.request.get("/api/backend/v1/me")).status()).toBe(401);
+  await replay.close();
 
   expect(policyViolations).toEqual([]);
   expect(consoleErrors).toEqual([]);
@@ -274,9 +282,11 @@ test("a messy file pauses for review, and approving continues the analysis", asy
   });
   await expect(page.getByText("Saved")).toBeVisible({ timeout: 60_000 });
   await page.getByRole("link", { name: "Field service jobs" }).click();
+  await page.getByText("Manual", { exact: true }).click();
+  await expect(page.getByText(/Stops so you can check/)).toBeVisible();
   await page.getByRole("button", { name: "Analyse newest version" }).click();
 
-  // --- the run stops at the review gate; nothing has been changed yet
+  // --- a manual run stops at the review gate; nothing has been changed yet
   await expect(page.getByRole("heading", { name: "Your review is needed" })).toBeVisible({
     timeout: 90_000,
   });
@@ -298,19 +308,20 @@ test("a messy file pauses for review, and approving continues the analysis", asy
   await page.goBack();
   await page.goBack();
 
-  // --- approving is refused until every change is decided, then continues the run
+  // --- every change at once: keep all, apply all (one switched back by hand), then approve
   await page.getByRole("link", { name: "Review changes" }).click();
   await expect(page.getByRole("heading", { name: "Needs your decision" })).toBeVisible();
   await expectNoAxeViolations(page);
-  await page.getByRole("button", { name: "Approve and continue" }).click();
-  await expect(page.getByText("Decide every change first.")).toBeVisible();
   const groups = page.getByRole("radiogroup");
   const count = await groups.count();
-  expect(count).toBeGreaterThan(0);
-  for (let i = 0; i < count; i += 1) {
-    await groups.nth(i).getByText("Apply", { exact: true }).click();
-  }
-  await expect(page.getByText(`${count} of ${count} decided`)).toBeVisible();
+  expect(count).toBeGreaterThan(1);
+  await expect(page.getByText(`${count} undecided, kept as is`)).toBeVisible();
+  await page.getByRole("button", { name: "Keep all as is" }).click();
+  await expect(page.getByText(`0 of ${count} to apply`)).toBeVisible();
+  await page.getByRole("button", { name: "Apply all" }).click();
+  await expect(page.getByText(`${count} of ${count} to apply`)).toBeVisible();
+  await groups.nth(0).getByText("Keep as is", { exact: true }).click();
+  await expect(page.getByText(`${count - 1} of ${count} to apply`)).toBeVisible();
   await page.getByRole("button", { name: "Approve and continue" }).click();
 
   await expect(page).toHaveURL(/\/runs\/[0-9a-f-]{36}$/);
@@ -351,12 +362,29 @@ test("a messy file pauses for review, and approving continues the analysis", asy
   await expect(page.locator("main")).not.toContainText("@");
   await expectNoAxeViolations(page);
 
-  // --- the report downloads as one HTML file that runs nothing
-  const download = page.waitForEvent("download");
-  await page.getByRole("link", { name: "Download HTML" }).click();
-  const file = await download;
-  expect(file.suggestedFilename()).toMatch(/^report-[a-z0-9-]+\.html$/);
-  const html = await readFile((await file.path()) ?? "", "utf8");
+  // --- the report downloads as PDF, Word, Markdown and one HTML file that runs nothing
+  const files: Record<string, Buffer> = {};
+  for (const [name, ext] of [
+    [/^PDF/, "pdf"],
+    [/^Word/, "docx"],
+    [/^Markdown/, "md"],
+    [/^HTML/, "html"],
+  ] as const) {
+    await page.getByText("Download", { exact: true }).click();
+    const download = page.waitForEvent("download");
+    await page
+      .getByRole("list", { name: "Download the report as" })
+      .getByRole("link", { name })
+      .click();
+    const file = await download;
+    expect(file.suggestedFilename()).toMatch(new RegExp(`^report-[a-z0-9-]+\\.${ext}$`));
+    files[ext] = await readFile((await file.path()) ?? "");
+  }
+  expect(files.pdf!.subarray(0, 5).toString()).toBe("%PDF-");
+  expect(files.docx!.subarray(0, 2).toString()).toBe("PK");
+  expect(files.md!.toString("utf8")).toMatch(/^# /);
+  expect(files.md!.toString("utf8")).not.toContain("@");
+  const html = files.html!.toString("utf8");
   expect(html.toLowerCase()).not.toContain("<script");
   expect(html).toContain("<svg");
 });
@@ -380,11 +408,6 @@ test("explore one group of a finished analysis", async ({ page }) => {
   await expect(page.getByText("Saved")).toBeVisible({ timeout: 60_000 });
   await page.getByRole("link", { name: "Regional sales" }).click();
   await page.getByRole("button", { name: "Analyse newest version" }).click();
-  await expect(page.getByRole("heading", { name: "Your review is needed" })).toBeVisible({
-    timeout: 90_000,
-  });
-  await page.getByRole("link", { name: "Review changes" }).click();
-  await page.getByRole("button", { name: "Approve and continue" }).click();
   await expect(page.getByText("Your report is ready")).toBeVisible({ timeout: 90_000 });
 
   // --- one group explored on its own (an exploratory sub-run), then its dashboard
@@ -400,6 +423,7 @@ test("explore one group of a finished analysis", async ({ page }) => {
   await expectNoAxeViolations(page);
   await confirm.getByRole("button", { name: "Start exploring" }).click();
   await expect(page).toHaveURL(/\/runs\/[0-9a-f-]{36}$/);
+  const explorationUrl = page.url();
   await expect(page.getByText(/^Exploring a subset/)).toBeVisible();
   await expect(page.getByText("Your report is ready")).toBeVisible({ timeout: 90_000 });
   await page.getByRole("link", { name: "Open the dashboard" }).click();
@@ -411,4 +435,31 @@ test("explore one group of a finished analysis", async ({ page }) => {
   // The runs list says which run explores what.
   await page.getByRole("link", { name: "Runs", exact: true }).click();
   await expect(page.getByRole("row", { name: /Exploring region/ })).toHaveCount(1);
+
+  // --- deleting: the exploration from its page, then the whole dataset. Gone at once.
+  await page.goto(explorationUrl);
+  await page.getByRole("button", { name: "Delete analysis…" }).click();
+  const sure = page.getByRole("group", { name: "Confirm deleting this analysis" });
+  await expect(sure).toContainText("cannot be undone");
+  await expect(sure.getByRole("button", { name: "Keep it" })).toBeFocused();
+  await expectNoAxeViolations(page);
+  await sure.getByRole("button", { name: "Delete analysis" }).click();
+  await expect(page).toHaveURL(/\/datasets\/[0-9a-f-]{36}$/);
+  const datasetUrl = page.url();
+  await page.goto(explorationUrl);
+  await expect(page.getByRole("heading", { name: "Page not found" })).toBeVisible();
+  await page.goto(datasetUrl.replace(/\/datasets\/[^/]+$/, "/runs"));
+  await expect(page.getByRole("row", { name: /Exploring region/ })).toHaveCount(0);
+  await expect(page.getByRole("row", { name: /Regional sales/ })).toHaveCount(1);
+
+  await page.goto(datasetUrl);
+  await page.getByRole("button", { name: "Delete dataset…" }).click();
+  await page
+    .getByRole("group", { name: "Confirm deleting this dataset" })
+    .getByRole("button", { name: "Delete dataset" })
+    .click();
+  await expect(page).toHaveURL(/\/o\/[0-9a-f-]{36}$/);
+  await expect(page.getByText("No datasets yet")).toBeVisible();
+  await page.getByRole("link", { name: "Runs", exact: true }).click();
+  await expect(page.getByRole("row", { name: /Regional sales/ })).toHaveCount(0);
 });

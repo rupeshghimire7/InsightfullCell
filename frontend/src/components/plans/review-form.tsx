@@ -4,12 +4,10 @@ import { useRouter } from "next/navigation";
 import {
   useId,
   useMemo,
-  useRef,
   useState,
   type CSSProperties,
   type FormEvent,
   type ReactNode,
-  type Ref,
 } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,12 +47,13 @@ export const MAX_REQUESTS = 5;
 const MAX_REQUEST_CHARS = 500;
 
 /**
- * The review gate. Changes that could remove data wait for an explicit choice; everything
- * else is shown with its current state and can be switched. The person can also keep or
- * remove planned questions and ask for more in their own words.
+ * The review gate (manual runs). Changes that could remove data are listed with Apply / Keep
+ * as is, one by one or all at once; a change left undecided is kept as is (not made). Everything
+ * else is shown with its current state and can be switched. The person can also keep or remove
+ * planned questions and ask for more in their own words.
  *
  * - No change to the questions: **Approve and continue** records one new, immutable cleaning
- *   plan revision and the analysis goes on to the report.
+ *   plan revision (undecided changes not made) and the analysis goes on to the report.
  * - Questions removed, brought back or asked for: **Update the plan** plans again (the engine
  *   first, then the planning model) and the plan comes back here.
  */
@@ -108,11 +107,9 @@ export function ReviewForm({ plan, orgId, api = plansApi }: ReviewFormProps) {
   const revising = questionsChanged || requestsChanged;
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<Problem | null>(null);
-  const [nudge, setNudge] = useState(false);
-  const firstUndecided = useRef<HTMLFieldSetElement | null>(null);
 
   const decided = pending.filter((o) => choices[o.id] !== undefined).length;
-  const complete = decided === pending.length;
+  const applied = pending.filter((o) => choices[o.id] === true).length;
   const personal = new Set(plan.columns.filter((c) => c.personal_data).map((c) => c.name));
   const targetOptions = plan.dictionary.filter(
     (d) =>
@@ -124,7 +121,14 @@ export function ReviewForm({ plan, orgId, api = plansApi }: ReviewFormProps) {
 
   function set(id: string, value: boolean) {
     setChoices((current) => ({ ...current, [id]: value }));
-    setNudge(false);
+  }
+
+  /** Apply every change that waits for a decision, or keep every one as it is. */
+  function setAll(value: boolean) {
+    setChoices((current) => ({
+      ...current,
+      ...Object.fromEntries(pending.map((o) => [o.id, value])),
+    }));
   }
 
   function undoQuestionChanges() {
@@ -139,11 +143,6 @@ export function ReviewForm({ plan, orgId, api = plansApi }: ReviewFormProps) {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!revising && !complete) {
-      setNudge(true);
-      firstUndecided.current?.querySelector<HTMLInputElement>("input")?.focus();
-      return;
-    }
     if (!plan.cleaning) return;
     setBusy(true);
     setProblem(null);
@@ -163,6 +162,7 @@ export function ReviewForm({ plan, orgId, api = plansApi }: ReviewFormProps) {
     }
     const body: DecideRequest = {
       cleaning_revision: plan.cleaning.revision,
+      // Undecided changes are sent as "keep as is": approving never makes a change by default.
       decisions: operations.map((o) => ({ operation_id: o.id, accept: choices[o.id] === true })),
       columns: edits,
       target: target || null,
@@ -192,19 +192,38 @@ export function ReviewForm({ plan, orgId, api = plansApi }: ReviewFormProps) {
   }
 
   const stale = problem && problem.status === 412;
-  const firstOpen = pending.find((o) => choices[o.id] === undefined)?.id;
 
   return (
     <form id={formId} onSubmit={(e) => void submit(e)} className="space-y-12 pb-28" noValidate>
       <section aria-labelledby="decide-title" className="space-y-4">
-        <div className="space-y-1">
-          <h2 id="decide-title" className="text-lg font-semibold">
-            Needs your decision
-          </h2>
-          <p className="max-w-[65ch] text-muted">
-            These changes could remove or replace values. Nothing changes until you approve, and the
-            original file is never modified.
-          </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="space-y-1">
+            <h2 id="decide-title" className="text-lg font-semibold">
+              Needs your decision
+            </h2>
+            <p className="max-w-[65ch] text-muted">
+              These changes could remove or replace values. Nothing changes until you approve, a
+              change you leave undecided is kept as it is, and the original file is never modified.
+            </p>
+          </div>
+          {pending.length > 1 ? (
+            <div role="group" aria-label="Decide every change at once" className="flex gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => setAll(true)}
+                aria-pressed={applied === pending.length}
+              >
+                Apply all
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => setAll(false)}
+                aria-pressed={decided === pending.length && applied === 0}
+              >
+                Keep all as is
+              </Button>
+            </div>
+          ) : null}
         </div>
         {pending.length === 0 ? (
           <p className="flex items-center gap-2 text-muted">
@@ -214,16 +233,12 @@ export function ReviewForm({ plan, orgId, api = plansApi }: ReviewFormProps) {
         ) : (
           <ol className="space-y-3">
             {pending.map((op, i) => {
-              const undecided = choices[op.id] === undefined;
-              const attach = op.id === firstOpen;
               return (
                 <li key={op.id} className="enter" style={{ "--i": i } as CSSProperties}>
                   <Decision
                     op={op}
                     choice={choices[op.id]}
                     onChange={(value) => set(op.id, value)}
-                    highlight={nudge && undecided}
-                    ref={attach ? firstUndecided : undefined}
                     columnLabel={
                       op.column ? columns[op.column]?.display_name || op.column : "All rows"
                     }
@@ -455,11 +470,14 @@ export function ReviewForm({ plan, orgId, api = plansApi }: ReviewFormProps) {
             ) : pending.length === 0 ? (
               <span className="text-muted">Nothing needs a decision. Approve to continue.</span>
             ) : (
-              <span className={complete ? "text-text" : "text-muted"}>
-                <span className="tabular font-mono font-medium text-text">{decided}</span> of{" "}
-                <span className="tabular font-mono">{pending.length}</span> decided
-                {nudge && !complete ? (
-                  <span className="ml-2 font-medium text-warning">Decide every change first.</span>
+              <span className="text-text">
+                <span className="tabular font-mono font-medium">{applied}</span> of{" "}
+                <span className="tabular font-mono">{pending.length}</span> to apply
+                {decided < pending.length ? (
+                  <span className="text-muted">
+                    {" "}
+                    · {pending.length - decided} undecided, kept as is
+                  </span>
                 ) : null}
               </span>
             )}
@@ -470,17 +488,10 @@ export function ReviewForm({ plan, orgId, api = plansApi }: ReviewFormProps) {
               {busy ? "Updating…" : "Update the plan"}
             </Button>
           ) : (
-            <Button
-              type="submit"
-              loading={busy}
-              aria-describedby={complete ? undefined : `${formId}-why`}
-            >
+            <Button type="submit" loading={busy}>
               {busy ? "Approving…" : "Approve and continue"}
             </Button>
           )}
-          <span id={`${formId}-why`} className="sr-only">
-            Every change marked as needing your decision must be applied or skipped first.
-          </span>
         </div>
       </div>
 
@@ -512,18 +523,15 @@ interface DecisionProps {
   op: CleaningOperation;
   choice: Choice;
   onChange: (value: boolean) => void;
-  highlight: boolean;
   columnLabel: string;
-  ref?: Ref<HTMLFieldSetElement>;
 }
 
-function Decision({ op, choice, onChange, highlight, columnLabel, ref }: DecisionProps) {
+function Decision({ op, choice, onChange, columnLabel }: DecisionProps) {
   const name = useId();
   return (
     <fieldset
-      ref={ref}
       className={`rounded-panel border bg-surface p-4 transition-colors sm:p-5 ${
-        highlight ? "border-warning" : choice === undefined ? "border-warning/45" : "border-border"
+        choice === true ? "border-accent/50" : "border-border"
       }`}
     >
       <legend className="sr-only">

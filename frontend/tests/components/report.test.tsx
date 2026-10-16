@@ -111,10 +111,31 @@ describe("ReportView", () => {
       "href",
       "/o/org-1/runs/run-1/recipe",
     );
-    const download = screen.getByRole("link", { name: "Download HTML" });
-    expect(download).toHaveAttribute("href", "/api/backend/v1/runs/run-1/report.html");
-    expect(download).toHaveAttribute("download");
-    expect(screen.getByRole("button", { name: "Print or save as PDF" })).toBeInTheDocument();
+    const formats = within(screen.getByRole("list", { name: "Download the report as" }));
+    for (const [name, ext] of [
+      [/^PDF/, "pdf"],
+      [/^Word/, "docx"],
+      [/^Markdown/, "md"],
+      [/^HTML/, "html"],
+    ] as const) {
+      const link = formats.getByRole("link", { name });
+      expect(link).toHaveAttribute("href", `/api/backend/v1/runs/run-1/report.${ext}`);
+      expect(link).toHaveAttribute("download");
+    }
+    expect(screen.getByRole("button", { name: "Print" })).toBeInTheDocument();
+  });
+
+  it("opens the download menu and closes it with Escape", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<ReportActions orgId="org-1" runId="run-1" />);
+    const menu = container.querySelector("details")!;
+    const summary = screen.getByText("Download").closest("summary")!;
+    await user.click(summary); // what Enter or Space on a summary does in a browser
+    expect(menu.open).toBe(true);
+    expect(await axe(container)).toHaveNoViolations();
+    await user.keyboard("{Escape}");
+    expect(menu.open).toBe(false);
+    expect(summary).toHaveFocus();
   });
 });
 

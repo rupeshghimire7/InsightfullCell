@@ -1,12 +1,14 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
 import { CircleNotch } from "@/components/ui/icons";
 
-type Variant = "primary" | "secondary" | "ghost";
+type Variant = "primary" | "secondary" | "ghost" | "danger";
 
 const VARIANTS: Record<Variant, string> = {
   primary: "bg-accent text-accent-contrast hover:brightness-110 border-transparent",
   secondary: "bg-surface text-text border-border hover:bg-bg",
   ghost: "bg-transparent text-text border-transparent hover:bg-surface",
+  // Text on surface keeps its contrast in both themes (a filled red would not in dark mode).
+  danger: "bg-surface text-danger border-danger/50 hover:bg-danger/10",
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -14,6 +16,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Keeps the label visible and adds a spinner; the button stays focusable but inert. */
   loading?: boolean;
   children: ReactNode;
+  ref?: Ref<HTMLButtonElement>;
 }
 
 export function Button({

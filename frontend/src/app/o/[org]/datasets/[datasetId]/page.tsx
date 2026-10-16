@@ -4,6 +4,7 @@ import { FORMAT_LABEL } from "@/components/datasets/dataset-table";
 import { RunTable } from "@/components/runs/run-table";
 import { StartRunButton } from "@/components/runs/start-run-button";
 import { BackLink } from "@/components/ui/back-link";
+import { DeleteAction } from "@/components/ui/delete-action";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ListChecks } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/page-header";
@@ -119,6 +120,13 @@ export default async function DatasetPage({
               </li>
             ))}
           </ol>
+          <DeleteAction
+            kind="dataset"
+            id={info.id}
+            redirectTo={`/o/${org}`}
+            consequence="Its versions and every analysis of it, with their reports, go with it."
+            className="pt-3"
+          />
         </section>
       </div>
     </>

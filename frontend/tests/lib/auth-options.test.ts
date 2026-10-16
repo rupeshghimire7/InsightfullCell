@@ -49,11 +49,15 @@ describe("buildAuthOptions", () => {
     S3_PUBLIC_ORIGIN: "http://localhost:9000",
   };
 
-  async function pluginIds(env: Record<string, string>): Promise<string[]> {
+  async function options(env: Record<string, string> = {}) {
     vi.resetModules();
     for (const [key, value] of Object.entries({ ...base, ...env })) vi.stubEnv(key, value);
     const { buildAuthOptions } = await import("@/lib/auth-options");
-    return buildAuthOptions({} as Pool).plugins.map((plugin) => plugin.id);
+    return buildAuthOptions({} as Pool);
+  }
+
+  async function pluginIds(env: Record<string, string>): Promise<string[]> {
+    return (await options(env)).plugins.map((plugin) => plugin.id);
   }
 
   afterEach(() => {
@@ -67,5 +71,16 @@ describe("buildAuthOptions", () => {
 
   it("offers it once switched on", async () => {
     expect(await pluginIds({ EMAIL_LINK_SIGN_IN: "on" })).toContain("magic-link");
+  });
+
+  it("never hands the API token to the browser", async () => {
+    const built = await options();
+    expect(built.disabledPaths).toContain("/token");
+    const jwt = built.plugins.find((plugin) => plugin.id === "jwt");
+    expect(jwt?.options).toMatchObject({ disableSettingJwtHeader: true });
+  });
+
+  it("checks the database on every request, so signing out ends access at once", async () => {
+    expect((await options()).session.cookieCache).toEqual({ enabled: false });
   });
 });

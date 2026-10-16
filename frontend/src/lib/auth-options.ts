@@ -48,8 +48,14 @@ export function buildAuthOptions(pool: Pool, getApi: () => OrganizationApi = unb
     session: {
       expiresIn: 7 * DAY,
       updateAge: DAY,
-      cookieCache: { enabled: true, maxAge: 5 * 60 },
+      // Off: a cached session cookie is trusted without asking the database, so a signed-out
+      // (or revoked) session kept working, and minting API tokens, until the cache expired.
+      // Every session check reads the database instead; signing out ends access at once.
+      cookieCache: { enabled: false },
     },
+    // The API token is minted on the server only (BFF, `getApiToken`). Better Auth's JWT plugin
+    // would also hand it to any page script at GET /api/auth/token; that route does not exist.
+    disabledPaths: ["/token"],
     rateLimit: { enabled: true, storage: "database", window: 60, max: 60 },
     advanced: {
       // The API identifies users and organisations by UUID.
@@ -100,6 +106,8 @@ export function buildAuthOptions(pool: Pool, getApi: () => OrganizationApi = unb
       }),
       jwt({
         jwks: { keyPairConfig: { alg: "EdDSA", crv: "Ed25519" }, rotationInterval: 30 * DAY },
+        // Nor in a `set-auth-jwt` header on session responses: the browser never holds it.
+        disableSettingJwtHeader: true,
         jwt: {
           issuer: env.BETTER_AUTH_URL,
           audience: env.AUTH_JWT_AUDIENCE,

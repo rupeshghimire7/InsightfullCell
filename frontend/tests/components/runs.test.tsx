@@ -136,6 +136,40 @@ describe("StartRunButton", () => {
     );
   });
 
+  it("runs automatically unless manual review is chosen", async () => {
+    const start = vi.fn(async () => run());
+    const user = userEvent.setup();
+    const { container } = render(
+      <StartRunButton orgId="org-1" datasetId="d1" label="Analyse this file" api={api(start)} />,
+    );
+    const automatic = screen.getByRole("radio", { name: "Automatic" });
+    expect(automatic).toBeChecked();
+    expect(screen.getByText(/goes straight on to the report/)).toBeInTheDocument();
+    await user.click(screen.getByText("Manual"));
+    expect(screen.getByRole("radio", { name: "Manual" })).toBeChecked();
+    expect(screen.getByText(/Stops so you can check/)).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+    await user.click(screen.getByRole("button", { name: "Analyse this file" }));
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({ reviewMode: "manual" }));
+  });
+
+  it("starts a fresh request when the mode changes after a failure", async () => {
+    const keys: string[] = [];
+    const start = vi.fn(async ({ idempotencyKey }: { idempotencyKey: string }) => {
+      keys.push(idempotencyKey);
+      throw new TypeError("offline");
+    });
+    const user = userEvent.setup();
+    render(<StartRunButton orgId="org-1" datasetId="d1" api={api(start as RunsApi["start"])} />);
+    await user.click(screen.getByRole("button", { name: "Analyse" }));
+    await screen.findByRole("alert");
+    await user.click(screen.getByText("Manual"));
+    await user.click(screen.getByRole("button", { name: "Analyse" }));
+    await waitFor(() => expect(keys).toHaveLength(2));
+    expect(keys[0]).not.toBe(keys[1]);
+  });
+
   it("reuses its Idempotency-Key after a network error, but not after a refusal", async () => {
     const keys: string[] = [];
     let call = 0;

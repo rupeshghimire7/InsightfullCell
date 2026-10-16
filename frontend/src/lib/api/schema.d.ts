@@ -66,7 +66,13 @@ export interface paths {
         get: operations["get_dataset_v1_datasets__dataset_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete a dataset, its versions and every analysis of it
+         * @description Removes the dataset and everything made from it from the database at once; its files
+         *     leave storage after ``files_removed_after``. ``409`` ``still-running`` while an analysis
+         *     of it is running (cancel it first).
+         */
+        delete: operations["delete_dataset_v1_datasets__dataset_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -106,7 +112,8 @@ export interface paths {
          * Start an analysis of a dataset
          * @description Queues a run of the dataset's newest version (or ``dataset_version_id``) and returns at
          *     once; follow ``events_url`` for progress. Replaying with the same ``Idempotency-Key`` returns
-         *     the same run instead of starting another.
+         *     the same run instead of starting another. ``review_mode`` (default ``auto``) decides whether
+         *     the run stops for your review.
          */
         post: operations["create_run_v1_runs_post"];
         delete?: never;
@@ -126,7 +133,13 @@ export interface paths {
         get: operations["get_run_v1_runs__run_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete a run, its explorations and everything they produced
+         * @description Removes the run (with its drill-downs) from the database at once; its files leave
+         *     storage after ``files_removed_after``. ``409`` ``still-running`` while it runs (cancel it
+         *     first).
+         */
+        delete: operations["delete_run_v1_runs__run_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -304,6 +317,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/runs/{run_id}/report.docx": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the report as a Word document
+         * @description The same report as a Word document: headings, answers, charts and maps as pictures with
+         *     their numbers, and every fact.
+         */
+        get: operations["export_report_docx_v1_runs__run_id__report_docx_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/runs/{run_id}/report.html": {
         parameters: {
             query?: never;
@@ -317,6 +351,47 @@ export interface paths {
          *     content hash. Nothing in the file loads or runs anything.
          */
         get: operations["export_report_v1_runs__run_id__report_html_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs/{run_id}/report.md": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the report as Markdown
+         * @description The same report as the HTML export, as Markdown: every chart as the table of its numbers
+         *     (and an inline SVG image), every fact with its test and content hash.
+         */
+        get: operations["export_report_markdown_v1_runs__run_id__report_md_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs/{run_id}/report.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the report as a PDF
+         * @description The same report as an A4 PDF, made on the server (no printing needed).
+         */
+        get: operations["export_report_pdf_v1_runs__run_id__report_pdf_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -769,6 +844,13 @@ export interface components {
              * @description The version to analyse. Defaults to the newest version.
              */
             dataset_version_id?: string | null;
+            /**
+             * Review Mode
+             * @description auto: every change that would wait for a review is applied and the run goes on to the report without stopping. manual: the run stops for your review.
+             * @default auto
+             * @enum {string}
+             */
+            review_mode: "auto" | "manual";
         };
         /** CreateUploadRequest */
         CreateUploadRequest: {
@@ -880,6 +962,23 @@ export interface components {
             no_target: boolean;
             /** Target */
             target?: string | null;
+        };
+        /**
+         * DeletedOut
+         * @description What a delete removed. The rows are gone already; the files follow later.
+         */
+        DeletedOut: {
+            /**
+             * Files Removed After
+             * Format: date-time
+             * @description When the worker removes the files from storage (STORAGE_PURGE_AFTER_DAYS).
+             */
+            files_removed_after: string;
+            /**
+             * Run Ids
+             * @description Every run that was deleted with it.
+             */
+            run_ids: string[];
         };
         /** DictionaryEntryOut */
         DictionaryEntryOut: {
@@ -1700,6 +1799,13 @@ export interface components {
             last_event_seq: number;
             phase: components["schemas"]["Phase"];
             queue: components["schemas"]["Queue"];
+            /**
+             * Review Mode
+             * @description Whether the run stops for a person's review.
+             * @default manual
+             * @enum {string}
+             */
+            review_mode: "auto" | "manual";
             /** Review Requested At */
             review_requested_at: string | null;
             /**
@@ -1722,6 +1828,12 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /**
+             * Waiting For Worker
+             * @description The run is queued and no worker is running, so it cannot start until one does.
+             * @default false
+             */
+            waiting_for_worker: boolean;
         };
         /** RunPageOut */
         RunPageOut: {
@@ -1773,6 +1885,13 @@ export interface components {
             last_event_seq: number;
             phase: components["schemas"]["Phase"];
             queue: components["schemas"]["Queue"];
+            /**
+             * Review Mode
+             * @description Whether the run stops for a person's review.
+             * @default manual
+             * @enum {string}
+             */
+            review_mode: "auto" | "manual";
             /** Review Requested At */
             review_requested_at: string | null;
             /**
@@ -2229,6 +2348,88 @@ export interface operations {
             };
         };
     };
+    delete_dataset_v1_datasets__dataset_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletedOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     me_v1_me_get: {
         parameters: {
             query?: never;
@@ -2501,6 +2702,88 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    delete_run_v1_runs__run_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletedOut"];
                 };
             };
             /** @description Unauthorized */
@@ -3241,6 +3524,88 @@ export interface operations {
             };
         };
     };
+    export_report_docx_v1_runs__run_id__report_docx_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The report as .docx. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": unknown;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     export_report_v1_runs__run_id__report_html_get: {
         parameters: {
             query?: never;
@@ -3319,6 +3684,170 @@ export interface operations {
                 content: {
                     "application/problem+json": components["schemas"]["Problem"];
                     "text/html": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    export_report_markdown_v1_runs__run_id__report_md_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The report as Markdown. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/markdown": unknown;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    export_report_pdf_v1_runs__run_id__report_pdf_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The report as PDF. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": unknown;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

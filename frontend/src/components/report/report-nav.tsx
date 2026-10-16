@@ -1,6 +1,6 @@
 import Link from "next/link";
+import { DownloadMenu } from "@/components/report/download-menu";
 import { PrintButton } from "@/components/report/print-button";
-import { DownloadSimple } from "@/components/ui/icons";
 
 const SECONDARY =
   "press inline-flex min-h-9 items-center justify-center gap-2 rounded-control border border-border bg-surface px-4 text-sm font-medium hover:bg-bg pointer-coarse:min-h-11";
@@ -46,14 +46,11 @@ export function ReportTabs({
   );
 }
 
-/** Export the report (one HTML file, or print to PDF), and open the plan or recipe. */
+/** Download the report (PDF, Word, Markdown or HTML) or print it, and open the plan or recipe. */
 export function ReportActions({ orgId, runId }: { orgId: string; runId: string }) {
   return (
     <div className="flex flex-wrap gap-2 print:hidden">
-      <a href={`/api/backend/v1/runs/${runId}/report.html`} download className={SECONDARY}>
-        <DownloadSimple aria-hidden="true" className="size-4" />
-        Download HTML
-      </a>
+      <DownloadMenu runId={runId} />
       <PrintButton />
       <Link href={`/o/${orgId}/runs/${runId}/plan`} className={SECONDARY}>
         Open the plan

@@ -34,8 +34,10 @@ export function run(overrides: Partial<Run> = {}): Run {
     started_at: null,
     finished_at: null,
     review_requested_at: null,
+    review_mode: "manual",
     stages: [stage()],
     events_url: "/v1/runs/01a120e9-cc81-7ec1-9428-29aea00bb693/events",
+    waiting_for_worker: false,
     ...overrides,
   };
 }

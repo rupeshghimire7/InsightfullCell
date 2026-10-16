@@ -9,7 +9,8 @@ import type { FollowOptions, StreamResult } from "@/lib/runs/sse";
 import type { Run } from "@/lib/runs/types";
 import { event, INGEST_OUTPUT, run, stage } from "../lib/runs-fixtures";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
+const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
 /** A stream the test drives: it records the options and resolves when told to. */
 function controllableStream() {
@@ -48,6 +49,10 @@ function fakeApi(overrides: Partial<RunsApi> = {}): RunsApi {
       }),
     ),
     retry: vi.fn(async () => run({ status: "queued", row_version: 4, last_event_seq: 9 })),
+    remove: vi.fn(async () => ({
+      run_ids: [run().id],
+      files_removed_after: "2026-10-17T00:00:00Z",
+    })),
     ticket: vi.fn(),
     ...overrides,
   } as RunsApi;
@@ -251,5 +256,82 @@ describe("RunProgress", () => {
       expect.stringMatching(/\/o\/org-1\/runs\/.+\/review$/),
     );
     expect(screen.getByTestId("run-announcer")).toHaveTextContent("waiting for your review");
+  });
+  it("says when no worker is running, until the run starts", async () => {
+    const stream = controllableStream();
+    const { container } = render(
+      <RunProgress
+        initial={run({ waiting_for_worker: true })}
+        orgId="org-1"
+        api={fakeApi()}
+        follow={stream.follow}
+      />,
+    );
+    expect(screen.getByTestId("no-worker")).toHaveTextContent("Waiting for a worker");
+    expect(screen.getByTestId("no-worker")).toHaveTextContent("make worker");
+    expect(await axe(container)).toHaveNoViolations();
+    stream.emit(event(2, "run.started"));
+    expect(screen.queryByTestId("no-worker")).not.toBeInTheDocument();
+  });
+
+  it("asks before deleting, then deletes and goes to the dataset", async () => {
+    const user = userEvent.setup();
+    const api = fakeApi();
+    const finished = run({ status: "succeeded", finished_at: "2026-10-10T00:05:00Z" });
+    const { container } = render(
+      <RunProgress initial={finished} orgId="org-1" api={api} follow={vi.fn()} />,
+    );
+    await user.click(screen.getByRole("button", { name: "Delete analysis…" }));
+    const group = screen.getByRole("group", { name: "Confirm deleting this analysis" });
+    expect(group).toHaveTextContent("cannot be undone");
+    expect(screen.getByRole("button", { name: "Keep it" })).toHaveFocus();
+    expect(await axe(container)).toHaveNoViolations();
+
+    await user.click(screen.getByRole("button", { name: "Keep it" }));
+    expect(api.remove).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Delete analysis…" }));
+    await user.click(screen.getByRole("button", { name: "Delete analysis" }));
+    await waitFor(() => expect(api.remove).toHaveBeenCalledWith(finished.id));
+    expect(router.replace).toHaveBeenCalledWith(`/o/org-1/datasets/${finished.dataset_id}`);
+    expect(router.refresh).toHaveBeenCalled();
+  });
+
+  it("offers no delete while running, and explains a refusal", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(
+      <RunProgress
+        initial={run({ status: "running" })}
+        orgId="org-1"
+        api={fakeApi()}
+        follow={vi.fn(() => new Promise<StreamResult>(() => undefined))}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /Delete analysis/ })).not.toBeInTheDocument();
+    unmount();
+
+    const api = fakeApi({
+      remove: vi.fn(async () => {
+        throw new ProblemError({
+          title: "An analysis is still running",
+          status: 409,
+          code: "still-running",
+          detail: "This analysis (or one of its explorations) is still running.",
+          hint: "Cancel it, wait until it has stopped, then delete it.",
+        });
+      }),
+    });
+    render(
+      <RunProgress
+        initial={run({ status: "cancelled", finished_at: "2026-10-10T00:05:00Z" })}
+        orgId="org-1"
+        api={api}
+        follow={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Delete analysis…" }));
+    await user.click(screen.getByRole("button", { name: "Delete analysis" }));
+    expect(await screen.findByText("An analysis is still running")).toBeInTheDocument();
+    expect(screen.getByText(/wait until it has stopped/)).toBeInTheDocument();
   });
 });

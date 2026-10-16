@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { RunStatusBadge } from "@/components/runs/run-status-badge";
 import { StageList } from "@/components/runs/stage-list";
 import { Button } from "@/components/ui/button";
+import { DeleteAction } from "@/components/ui/delete-action";
 import {
   ChartBar,
   Compass,
@@ -13,6 +14,7 @@ import {
   Info,
   Pulse,
   SealCheck,
+  WarningCircle,
   WifiSlash,
 } from "@/components/ui/icons";
 import { ProblemAlert } from "@/components/ui/problem-alert";
@@ -202,6 +204,28 @@ export function RunProgress({
             </span>
           </p>
         ) : null}
+        {run.status === "queued" && run.waiting_for_worker ? (
+          <div
+            role="status"
+            className="enter flex items-start gap-3 rounded-panel border border-warning/45 bg-warning/10 p-4 text-sm"
+            data-testid="no-worker"
+          >
+            <WarningCircle
+              aria-hidden="true"
+              weight="fill"
+              className="mt-0.5 size-5 shrink-0 text-warning"
+            />
+            <div>
+              <p className="font-semibold">Waiting for a worker</p>
+              <p className="mt-1 max-w-[62ch] text-muted">
+                The analysis is queued, but no worker is running to start it, so every step is
+                waiting. It starts by itself as soon as a worker runs: on a development machine, run{" "}
+                <code className="font-mono text-text">make worker</code> (or{" "}
+                <code className="font-mono text-text">make dev</code> for everything).
+              </p>
+            </div>
+          </div>
+        ) : null}
         {view.note ? (
           <p className="enter flex items-start gap-2 rounded-panel border border-border bg-surface p-3 text-sm">
             <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-accent" />
@@ -345,6 +369,11 @@ export function RunProgress({
           <Detail label="Started">
             {run.started_at ? <LocalTime iso={run.started_at} /> : "Not yet"}
           </Detail>
+          {run.drilldown ? null : (
+            <Detail label="Review">
+              {run.review_mode === "auto" ? "Automatic" : "Manual (stops for you)"}
+            </Detail>
+          )}
           <Detail label={run.finished_at ? "Took" : "Running for"}>
             <Elapsed
               from={run.started_at}
@@ -392,6 +421,19 @@ export function RunProgress({
               Cancel analysis…
             </Button>
           )
+        ) : null}
+        {run.status !== "running" ? (
+          <DeleteAction
+            kind="run"
+            id={runId}
+            redirectTo={`/o/${orgId}/datasets/${run.dataset_id}`}
+            consequence={
+              run.drilldown
+                ? "Its report goes with it."
+                : "Its plan, report and any explorations of it go with it."
+            }
+            api={api}
+          />
         ) : null}
       </aside>
 

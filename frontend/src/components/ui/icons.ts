@@ -49,6 +49,7 @@ export {
   StopCircle,
   Table,
   Tag,
+  Trash,
   Target,
   TextAlignLeft,
   WarningCircle,
