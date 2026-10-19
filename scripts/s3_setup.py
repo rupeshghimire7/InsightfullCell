@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from pathlib import Path
 from typing import Any
 
 import boto3
@@ -60,11 +61,31 @@ def ensure_bucket(s3: Any, bucket: str, origins: list[str], *, add: bool = False
     return origins
 
 
+def web_origins(env_file: Path) -> list[str]:
+    """``BETTER_AUTH_URL`` and ``AUTH_TRUSTED_ORIGINS`` from the web app's env file: every origin
+    its pages are served at, so a tunnel listed there can upload too."""
+    values: dict[str, str] = {}
+    for line in env_file.read_text().splitlines():
+        key, sep, value = line.strip().partition("=")
+        if sep and not key.startswith("#"):
+            values[key.strip()] = value.strip().strip("'\"")
+    entries = [
+        values.get("BETTER_AUTH_URL", ""),
+        *values.get("AUTH_TRUSTED_ORIGINS", "").split(","),
+    ]
+    return list(dict.fromkeys(e.strip().rstrip("/") for e in entries if e.strip()))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--endpoint", default="http://localhost:9000")
     parser.add_argument("--bucket", default="insightfulcell-dev")
     parser.add_argument("--origin", action="append", help="Allowed browser origin (repeatable)")
+    parser.add_argument(
+        "--web-env",
+        type=Path,
+        help="Also allow the origins in this env file (BETTER_AUTH_URL, AUTH_TRUSTED_ORIGINS)",
+    )
     parser.add_argument(
         "--add",
         action="store_true",
@@ -81,8 +102,11 @@ def main() -> int:
         aws_access_key_id=args.access_key,
         aws_secret_access_key=args.secret_key,
     )
+    origins = list(args.origin or [])
+    if args.web_env and args.web_env.is_file():
+        origins += web_origins(args.web_env)
     origins = ensure_bucket(
-        client, args.bucket, args.origin or ["http://localhost:3000"], add=args.add
+        client, args.bucket, list(dict.fromkeys(origins)) or ["http://localhost:3000"], add=args.add
     )
     print(
         f"Bucket '{args.bucket}' ready on {args.endpoint}; browser uploads allowed from "

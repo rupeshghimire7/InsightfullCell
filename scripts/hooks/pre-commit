@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fast checks on what is staged (seconds, not minutes). The full gate runs on pre-push.
+# Fast checks on what is staged (seconds, not minutes).
 set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"

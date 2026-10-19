@@ -7,7 +7,7 @@ OWNER_URL := $(subst /postgres,/$(DB),$(ADMIN_URL))
 # uv manages backend/.venv itself; an activated venv elsewhere only produces warnings.
 unexport VIRTUAL_ENV
 
-.PHONY: help bootstrap up down migrate dev api worker web check check-fast fix e2e contract hooks clean
+.PHONY: help bootstrap up down migrate dev api worker web allow-origin check check-fast fix e2e contract hooks clean
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[1m%-12s\033[0m %s\n", $$1, $$2}'
@@ -18,7 +18,7 @@ bootstrap: ## One-time setup: dependencies, .env files, git hooks
 up: ## Start PostgreSQL and S3 storage (Docker)
 	@command -v docker >/dev/null || { echo "Docker is not installed. See README.md, 'Quick start'."; exit 127; }
 	docker compose up -d --wait
-	cd backend && uv run python ../scripts/s3_setup.py --endpoint http://localhost:9000
+	cd backend && uv run python ../scripts/s3_setup.py --endpoint http://localhost:9000 --web-env ../frontend/.env.local
 
 down: ## Stop PostgreSQL and S3 storage (data is kept)
 	docker compose down
@@ -42,6 +42,9 @@ worker: ## Run the worker: analyses stay queued until one runs (and upkeep)
 web: ## Run the web app on :3000
 	cd frontend && pnpm dev
 
+allow-origin: ## Open the app from another address too: make allow-origin ORIGIN=https://….ngrok-free.app
+	scripts/allow-origin.sh $(ORIGIN)
+
 check: ## Everything CI runs. Run before you push
 	scripts/check.sh
 
@@ -57,7 +60,7 @@ e2e: ## Browser test of the full stack (sign in, upload, live analysis)
 contract: ## Regenerate openapi.json and the typed frontend client
 	scripts/generate-contract.sh
 
-hooks: ## Install git hooks (format on commit, full gate on push)
+hooks: ## Install git hooks (format and secrets on commit, commit-message check)
 	scripts/install-hooks.sh
 
 clean: ## Remove build output and caches
