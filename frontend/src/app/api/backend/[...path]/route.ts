@@ -6,7 +6,7 @@ import {
   resolveBackendPath,
 } from "@/lib/backend-policy";
 import { getApiToken } from "@/lib/backend";
-import { getEnv } from "@/lib/env";
+import { appOrigins, getEnv } from "@/lib/env";
 import { ServiceUnavailableError } from "@/lib/unavailable";
 
 export const dynamic = "force-dynamic";
@@ -31,13 +31,7 @@ async function forward(request: NextRequest, context: { params: Promise<{ path: 
   const apiPath = resolveBackendPath(segments);
   if (!apiPath) return problem(404, "http-404", "Not found", "This path is not available.");
 
-  if (
-    !isTrustedOrigin(
-      request.method,
-      request.headers.get("origin"),
-      new URL(env.BETTER_AUTH_URL).origin,
-    )
-  ) {
+  if (!isTrustedOrigin(request.method, request.headers.get("origin"), appOrigins(env))) {
     return problem(
       403,
       "forbidden-origin",

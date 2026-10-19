@@ -160,6 +160,18 @@
     /* Staggered, but capped: the tenth item of a long list is not kept waiting. */
     animation-delay: calc(min(var(--i, 0), 8) * 40ms);
   }
+  /* The data side panel is open: on wide screens the page makes room for it (data-sidebar.tsx). */
+  @media (min-width: 64rem) {
+    body[data-data-panel="open"] {
+      /* Same floor as the panel's own width (20rem), so the two always line up. */
+      padding-right: max(var(--data-panel-width), 20rem);
+    }
+  }
+  /* Hidden, then shown after a delay without any script: a notice for pages that never load. */
+  .reveal-late {
+    visibility: hidden;
+    animation: reveal 0s 8s forwards;
+  }
   .press {
     transition:
       transform 120ms var(--ease-out-soft),
@@ -169,6 +181,12 @@
   }
   .press:active:not([aria-disabled="true"]) {
     transform: translateY(1px) scale(0.985);
+  }
+}
+
+@keyframes reveal {
+  to {
+    visibility: visible;
   }
 }
 

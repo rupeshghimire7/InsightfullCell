@@ -39,7 +39,8 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     {
-      source: "/((?!_next/static|_next/image|favicon.ico).*)",
+      // Upload parts relayed to storage skip it: a proxy buffers request bodies (up to 10 MB).
+      source: "/((?!_next/static|_next/image|favicon.ico|api/storage/).*)",
       missing: [{ type: "header", key: "next-router-prefetch" }],
     },
   ],

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DataSidebar } from "@/components/report/data-sidebar";
 import { DownloadMenu } from "@/components/report/download-menu";
 import { PrintButton } from "@/components/report/print-button";
 
@@ -46,10 +47,12 @@ export function ReportTabs({
   );
 }
 
-/** Download the report (PDF, Word, Markdown or HTML) or print it, and open the plan or recipe. */
+/** See the data the analysis read, download the report (PDF, Word, Markdown or HTML) or print it,
+ * and open the plan or recipe. */
 export function ReportActions({ orgId, runId }: { orgId: string; runId: string }) {
   return (
     <div className="flex flex-wrap gap-2 print:hidden">
+      <DataSidebar runId={runId} />
       <DownloadMenu runId={runId} />
       <PrintButton />
       <Link href={`/o/${orgId}/runs/${runId}/plan`} className={SECONDARY}>

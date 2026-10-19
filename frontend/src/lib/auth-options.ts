@@ -11,7 +11,7 @@ import {
   PASSWORD_MIN_LENGTH,
 } from "@/lib/auth-constants";
 import { EmailDeliveryError, isResendApiKey, sendSignInEmail } from "@/lib/email";
-import { getEnv } from "@/lib/env";
+import { appOrigins, getEnv } from "@/lib/env";
 import { ac, roles } from "@/lib/permissions";
 import { createIdentity, type OrganizationApi } from "@/lib/identity";
 import { linkDelivery } from "@/lib/sign-in-options";
@@ -30,6 +30,9 @@ export function buildAuthOptions(pool: Pool, getApi: () => OrganizationApi = unb
   return {
     appName: "InsightfulCell",
     baseURL: env.BETTER_AUTH_URL,
+    // Sign-in POSTs are refused (403 INVALID_ORIGIN) unless the page's origin is listed: by
+    // default only BETTER_AUTH_URL's, so a tunnel or second domain goes in AUTH_TRUSTED_ORIGINS.
+    trustedOrigins: appOrigins(env),
     secret: env.BETTER_AUTH_SECRET,
     database: pool,
     // Registration with a password needs no mail provider: no verification email or code is sent

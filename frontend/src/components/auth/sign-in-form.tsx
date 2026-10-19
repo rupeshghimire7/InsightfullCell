@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Info } from "@/components/ui/icons";
 import { ProblemAlert } from "@/components/ui/problem-alert";
@@ -29,6 +37,10 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** Same rule as the server (`isResendApiKey`); the server checks again. */
 const RESEND_KEY_PATTERN = /^re_[A-Za-z0-9_-]{8,200}$/;
 const TOO_MANY = "Too many attempts. Wait a minute, then try again.";
+const UNREACHABLE = "We couldn’t reach the server. Check your connection, then try again.";
+const SERVER_PROBLEM = "The server ran into a problem. Try again in a moment.";
+const ORIGIN_REFUSED =
+  "Sign-in isn’t allowed from this web address. Open the app at its usual address, or ask whoever runs it to allow this one.";
 const TEST_SENDER_LIMIT =
   "Resend’s test sender only delivers to the email address that owns the Resend account. Enter that address, or verify a domain in Resend to email anyone.";
 
@@ -67,8 +79,45 @@ export function validate(mode: SignInMode, action: "password" | "link", values: 
   return errors;
 }
 
-function passwordError(mode: SignInMode, error: { status?: number; code?: string }): string {
+interface AuthError {
+  status?: number;
+  code?: string;
+}
+
+/** Failures that are not about what was typed: the connection, this address, the server. */
+export function transportError(error: AuthError): string | null {
+  if (!error.status) return UNREACHABLE;
   if (error.status === 429) return TOO_MANY;
+  if (error.code === "INVALID_ORIGIN" || error.code === "MISSING_OR_NULL_ORIGIN") {
+    return ORIGIN_REFUSED;
+  }
+  if (error.status >= 500) return SERVER_PROBLEM;
+  return null;
+}
+
+/** Runs an auth client call; a request that never got an answer becomes `{ status: 0 }`. */
+async function settle(call: () => Promise<{ error: AuthError | null }>): Promise<AuthError | null> {
+  try {
+    return (await call()).error;
+  } catch {
+    return { status: 0 };
+  }
+}
+
+const subscribeNothing = () => () => {};
+
+/** False in the server-rendered HTML, true once React runs in the browser. */
+function useHydrated(): boolean {
+  return useSyncExternalStore(
+    subscribeNothing,
+    () => true,
+    () => false,
+  );
+}
+
+export function passwordError(mode: SignInMode, error: AuthError): string {
+  const transport = transportError(error);
+  if (transport) return transport;
   if (mode === "register") {
     return error.code?.startsWith("USER_ALREADY_EXISTS")
       ? "An account with this email already exists. Sign in instead."
@@ -82,7 +131,7 @@ function passwordError(mode: SignInMode, error: { status?: number; code?: string
 /** Why a sign-in link was not sent, from the server's error code (see `auth-options.ts`). A
  * problem with the typed Resend key is shown on that field instead of above the form. */
 export function linkError(
-  error: { status?: number; code?: string },
+  error: AuthError,
   delivery: LinkDelivery,
 ): { message: string; field?: "resendApiKey" } {
   switch (error.code) {
@@ -99,7 +148,9 @@ export function linkError(
           "Sign-in email isn’t set up correctly on this server. Paste your own Resend API key, or use a password.",
       };
   }
-  if (error.status === 429) return { message: TOO_MANY };
+  // A 5xx here is usually the email failing to send, which the delivery-specific text explains.
+  const transport = error.status && error.status >= 500 ? null : transportError(error);
+  if (transport) return { message: transport };
   return {
     message:
       delivery === "resend-test"
@@ -116,6 +167,7 @@ export function SignInForm({
   expiresInMinutes,
 }: SignInFormProps) {
   const router = useRouter();
+  const hydrated = useHydrated();
   const formRef = useRef<HTMLFormElement>(null);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -166,9 +218,11 @@ export function SignInForm({
     const values = readValid("password");
     if (!values) return;
     setStatus({ kind: "busy", action: "password" });
-    const { error } = registering
-      ? await authClient.signUp.email(values)
-      : await authClient.signIn.email({ email: values.email, password: values.password });
+    const error = await settle(() =>
+      registering
+        ? authClient.signUp.email(values)
+        : authClient.signIn.email({ email: values.email, password: values.password }),
+    );
     if (error) {
       setStatus({ kind: "error", message: passwordError(mode, error) });
       return;
@@ -206,14 +260,16 @@ export function SignInForm({
 
   async function sendLink(address: string, resendApiKey: string | undefined) {
     setStatus({ kind: "busy", action: "link" });
-    const { error } = await authClient.signIn.magicLink({
-      email: address,
-      callbackURL: "/",
-      // A failed or reused link lands on the sign-in page, where the error is explained.
-      errorCallbackURL: "/sign-in",
-      // Used once by the server to send this message; never stored (see `userResendKey`).
-      ...(resendApiKey ? { metadata: { resendApiKey } } : {}),
-    });
+    const error = await settle(() =>
+      authClient.signIn.magicLink({
+        email: address,
+        callbackURL: "/",
+        // A failed or reused link lands on the sign-in page, where the error is explained.
+        errorCallbackURL: "/sign-in",
+        // Used once by the server to send this message; never stored (see `userResendKey`).
+        ...(resendApiKey ? { metadata: { resendApiKey } } : {}),
+      }),
+    );
     if (error) {
       const problem = linkError(error, linkDelivery);
       if (problem.field) {
@@ -239,11 +295,14 @@ export function SignInForm({
 
   async function onGoogle() {
     setStatus({ kind: "busy", action: "google" });
-    const { error } = await authClient.signIn.social({ provider: "google", callbackURL: "/" });
+    const error = await settle(() =>
+      authClient.signIn.social({ provider: "google", callbackURL: "/" }),
+    );
     if (error) {
       setStatus({
         kind: "error",
-        message: "Google sign-in didn’t complete. Try again, or use your email.",
+        message:
+          transportError(error) ?? "Google sign-in didn’t complete. Try again, or use your email.",
       });
     }
   }
@@ -299,7 +358,16 @@ export function SignInForm({
         />
       ) : null}
 
-      <form ref={formRef} onSubmit={onSubmit} noValidate className="space-y-4">
+      {hydrated ? null : (
+        // Shown only if the page's scripts never start (CSS reveals it after a delay), so a sign-in
+        // that cannot work says so instead of doing nothing.
+        <p role="status" className="reveal-late text-sm text-muted">
+          The page is still loading. If this message stays, reload the page; if it keeps happening,
+          the server isn’t allowing this web address yet.
+        </p>
+      )}
+      {/* POST, so that even without scripts the password never ends up in the address bar. */}
+      <form ref={formRef} onSubmit={onSubmit} method="post" noValidate className="space-y-4">
         {registering ? (
           <Field label="Name" error={fieldErrors.name}>
             {(props) => (
@@ -336,7 +404,7 @@ export function SignInForm({
             />
           )}
         </Field>
-        <Button type="submit" loading={busy === "password"} className="w-full">
+        <Button type="submit" loading={busy === "password"} disabled={!hydrated} className="w-full">
           {registering
             ? busy === "password"
               ? "Creating account…"

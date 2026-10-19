@@ -2,9 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isTrustedOrigin } from "@/lib/backend-policy";
 import { getApiToken } from "@/lib/backend";
 import { getAuth } from "@/lib/auth";
-import { apiPublicUrl, getEnv } from "@/lib/env";
+import { apiPublicUrl, appOrigins, getEnv } from "@/lib/env";
 import { identityFromApiToken, TICKET_SECONDS, ticketClaims } from "@/lib/events-ticket";
 import { isUuid } from "@/lib/ids";
+import { eventsRelayPath, needsRelay } from "@/lib/relay";
 import { ServiceUnavailableError } from "@/lib/unavailable";
 
 export const dynamic = "force-dynamic";
@@ -30,9 +31,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ru
   if (!isUuid(runId)) {
     return problem(404, "run-not-found", "Run not found", "No run with this id exists.");
   }
-  if (
-    !isTrustedOrigin("POST", request.headers.get("origin"), new URL(env.BETTER_AUTH_URL).origin)
-  ) {
+  const origin = request.headers.get("origin");
+  if (origin === null || !isTrustedOrigin("POST", origin, appOrigins(env))) {
     return problem(
       403,
       "forbidden-origin",
@@ -65,7 +65,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ru
   return NextResponse.json(
     {
       ticket,
-      url: `${apiPublicUrl(env)}/v1/runs/${runId}/events`,
+      // A page opened from another address (a tunnel) cannot reach an API on localhost.
+      url: needsRelay(apiPublicUrl(env), new URL(origin).hostname)
+        ? eventsRelayPath(runId)
+        : `${apiPublicUrl(env)}/v1/runs/${runId}/events`,
       expires_at: new Date((now + TICKET_SECONDS) * 1000).toISOString(),
     },
     { headers: { "Cache-Control": "no-store" } },

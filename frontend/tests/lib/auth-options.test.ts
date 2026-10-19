@@ -73,6 +73,12 @@ describe("buildAuthOptions", () => {
     expect(await pluginIds({ EMAIL_LINK_SIGN_IN: "on" })).toContain("magic-link");
   });
 
+  it("trusts sign-in requests from every origin the app is served at", async () => {
+    expect((await options()).trustedOrigins).toEqual(["http://localhost:3000"]);
+    const built = await options({ AUTH_TRUSTED_ORIGINS: "https://abcd.ngrok-free.app" });
+    expect(built.trustedOrigins).toEqual(["http://localhost:3000", "https://abcd.ngrok-free.app"]);
+  });
+
   it("never hands the API token to the browser", async () => {
     const built = await options();
     expect(built.disabledPaths).toContain("/token");

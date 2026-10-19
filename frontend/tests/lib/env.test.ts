@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { apiPublicUrl, parseEnv } from "@/lib/env";
+import { apiPublicUrl, appOrigins, parseEnv } from "@/lib/env";
 
 const valid = {
   NODE_ENV: "development",
@@ -38,6 +38,7 @@ describe("parseEnv", () => {
       APP_ENV: "production",
       BETTER_AUTH_URL: "https://app.example.com",
       API_PUBLIC_URL: "https://api.example.com",
+      S3_PUBLIC_ORIGIN: "https://bucket.s3.eu-west-1.amazonaws.com",
     };
 
     it("rejects the console email transport when sign-in links are on (it prints them)", () => {
@@ -73,6 +74,28 @@ describe("parseEnv", () => {
         }),
       ).toThrow(/API_PUBLIC_URL: Must be https/);
     });
+    it("rejects browser-facing addresses on localhost", () => {
+      const problems = () =>
+        parseEnv({
+          ...production,
+          BETTER_AUTH_URL: "https://localhost:3000",
+          S3_PUBLIC_ORIGIN: "https://127.0.0.1:9000",
+          EMAIL_TRANSPORT: "resend",
+          RESEND_API_KEY: "k",
+        });
+      expect(problems).toThrow(/BETTER_AUTH_URL: Points at localhost/);
+      expect(problems).toThrow(/S3_PUBLIC_ORIGIN: Points at localhost/);
+    });
+    it("rejects a non-https storage origin", () => {
+      expect(() =>
+        parseEnv({
+          ...production,
+          S3_PUBLIC_ORIGIN: "http://bucket.example.com",
+          EMAIL_TRANSPORT: "resend",
+          RESEND_API_KEY: "k",
+        }),
+      ).toThrow(/S3_PUBLIC_ORIGIN: Must be https/);
+    });
     it("accepts a correct production configuration", () => {
       expect(
         parseEnv({ ...production, EMAIL_TRANSPORT: "resend", RESEND_API_KEY: "k" }).APP_ENV,
@@ -94,5 +117,46 @@ describe("live-progress settings", () => {
     expect(() => parseEnv({ ...valid, AUTH_EVENTS_AUDIENCE: "insightfulcell-api" })).toThrow(
       /AUTH_EVENTS_AUDIENCE/,
     );
+  });
+});
+
+describe("trusted origins", () => {
+  it("serves BETTER_AUTH_URL alone by default", () => {
+    expect(appOrigins(parseEnv(valid))).toEqual(["http://localhost:3000"]);
+  });
+
+  it("adds the listed origins, normalised and without duplicates", () => {
+    const env = parseEnv({
+      ...valid,
+      AUTH_TRUSTED_ORIGINS:
+        " https://abcd.ngrok-free.app/ ,http://localhost:3000,http://192.168.1.5:3000",
+    });
+    expect(appOrigins(env)).toEqual([
+      "http://localhost:3000",
+      "https://abcd.ngrok-free.app",
+      "http://192.168.1.5:3000",
+    ]);
+  });
+
+  it("refuses something that is not a bare origin", () => {
+    for (const bad of [
+      "abcd.ngrok-free.app",
+      "https://app.example.com/sign-in",
+      "ftp://x.example",
+    ]) {
+      expect(() => parseEnv({ ...valid, AUTH_TRUSTED_ORIGINS: bad })).toThrow(
+        /AUTH_TRUSTED_ORIGINS: .* is not an origin/,
+      );
+    }
+  });
+
+  it("refuses http origins next to an https app, whose cookies are Secure", () => {
+    expect(() =>
+      parseEnv({
+        ...valid,
+        BETTER_AUTH_URL: "https://app.example.com",
+        AUTH_TRUSTED_ORIGINS: "http://192.168.1.5:3000",
+      }),
+    ).toThrow(/must be https/);
   });
 });

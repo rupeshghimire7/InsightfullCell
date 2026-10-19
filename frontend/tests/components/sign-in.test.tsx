@@ -80,6 +80,40 @@ describe("SignInForm: password sign-in", () => {
     expect(replace).not.toHaveBeenCalled();
   });
 
+  it("says when the server cannot be reached instead of doing nothing", async () => {
+    email.mockRejectedValue(new TypeError("Failed to fetch"));
+    const user = userEvent.setup();
+    form();
+    await user.type(screen.getByLabelText("Email address"), "ada@example.com");
+    await user.type(screen.getByLabelText("Password"), "secret{Enter}");
+    expect(await screen.findByRole("alert")).toHaveTextContent("couldn’t reach the server");
+  });
+
+  it("explains a sign-in refused because of the web address", async () => {
+    email.mockResolvedValue({ data: null, error: { status: 403, code: "INVALID_ORIGIN" } });
+    const user = userEvent.setup();
+    form();
+    await user.type(screen.getByLabelText("Email address"), "ada@example.com");
+    await user.type(screen.getByLabelText("Password"), "secret{Enter}");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "isn’t allowed from this web address",
+    );
+  });
+
+  it("explains a server failure", async () => {
+    email.mockResolvedValue({ data: null, error: { status: 500 } });
+    const user = userEvent.setup();
+    form();
+    await user.type(screen.getByLabelText("Email address"), "ada@example.com");
+    await user.type(screen.getByLabelText("Password"), "secret{Enter}");
+    expect(await screen.findByRole("alert")).toHaveTextContent("server ran into a problem");
+  });
+
+  it("posts the form, so credentials never go into the address bar", () => {
+    const { container } = form();
+    expect(container.querySelector("form")).toHaveAttribute("method", "post");
+  });
+
   it("links to registration", () => {
     form();
     expect(screen.getByRole("link", { name: "Create an account" })).toHaveAttribute(

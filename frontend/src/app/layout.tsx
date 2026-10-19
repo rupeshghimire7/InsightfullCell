@@ -22,8 +22,17 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
-      <body className="antialiased">{children}</body>
+    // Browser extensions (password managers, Grammarly, dark mode, translation) add attributes to
+    // <html> and <body> before React loads. This ignores attribute differences on these two
+    // elements only; mismatches anywhere inside are still reported.
+    <html
+      lang="en"
+      className={`${GeistSans.variable} ${GeistMono.variable}`}
+      suppressHydrationWarning
+    >
+      <body className="antialiased" suppressHydrationWarning>
+        {children}
+      </body>
     </html>
   );
 }

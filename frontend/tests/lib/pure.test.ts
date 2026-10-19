@@ -80,14 +80,20 @@ describe("resolveBackendPath", () => {
 
 describe("isTrustedOrigin", () => {
   const app = "https://app.example.com";
+  const tunnel = "https://abcd.ngrok-free.app";
   it("lets safe methods through without an origin", () => {
-    expect(isTrustedOrigin("GET", null, app)).toBe(true);
+    expect(isTrustedOrigin("GET", null, [app])).toBe(true);
   });
   it("requires the exact app origin for mutations", () => {
-    expect(isTrustedOrigin("POST", app, app)).toBe(true);
-    expect(isTrustedOrigin("POST", null, app)).toBe(false);
-    expect(isTrustedOrigin("POST", "https://evil.example", app)).toBe(false);
-    expect(isTrustedOrigin("POST", `${app}.evil.example`, app)).toBe(false);
+    expect(isTrustedOrigin("POST", app, [app])).toBe(true);
+    expect(isTrustedOrigin("POST", null, [app])).toBe(false);
+    expect(isTrustedOrigin("POST", "https://evil.example", [app])).toBe(false);
+    expect(isTrustedOrigin("POST", `${app}.evil.example`, [app])).toBe(false);
+  });
+  it("accepts any origin the app is served at, and only those", () => {
+    expect(isTrustedOrigin("POST", tunnel, [app, tunnel])).toBe(true);
+    expect(isTrustedOrigin("DELETE", tunnel, [app])).toBe(false);
+    expect(isTrustedOrigin("POST", "https://other.ngrok-free.app", [app, tunnel])).toBe(false);
   });
 });
 
@@ -214,6 +220,7 @@ describe("sign-in options", () => {
           APP_ENV: "production",
           BETTER_AUTH_URL: "https://cell.example",
           API_PUBLIC_URL: "https://api.cell.example",
+          S3_PUBLIC_ORIGIN: "https://files.cell.example",
         }),
       ),
     ).toBe("off");

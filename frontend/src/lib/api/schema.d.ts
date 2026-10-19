@@ -423,6 +423,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/runs/{run_id}/rows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The rows of the table the run analysed, as read from the file (one page)
+         * @description The uploaded file as the analysis read it, before cleaning, in the file's order.
+         *     Columns flagged as personal data are listed with their kind and their cells are null.
+         *     409 ``data-not-available`` until the run has read the file.
+         */
+        get: operations["get_rows_v1_runs__run_id__rows_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/runs/{run_id}:cancel": {
         parameters: {
             query?: never;
@@ -908,6 +930,35 @@ export interface components {
             tiles: components["schemas"]["TileOut"][];
             /** Title */
             title: string;
+        };
+        /** DataColumnOut */
+        DataColumnOut: {
+            /** Name */
+            name: string;
+            /**
+             * Personal Data
+             * @description The kind of personal data when the column is hidden (its cells are null).
+             */
+            personal_data: string | null;
+            /**
+             * Type
+             * @description The column's type as read (DuckDB type name).
+             */
+            type: string;
+        };
+        /** DataPageOut */
+        DataPageOut: {
+            /** Columns */
+            columns: components["schemas"]["DataColumnOut"][];
+            /** Offset */
+            offset: number;
+            /**
+             * Rows
+             * @description One list per row, in column order, in the file's order. Long text is cut; integers beyond 2^53, decimals, dates and times are text.
+             */
+            rows: (string | number | boolean | null)[][];
+            /** Total Rows */
+            total_rows: number;
         };
         /** DatasetDetailOut */
         DatasetDetailOut: {
@@ -3917,6 +3968,91 @@ export interface operations {
             };
             /** @description Precondition Failed */
             412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_rows_v1_runs__run_id__rows_get: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataPageOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

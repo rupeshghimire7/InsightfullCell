@@ -41,12 +41,15 @@ export const FORWARDED_RESPONSE_HEADERS = [
   "content-disposition",
 ] as const;
 
-/** Mutations must come from this app's own pages (defence in depth next to SameSite=Lax). */
+/**
+ * Mutations must come from this app's own pages (defence in depth next to SameSite=Lax), at any
+ * of the origins it is served at (`appOrigins`).
+ */
 export function isTrustedOrigin(
   method: string,
   originHeader: string | null,
-  appOrigin: string,
+  appOrigins: readonly string[],
 ): boolean {
   if (method === "GET" || method === "HEAD") return true;
-  return originHeader !== null && originHeader === appOrigin;
+  return originHeader !== null && appOrigins.includes(originHeader);
 }

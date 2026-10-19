@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { isLoopbackHost } from "@/lib/relay";
 
 /**
  * Server configuration, validated once at first use (not at import time, so `next build` works
@@ -13,6 +14,12 @@ const schema = z
 
     /** Public URL of this web app. Also the issuer of the access tokens the API verifies. */
     BETTER_AUTH_URL: z.url(),
+    /**
+     * Other origins the same app is opened at (a tunnel such as ngrok, a LAN address, a second
+     * domain), comma separated. Sign-in and the backend proxy accept requests from them; tokens are
+     * still issued as BETTER_AUTH_URL, so the API's AUTH_ISSUER does not change (ADR-038).
+     */
+    AUTH_TRUSTED_ORIGINS: z.string().default(""),
     BETTER_AUTH_SECRET: z.string().min(32, "Use at least 32 random characters"),
     /** Better Auth tables live in the `auth` schema (created by `pnpm auth:migrate`). */
     AUTH_DATABASE_URL: z.string().min(1),
@@ -67,7 +74,44 @@ const schema = z
         message: "Must differ from AUTH_JWT_AUDIENCE, so a ticket can never act as an API token",
       });
     }
+    for (const entry of listOrigins(env.AUTH_TRUSTED_ORIGINS)) {
+      const origin = originOf(entry);
+      if (origin === null) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["AUTH_TRUSTED_ORIGINS"],
+          message: `"${entry}" is not an origin: use scheme://host[:port], with no path`,
+        });
+      } else if (env.BETTER_AUTH_URL.startsWith("https://") && !origin.startsWith("https://")) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["AUTH_TRUSTED_ORIGINS"],
+          message: `"${entry}" must be https while BETTER_AUTH_URL is (session cookies are Secure)`,
+        });
+      }
+    }
     if (env.APP_ENV === "production") {
+      const browserFacing = [
+        ["BETTER_AUTH_URL", env.BETTER_AUTH_URL],
+        ["API_PUBLIC_URL", env.API_PUBLIC_URL ?? env.API_BASE_URL],
+        ["S3_PUBLIC_ORIGIN", env.S3_PUBLIC_ORIGIN],
+      ] as const;
+      for (const [key, value] of browserFacing) {
+        if (isLoopback(value)) {
+          ctx.addIssue({
+            code: "custom",
+            path: [key],
+            message: "Points at localhost: browsers on other machines cannot reach it",
+          });
+        }
+      }
+      if (!env.S3_PUBLIC_ORIGIN.startsWith("https://")) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["S3_PUBLIC_ORIGIN"],
+          message: "Must be https in production (browsers upload to it from an https page)",
+        });
+      }
       if (!(env.API_PUBLIC_URL ?? env.API_BASE_URL).startsWith("https://")) {
         ctx.addIssue({
           code: "custom",
@@ -110,6 +154,38 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
 export function getEnv(): Env {
   cached ??= parseEnv(process.env);
   return cached;
+}
+
+function listOrigins(value: string): string[] {
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+/** `scheme://host[:port]` of an http(s) URL with nothing after it, or null. */
+function originOf(value: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  const bare = url.pathname === "/" && !url.search && !url.hash && !url.username && !url.password;
+  return (url.protocol === "http:" || url.protocol === "https:") && bare ? url.origin : null;
+}
+
+function isLoopback(value: string): boolean {
+  return isLoopbackHost(new URL(value).hostname);
+}
+
+/**
+ * Every origin the web app is served at: BETTER_AUTH_URL first, then AUTH_TRUSTED_ORIGINS.
+ * Mutations (sign-in, the backend proxy) are accepted only from these.
+ */
+export function appOrigins(env: Env = getEnv()): string[] {
+  const extra = listOrigins(env.AUTH_TRUSTED_ORIGINS).map(originOf);
+  return [...new Set([new URL(env.BETTER_AUTH_URL).origin, ...extra.filter((o) => o !== null)])];
 }
 
 /** Where browsers reach the API (live progress only; everything else goes through the BFF). */

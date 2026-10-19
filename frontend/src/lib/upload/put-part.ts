@@ -1,3 +1,5 @@
+import { partUploadUrl } from "@/lib/relay";
+
 /** Raised for failures worth retrying (network drop, 5xx, throttling). */
 export class TransientPutError extends Error {}
 /** The presigned URL was rejected (expired or invalid): fetch a fresh one. */
@@ -13,8 +15,9 @@ export type PutPart = (
 ) => Promise<string>;
 
 /**
- * PUT one part straight to object storage and return its ETag. XMLHttpRequest, not fetch,
- * because only XHR reports upload progress.
+ * PUT one part straight to object storage (through the web app's relay when storage is only on
+ * localhost and the page is not) and return its ETag. XMLHttpRequest, not fetch, because only XHR
+ * reports upload progress.
  */
 export const putPart: PutPart = (url, body, onProgress, signal) =>
   new Promise<string>((resolve, reject) => {
@@ -27,7 +30,7 @@ export const putPart: PutPart = (url, body, onProgress, signal) =>
     signal?.addEventListener("abort", onAbort, { once: true });
     const finish = () => signal?.removeEventListener("abort", onAbort);
 
-    xhr.open("PUT", url);
+    xhr.open("PUT", partUploadUrl(url, window.location.hostname));
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress(event.loaded);
     };
