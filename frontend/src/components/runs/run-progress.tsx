@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { RunStatusBadge } from "@/components/runs/run-status-badge";
 import { StageList } from "@/components/runs/stage-list";
 import { Button } from "@/components/ui/button";
@@ -463,11 +470,21 @@ function Elapsed({
   ticking: boolean;
 }) {
   const [now, setNow] = useState(() => Date.now());
+  // The server's clock is not the browser's: until hydration is done an open-ended duration
+  // shows a placeholder, so the server HTML and the first client render match.
+  const inBrowser = useSyncExternalStore(
+    noSubscription,
+    () => true,
+    () => false,
+  );
   useEffect(() => {
     if (!ticking) return;
     const timer = setInterval(() => setNow(Date.now()), 1_000);
     return () => clearInterval(timer);
   }, [ticking]);
   if (!from) return <span className="text-muted">Not started</span>;
+  if (!to && !inBrowser) return <span className="tabular text-muted">—</span>;
   return <span className="tabular">{formatDuration(from, to ?? now)}</span>;
 }
+
+const noSubscription = () => () => {};
