@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { SignInForm } from "@/components/auth/sign-in-form";
 import { ServiceUnavailable } from "@/components/ui/service-unavailable";
 import { MAGIC_LINK_TTL_SECONDS } from "@/lib/auth-constants";
@@ -22,6 +23,9 @@ export default async function SignInPage({
 }: {
   searchParams: Promise<{ error?: string; mode?: string }>;
 }) {
+  // Rendered per request: configuration is read when the server runs, never at build time
+  // (the image is built without it).
+  await connection();
   const env = getEnv();
   const session = await getSessionOrUnavailable();
   if (session === "unavailable") {
