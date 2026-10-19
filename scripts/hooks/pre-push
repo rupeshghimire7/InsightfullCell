@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-# The same gate CI runs, minus the slow dependency audits. Skip once with: git push --no-verify
-exec "$(git rev-parse --show-toplevel)/scripts/check.sh" --fast --fail-fast

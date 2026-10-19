@@ -327,8 +327,9 @@ def test_breaker_half_opens_after_the_wait() -> None:
 
 def test_cost_is_known_only_for_priced_models() -> None:
     assert cost_usd("claude-sonnet-5", 1_000_000, 100_000) == Decimal("3.000000")
-    assert cost_usd("gemini-3.8-flash", 1_000, 1_000) is None
-    assert cost_usd("gemini-3.8-flash", 1_000_000, 0, {"gemini-3.8-flash": (0.5, 2.0)}) == Decimal(
+    assert cost_usd("gemini-3.5-flash-lite", 1_000_000, 100_000) == Decimal("0.550000")
+    assert cost_usd("unpriced-model", 1_000, 1_000) is None
+    assert cost_usd("unpriced-model", 1_000_000, 0, {"unpriced-model": (0.5, 2.0)}) == Decimal(
         "0.500000"
     )
 

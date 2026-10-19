@@ -234,6 +234,14 @@ class ReportOutdated(DomainError):
     title = "This report was made by an earlier version of the analysis"
 
 
+class DataNotAvailable(DomainError):
+    """The run has not read its file yet (or reading it failed), so there are no rows to show."""
+
+    kind = ErrorKind.CONFLICT
+    code = "data-not-available"
+    title = "The data is not available yet"
+
+
 class DashboardNotAvailable(DomainError):
     """The report exists, but was written before dashboards were assembled."""
 

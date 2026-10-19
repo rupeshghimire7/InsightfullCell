@@ -6,8 +6,10 @@ import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from pydantic import ValidationError
+from sqlalchemy.dialects.postgresql import JSONB
 
 from insightfulcell.config import Settings
+from insightfulcell.db.models import Base
 from insightfulcell.db.revision import EXPECTED_SCHEMA_REVISION
 
 BACKEND = Path(__file__).parents[2]
@@ -39,6 +41,11 @@ def test_production_requires_https_jwks() -> None:
         Settings(**{**BASE, "auth_jwks_url": "http://web.example/jwks"}, environment="production")  # type: ignore[arg-type]
 
 
+def test_production_requires_an_https_issuer() -> None:
+    with pytest.raises(ValidationError, match="AUTH_ISSUER"):
+        Settings(**{**BASE, "auth_issuer": "http://web.example"}, environment="production")  # type: ignore[arg-type]
+
+
 def test_production_rejects_a_custom_s3_endpoint() -> None:
     with pytest.raises(ValidationError, match="S3_ENDPOINT_URL"):
         Settings(**BASE, environment="production", s3_endpoint_url="http://s3:9000")  # type: ignore[arg-type]
@@ -49,3 +56,16 @@ def test_security_critical_settings_have_no_defaults(monkeypatch: pytest.MonkeyP
         monkeypatch.delenv(name, raising=False)
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
+
+
+def test_nullable_jsonb_columns_store_sql_null() -> None:
+    """A JSON `null` fails the columns' `jsonb_typeof(...) = 'object'` checks (a live model's plan
+    has no input card, and saving it failed the run)."""
+    nullable = [
+        column
+        for table in Base.metadata.tables.values()
+        for column in table.columns
+        if isinstance(column.type, JSONB) and column.nullable
+    ]
+    assert {c.name for c in nullable} >= {"input_card", "inputs", "dashboard", "response_body"}
+    assert [c.name for c in nullable if not getattr(c.type, "none_as_null", False)] == []

@@ -14,6 +14,7 @@ from insightfulcell.db.tenant import TenantDatabase
 from insightfulcell.pipeline.definition import Pipeline, default_pipeline
 from insightfulcell.queue.port import JobQueue
 from insightfulcell.queue.procrastinate_queue import ProcrastinateQueue, create_procrastinate_app
+from insightfulcell.services.data_rows import DataRowsService, LocalArtifactCache
 from insightfulcell.services.datasets import DatasetService
 from insightfulcell.services.deletion import DeletionService
 from insightfulcell.services.drilldowns import DrilldownService
@@ -37,6 +38,7 @@ class Services:
     runs: RunService
     plans: PlanService
     reports: ReportService
+    data_rows: DataRowsService
     drilldowns: DrilldownService
     deletion: DeletionService
     queue: JobQueue
@@ -101,6 +103,7 @@ def build_services(  # noqa: PLR0913  (keyword-only overrides for tests)
         runs=RunService(db, queue, pipeline),
         plans=PlanService(db, queue),
         reports=ReportService(db),
+        data_rows=DataRowsService(db, LocalArtifactCache(store)),
         drilldowns=DrilldownService(db, queue, pipeline),
         deletion=DeletionService(db, store, queue, settings),
         queue=queue,

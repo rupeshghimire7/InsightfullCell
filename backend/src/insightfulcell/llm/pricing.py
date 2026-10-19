@@ -17,6 +17,11 @@ BUILT_IN: Final[dict[str, tuple[float, float]]] = {
     "claude-haiku-5-5": (0.10, 0.50),
     "claude-opus-5-5": (4.00, 20.00),
     "deepseek-v4-flash": (0.14, 0.28),
+    # Gemini paid-tier list prices, checked 2026-10-17 (free-tier calls are not billed; the
+    # 3.8 and 3.6 Flash prices double on 2027-01-01).
+    "gemini-3.5-flash-lite": (0.30, 2.50),
+    "gemini-3.1-flash-lite": (0.25, 1.50),
+    "gemini-3.8-flash": (0.75, 3.75),
 }
 
 

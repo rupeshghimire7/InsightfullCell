@@ -185,6 +185,8 @@ class Settings(BaseSettings):
         if self.environment == "production":
             if not self.auth_jwks_url.startswith("https://"):
                 raise ValueError("AUTH_JWKS_URL must be https in production")
+            if not self.auth_issuer.startswith("https://"):
+                raise ValueError("AUTH_ISSUER must be https in production (the web app's URL)")
             if self.s3_endpoint_url is not None:
                 raise ValueError("S3_ENDPOINT_URL must be unset in production (use AWS S3)")
             if any(not o.startswith("https://") for o in self.events_origins):

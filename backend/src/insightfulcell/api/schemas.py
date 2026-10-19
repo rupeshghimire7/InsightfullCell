@@ -669,6 +669,24 @@ class VisualsOut(_Out):
     claims: int = Field(description="Chart and map values recomputed from the data.")
 
 
+class DataColumnOut(_Out):
+    name: str
+    type: str = Field(description="The column's type as read (DuckDB type name).")
+    personal_data: str | None = Field(
+        description="The kind of personal data when the column is hidden (its cells are null)."
+    )
+
+
+class DataPageOut(_Out):
+    columns: list[DataColumnOut]
+    rows: list[list[str | int | float | bool | None]] = Field(
+        description="One list per row, in column order, in the file's order. Long text is cut; "
+        "integers beyond 2^53, decimals, dates and times are text."
+    )
+    total_rows: int
+    offset: int
+
+
 class ReportOut(_Out):
     """A finished run's report: every sentence cites the facts it rests on."""
 

@@ -32,6 +32,7 @@ class Action(StrEnum):
     RUN_DELETE = "run:delete"
     CLEANING_DECIDE = "cleaning:decide"
     DRILLDOWN_CREATE = "drilldown:create"
+    DATA_READ = "data:read"
 
 
 _ALL: Final = frozenset(Role)
@@ -52,6 +53,8 @@ POLICY: Final[dict[Action, frozenset[Role]]] = {
     Action.CLEANING_DECIDE: _WRITERS,
     # Exploring a subset starts a new (exploratory) run: analyst work.
     Action.DRILLDOWN_CREATE: _WRITERS,
+    # The analysed table's rows (personal-data columns stay hidden): everyone who reads reports.
+    Action.DATA_READ: _ALL,
 }
 
 

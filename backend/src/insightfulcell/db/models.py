@@ -25,6 +25,9 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 _NOW = text("now()")
+# A Python None in a nullable JSONB column is SQL NULL, not the JSON value `null`: the columns'
+# CHECK constraints (jsonb_typeof(...) = 'object') reject a JSON null.
+NULLABLE_JSONB = JSONB(none_as_null=True)
 
 
 class Base(DeclarativeBase):
@@ -105,7 +108,7 @@ class IdempotencyKey(Base):
     request_hash: Mapped[bytes] = mapped_column(LargeBinary)
     status: Mapped[str] = mapped_column(Text)
     response_code: Mapped[int | None] = mapped_column(Integer, default=None)
-    response_body: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
+    response_body: Mapped[dict[str, Any] | None] = mapped_column(NULLABLE_JSONB, default=None)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=_NOW)
 
 
@@ -139,7 +142,7 @@ class Run(Base):
     review_reminded_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), default=None
     )
-    inputs: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
+    inputs: Mapped[dict[str, Any] | None] = mapped_column(NULLABLE_JSONB, default=None)
     parent_run_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), default=None)
 
 
@@ -211,7 +214,7 @@ class AnalysisPlan(Base):
     plan: Mapped[dict[str, Any]] = mapped_column(JSONB)
     plan_hash: Mapped[str] = mapped_column(Text)
     rejected: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, server_default=text("'[]'"))
-    input_card: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
+    input_card: Mapped[dict[str, Any] | None] = mapped_column(NULLABLE_JSONB, default=None)
     fallback_reason: Mapped[str | None] = mapped_column(Text, default=None)
     created_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), default=None)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=_NOW)
@@ -392,7 +395,7 @@ class RunReport(Base):
     provider: Mapped[str | None] = mapped_column(Text, default=None)
     model: Mapped[str | None] = mapped_column(Text, default=None)
     prompt_version: Mapped[str | None] = mapped_column(Text, default=None)
-    dashboard: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
+    dashboard: Mapped[dict[str, Any] | None] = mapped_column(NULLABLE_JSONB, default=None)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=_NOW)
 
 

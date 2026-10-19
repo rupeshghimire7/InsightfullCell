@@ -164,5 +164,6 @@ class TestSettings:
             self._settings(
                 environment="production",
                 auth_jwks_url="https://auth.test/jwks",
+                auth_issuer="https://auth.test",
                 events_allowed_origins="http://insecure.test",
             )

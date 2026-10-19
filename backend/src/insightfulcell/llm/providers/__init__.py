@@ -2,8 +2,12 @@
 
 Two tiers: ``strong`` (planning, narration, the question agent) and ``fast`` (routing, the
 judge). Defaults can be overridden with ``LLM_MODEL_STRONG`` / ``LLM_MODEL_FAST``. Model ids
-were checked against each provider's model list on 2026-10-10; check them again before
-relying on them.
+were checked against each provider's model list on 2026-10-10 (Gemini's again on 2026-10-17);
+check them again before relying on them.
+
+Gemini defaults to its Flash-Lite models: stable, on the free tier, and the cheapest that
+take a JSON schema. Every answer is validated and every sentence verified, so a smaller model
+costs fallbacks, never wrong numbers. ``gemini-3.8-flash`` is the step up.
 """
 
 from __future__ import annotations
@@ -14,7 +18,7 @@ from insightfulcell.config import Settings
 from insightfulcell.llm.transport import Transport
 
 DEFAULT_MODELS: Final[dict[str, dict[str, str]]] = {
-    "gemini": {"strong": "gemini-3.8-flash", "fast": "gemini-3.5-flash-lite"},
+    "gemini": {"strong": "gemini-3.5-flash-lite", "fast": "gemini-3.1-flash-lite"},
     "openai": {"strong": "gpt-6.1-sol", "fast": "gpt-6-luna"},
     # The system map names Sonnet for planning and narration and Haiku for routing and judging.
     "anthropic": {"strong": "claude-sonnet-5", "fast": "claude-haiku-5-5"},

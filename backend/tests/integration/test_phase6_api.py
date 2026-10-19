@@ -401,3 +401,47 @@ class TestDrilldowns:
         assert run["failure"]["code"] == "subset-too-small"
         assert "Atlantis" not in run["failure"]["detail"]
         assert "30" in run["failure"]["detail"]
+
+
+class TestSeeTheData:
+    async def test_rows_as_read_with_personal_data_hidden_in_the_callers_organisation(
+        self,
+        client: httpx.AsyncClient,
+        auth: AuthHeaders,
+        alice: Identity,
+        bob: Identity,
+        executor: RunExecutor,
+    ) -> None:
+        dataset_id = (await create_dataset(client, auth(alice), data=MESSY))["dataset"]["id"]
+        run_id: str = (await start_run(client, auth(alice), dataset_id)).json()["id"]
+        early = await client.get(f"/v1/runs/{run_id}/rows", headers=auth(alice))
+        assert (early.status_code, early.json()["code"]) == (409, "data-not-available")
+
+        assert await executor.execute(UUID(run_id), alice.org_id, Phase.A) is (
+            Outcome.AWAITING_REVIEW
+        )
+        response = await client.get(f"/v1/runs/{run_id}/rows?limit=5", headers=auth(alice))
+        assert response.status_code == 200, response.text
+        page = response.json()
+        names = [c["name"] for c in page["columns"]]
+        assert names[:3] == ["Job ID", "Job #", "Created"]
+        assert page["total_rows"] == 25
+        assert (page["offset"], len(page["rows"])) == (0, 5)
+        assert all(len(row) == len(names) for row in page["rows"])
+        hidden = {c["name"] for c in page["columns"] if c["personal_data"]}
+        assert {"Customer Name", "Email", "Phone"} <= hidden
+        for index, column in enumerate(page["columns"]):
+            cells = [row[index] for row in page["rows"]]
+            if column["personal_data"]:
+                assert cells == [None] * 5
+        assert page["rows"][0][names.index("Suburb")] == "Richmond"
+        assert "Aroha Te Whare" not in response.text
+
+        last = (
+            await client.get(f"/v1/runs/{run_id}/rows?offset=20&limit=200", headers=auth(alice))
+        ).json()
+        assert (last["offset"], len(last["rows"])) == (20, 5)
+        too_many = await client.get(f"/v1/runs/{run_id}/rows?limit=201", headers=auth(alice))
+        assert too_many.status_code == 422
+        other_org = await client.get(f"/v1/runs/{run_id}/rows", headers=auth(bob))
+        assert other_org.status_code == 404

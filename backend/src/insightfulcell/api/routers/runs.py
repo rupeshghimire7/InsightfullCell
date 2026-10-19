@@ -32,6 +32,8 @@ from insightfulcell.api.schemas import (
     CreateDrilldownRequest,
     CreateRunRequest,
     DashboardOut,
+    DataColumnOut,
+    DataPageOut,
     DecideCleaningRequest,
     DeletedOut,
     PlanColumnOut,
@@ -52,6 +54,7 @@ from insightfulcell.engine.analysis.facts import ChartData
 from insightfulcell.engine.cleaning.operations import CATALOGUE
 from insightfulcell.engine.planning.language import CleaningKind
 from insightfulcell.exports.html import CONTENT_SECURITY_POLICY
+from insightfulcell.services.data_rows import MAX_PAGE_ROWS
 from insightfulcell.services.datasets import MAX_PAGE_SIZE
 from insightfulcell.services.dto import RunDetail, RunEventInfo
 from insightfulcell.services.plans import ColumnEdit, PlanDecision, PlanView
@@ -464,6 +467,34 @@ async def get_dashboard(
     """Assembled with the report from the same facts (409 ``report-not-ready`` before the run
     finishes; 409 ``dashboard-not-available`` for a report written before dashboards)."""
     return to_dashboard_out(await services.reports.get_dashboard(principal, run_id))
+
+
+@router.get(
+    "/{run_id}/rows",
+    response_model=DataPageOut,
+    summary="The rows of the table the run analysed, as read from the file (one page)",
+    responses={409: problem_response()},
+)
+async def get_rows(
+    run_id: UUID,
+    principal: CurrentPrincipal,
+    services: ServicesDep,
+    offset: Annotated[int, Query(ge=0, le=1_000_000_000)] = 0,
+    limit: Annotated[int, Query(ge=1, le=MAX_PAGE_ROWS)] = 100,
+) -> DataPageOut:
+    """The uploaded file as the analysis read it, before cleaning, in the file's order.
+    Columns flagged as personal data are listed with their kind and their cells are null.
+    409 ``data-not-available`` until the run has read the file."""
+    page = await services.data_rows.page(principal, run_id, offset=offset, limit=limit)
+    return DataPageOut(
+        columns=[
+            DataColumnOut(name=c.name, type=c.type, personal_data=c.personal_data)
+            for c in page.columns
+        ],
+        rows=page.rows,
+        total_rows=page.total_rows,
+        offset=page.offset,
+    )
 
 
 @router.get(
