@@ -1,5 +1,5 @@
 # Design baseline, kept local
-INITIAL_DOCS/
+# INITIAL_DOCS/
 
 # Secrets and local configuration (commit the *.example files instead)
 .env
@@ -45,4 +45,7 @@ SETUP_MANUAL.md
 docs/
 .claude/
 review_cr.jsonl
-sample_data/
+sample_data/*.py
+sample_data/*.txt
+sample_data/*.md
+sample_data/README.md
