@@ -500,7 +500,88 @@ Not changed (noted for later): the dedup path ignores `dataset_id` when the same
 | An xlsx with title rows above the header ingests as 9 × 1: the title becomes the only column | Open: no header-row detection for Excel |
 | A 0-byte file says "The file has a header but no data rows." | Open: misleading message |
 
+### Iteration 15 · 2026-10-17 · Gemini errors explained, cheaper default models, documentation
+
+**Why:** the person saw 404, 429, 503 and 504 errors in their Gemini usage and asked why, which model is used (to be switched to a good, very cheap one), how prompts are built and answers parsed, a code trace file, and `system_flow.md` / `explained_system_flow.md` updated without leaving out any feature.
+
+**Diagnosis (from `app.llm_calls` in the dev database and the code; no model call made):** 31 attempts on 16 Oct, all `gemini-3.8-flash`: 7 ok, 14 `provider_error` (fast 503 "overloaded" answers, 1–7 s), 10 `rate_limited` (13 calls in one minute: narration runs 4 questions at once and `LLM_REQUESTS_PER_MINUTE` is off; this key's free tier also allows 20 requests a day for that model). 504 is Google's `DEADLINE_EXCEEDED`: `google-genai` sends the 90 s client timeout as `X-Server-Timeout`, and a plan answer took 44 s with about 7,400 output tokens. No 404 was recorded by the app's runs; they come from requests outside the ledger (start-up model lookups in earlier sessions, model-id probing or other tools on the same key) for an id the key cannot use.
+
+**Changed:** Gemini defaults `gemini-3.5-flash-lite` (strong) and `gemini-3.1-flash-lite` (fast), checked against Google's models and pricing pages today; Gemini prices in `llm/pricing.py`; `.env.example` note; pricing test updated. Docs: `system_flow.md`, `explained_system_flow.md` (rewritten in their structure: prompts verbatim, schemas, parsing, error table, Phase B in full), new `code_trace.md`, CHANGELOG.
+
+| Found while checking | Status |
+|---|---|
+| Changing `LLM_PROVIDER` or a model id changes the `understand` (and `report`) checkpoint key, so a run planned before the change fails `pipeline-changed` when it continues to Phase B (pending manual review, `report:renarrate`, drill-down of an older run). `409 report-outdated` checks the code version only. | Open: documented; start new analyses after a model change. Your dev database has no run awaiting review (5 succeeded, 3 cancelled). |
+
+**For your local setup:** restart `make worker` (or `make dev`) to pick up the new defaults; its start-up check looks the two models up (free). On the free tier, consider `LLM_REQUESTS_PER_MINUTE=5`, `LLM_NARRATION_CONCURRENCY=1` and `LLM_TIMEOUT_SECONDS=180` in `backend/.env`.
+
+### Iteration 16 · 2026-10-18 · Deep system test and two reports (no app code changed)
+
+**Why:** the person asked for a deep test of the whole system (functional, security, privacy, UI, reliability) with the sample data, judged from user, stakeholder, developer, tester and attacker views, and two Word reports: a test report with screenshots and a verdict, and an industry-style project report with diagrams.
+
+**Delivered:** `reports/InsightfulCell_System_Test_Report.docx` (47 pages) and `reports/InsightfulCell_Project_Report.docx` (34 pages). Test drivers, logs and screenshots stay in the session scratchpad (isolated stack: database `ic_qa`, API 8200, web 3200, RustFS shared).
+
+**Verdict:** not ready for real users' sensitive data in production; closed pilot after fixes. Security core held (0 cross-tenant leaks in 22 attacks). Open findings (IDs from the test report):
+
+| ID | Severity | Finding |
+|---|---|---|
+| F-01 | Critical | With a model configured, `understand` fails every new table: the model plan is saved with `input_card=None` → JSON `null` violates `analysis_plans_input_card_check` (3 paid calls, then internal-error) |
+| F-02 | High | `*_pct` columns on a 0–100 scale emptied by `set_invalid_to_null [0,1]`; automatic mode applies it |
+| F-03 | High | Decimal commas misparsed (`122,97` → 12297, `1.000,81` → 1.00081), classed lossless |
+| F-04 | High | Nested JSON (STRUCT/LIST) crashes `semantics._meaning` (KeyError `avg_length`) |
+| F-05 | High | Category merge Austria → Australia |
+| F-06 | Medium | Better Auth invitation endpoints live; acceptance needs no verified email (attacker joined an org in the test) |
+| F-07…F-22 | Medium–Info | XFF throttle bypass, no rate limits/BFF body cap, leading-zero ids parsed, rules-planner roles, no outcome chosen, auto mode applies lossy changes, duplicate removal on 1-column data, Excel title rows, multi-line headers, retry policy, Explore below 30 rows, set-active side effect, sign-up enumeration, Unicode names, mixed-config runs, export CSP |
+
+### Iteration 17 · 2026-10-19 · Sign-up through ngrok; deployment address checks (ADR-038)
+
+**Why:** `git push` ran the whole check suite (the pre-push hook) and the person wants push to only push; they asked to see the users in the local database; and an ngrok link could not create a user while `localhost:3000` could. They asked to fix it so deployment has no such issues.
+
+**Diagnosis:** reproduced on the dev server: `POST /api/auth/sign-up/email` with `Origin: https://….ngrok-free.app` and browser fetch headers answers `403 INVALID_ORIGIN` (Better Auth trusts only `BETTER_AUTH_URL`). The backend proxy and the ticket route had the same single-origin check, `next dev` blocks unknown hosts, and `make up` reset bucket CORS to `localhost:3000`.
+
+**Changed:** `AUTH_TRUSTED_ORIGINS` + `appOrigins()` (web), used by Better Auth, the proxy, the ticket route and `allowedDevOrigins`; `make allow-origin` (`scripts/allow-origin.sh`); `s3_setup.py --web-env` used by `make up`; production checks for localhost/http browser-facing addresses (web) and an http `AUTH_ISSUER` (API); pre-push hook deleted; `scripts/db-users.sh`. Docs: ADR-038, SETUP_MANUAL 1.1, 6.4 and troubleshooting, both `.env.example`, CHANGELOG.
+
+| Note | Status |
+|---|---|
+| On another device, uploads go to `S3_PUBLIC_ORIGIN` and live progress to `API_PUBLIC_URL`, both `localhost` locally | By design: tunnel ports 9000 and 8000 as well (SETUP_MANUAL 1.1); live progress falls back to polling |
+| Free ngrok URLs change on restart; each new one needs `make allow-origin` (old entries stay) | Use ngrok's free static domain |
+
+### Iteration 18 · 2026-10-19 · Friends sign in, upload and watch runs through one ngrok tunnel (ADR-039)
+
+**Why:** through `https://…ngrok-free.dev` sign-up created no user and sign-in did nothing, with no error; the email and password appeared in the address bar. The person asked for it fixed at once, plus anything else that would break the shared or deployed system, and for better error handling.
+
+**Diagnosis:** `AUTH_TRUSTED_ORIGINS` was never set for the tunnel (`make allow-origin` not run), so `next dev` refused the host (`/_next/hmr` 503) and React never hydrated; the form then submitted natively as `GET /sign-in?email=…&password=…`. Beyond sign-in: on a friend's device uploads (`localhost:9000`) and live progress (`localhost:8000`) could not work, and with Gemini live every new analysis failed at `understand` (F-01: JSON `null` input card vs `analysis_plans_input_card_check`).
+
+**Changed:** ran `make allow-origin` for the tunnel and restarted the web app. Sign-in form: disabled submit until hydrated, `method="post"`, CSS-delayed "still loading" notice, messages for unreachable server / refused address / server error (`transportError`). New `lib/relay.ts`, `PUT /api/storage/[...path]`, `GET /api/runs/[runId]/events`; `putPart` and the event-ticket route use them only for a loopback target from a non-loopback page; proxy matcher skips `/api/storage/`. Backend: `NULLABLE_JSONB` (`none_as_null=True`) on the four nullable JSONB columns, with a test. `agentRules: false`. Docs: ADR-039, SETUP_MANUAL 1.1, CHANGELOG, `allow-origin.sh` hint.
+
+| Note | Status |
+|---|---|
+| Iteration 17's "tunnel ports 9000 and 8000 as well" | Superseded: one tunnel is enough |
+| F-01 (test report) | Fixed |
+| Friends use `next dev` through the tunnel (first visit to each page compiles, a few seconds) | Open: acceptable for testing; a production build is the faster option |
+
+### Iteration 19 · 2026-10-19 · "See the data" side panel on the report and dashboard (ADR-040)
+
+**Why:** the person asked for a "See the data" button on the report and dashboard that opens the original table in a side panel, with an arrow to open and close it and a ⋮⋮ grip to drag its width; then asked for 25 % table / 75 % report by default.
+
+**Changed:** backend `services/data_rows.py` (`DataRowsService`, `LocalArtifactCache`), `GET /v1/runs/{id}/rows`, `Action.DATA_READ`, `DataNotAvailable`, schemas, container; integration test (409 before ingest, paging, limit, personal columns null and absent from the body, other organisation 404); role-matrix row. Frontend `components/report/data-sidebar.tsx` in `ReportActions`, push-layout rule in `globals.css`, `CaretLeft`/`CaretRight`/`DotsSixVertical` icons, `PageHeader` container query; component tests incl. axe. Contract regenerated. Docs: ADR-040, CHANGELOG.
+
+| Note | Status |
+|---|---|
+| The table is the file as read (e.g. 25 rows) while the dashboard says rows analysed after cleaning (e.g. 23) | By design: the panel says "before cleaning" |
+| No sorting, filtering or search in the panel; cleaned table not offered | Open (ADR-040, revisit) |
+| A deleted run's cached Parquet stays on the API host up to an hour (never served) | Accepted (ADR-040) |
+
 ## Last check run
+
+**Iteration 19 (2026-10-19), PostgreSQL 18 + RustFS running.** Frontend: 31 files / 391 tests (axe included), lint, typecheck, format check, `pnpm build` pass. Backend: 496 unit tests, ruff, ruff format, mypy, import contracts pass; integration: 179 passed (including the new rows test). Real browser on the local stack (1440×900 and 390×844): panel opens at 25 % (360 px), drags to 50 %, closes and reopens from the edge tab, page header stacks when narrowed. `make check` / `make e2e`: not run.
+
+
+**Iteration 18 (2026-10-19), PostgreSQL 18 + RustFS running.** Frontend: typecheck, lint, format check, 30 files / 385 tests, `pnpm build` pass. Backend: 492 unit tests, 178 integration tests, ruff, mypy, import contracts pass. Through the real ngrok tunnel (headless Chromium): register, 10.6 MB two-part upload via the storage relay, analysis with live Gemini to "Your report is ready" with progress via the events relay (`text/event-stream`, `run.succeeded`); without JavaScript the form is POST, submit disabled, notice shown after 8 s. `make check` as a whole and `make e2e`: not run.
+
+
+**Iteration 16 (2026-10-18), PostgreSQL 18 + RustFS running.** `scripts/check.sh` (full): pass, 668 backend tests (92.88% coverage), 369 frontend tests, build and audits clean. `scripts/e2e.sh` on 8100/3100: 5/5. Deep run of 52 sample files: 46 succeeded, 3 refused as designed, 1 crash (F-04), 2 uploads refused as designed. Security battery 92/99 (7 findings). axe on 15 pages: 0 violations. Live Gemini: one run (6 plan calls in total, isolated `ic_qa`), failed by F-01.
+
+**Iteration 15 (2026-10-17):** backend unit tests 490/490 pass; ruff, ruff format and mypy clean on `llm/` and the changed test. Integration, frontend and e2e suites not re-run (only model defaults, prices and docs changed). Live Gemini: not run.
 
 **Iteration 12b (2026-10-16), PostgreSQL 18 + RustFS running. Run on the final code.**
 

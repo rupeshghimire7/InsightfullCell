@@ -42,6 +42,7 @@ next-env.d.ts
 CHANGELOG.md
 CLAUDE.md
 SETUP_MANUAL.md
+INITIAL_DOCS/
 docs/
 .claude/
 review_cr.jsonl
@@ -49,3 +50,4 @@ sample_data/*.py
 sample_data/*.txt
 sample_data/*.md
 sample_data/README.md
+reports/
