@@ -1,0 +1,8 @@
+id,quote_test,amount
+1,"He said ""hi""",10
+2,"multi
+line
+cell",20
+3,"comma, inside",30
+4,unquoted 'single',40
+5,"trailing space ",50

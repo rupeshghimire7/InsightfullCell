@@ -1,0 +1,801 @@
+Kunde;Stadt;Datum;Umsatz (€);Rabatt;Menge;Kategorie;Bewertung;Zahlungsart;Bemerkung
+Mia Groß;Düsseldorf;15.02.2025;602,18;5 %;18;Lebensmittel;3,9;Bar;Größe passt nicht
+Rupert Müller;Wien;30.01.2025;250,04;10 %;19;Gerät;3,1;Karte;"ok; zufrieden"
+Hannah Weiß;Köln;06.05.2025;901,91;15 %;19;Gerät;1,8;Karte;Lieferung verspätet
+William Müller;München;20.02.2025;812,34;10 %;12;Lebensmittel;4,1;Karte;
+Tane Bäcker;Wien;28.04.2025;371,76;0 %;14;Gerät;4,7;Karte;Größe passt nicht
+Tane Bäcker;Graz;21.04.2025;217,96;0 %;5;Gerät;1,8;Karte;"ok; zufrieden"
+Liam Groß;München;27.08.2025;333,03;15 %;6;Kleidung;4,2;Karte;"ok; zufrieden"
+Rupert Müller;Graz;21.03.2025;446,72;10 %;7;Kleidung;2,9;Überweisung;
+Sofia Schäfer;Graz;24.09.2025;131,90;5 %;13;Lebensmittel;3,5;Bar;Lieferung verspätet
+Mateo Müller;Straße am Main;15.08.2025;103,95;5 %;14;Kleidung;1,9;Bar;Lieferung verspätet
+Ella Schäfer;München;05.07.2025;1.215,31;10 %;7;Kleidung;2,6;Bar;
+Mei Schäfer;Straße am Main;06.07.2025;235,53;15 %;17;Bücher;1,0;Überweisung;Größe passt nicht
+Isla Groß;München;22.05.2025;654,73;0 %;16;Lebensmittel;2,7;Bar;Größe passt nicht
+Ruby Weiß;Straße am Main;28.05.2025;506,47;5 %;3;Gerät;2,7;Überweisung;"ok; zufrieden"
+William Groß;Nürnberg;28.05.2025;878,63;0 %;19;Bücher;3,4;Karte;Größe passt nicht
+Anika Schäfer;Köln;11.04.2025;557,98;10 %;4;Bücher;3,6;Überweisung;
+Dev Bäcker;Wien;09.01.2025;120,13;10 %;8;Lebensmittel;2,5;Karte;
+Omar Schäfer;München;19.08.2025;1.697,08;15 %;17;Bücher;4,5;Überweisung;Größe passt nicht
+Omar Weiß;Nürnberg;31.01.2025;77,17;5 %;7;Kleidung;3,9;Überweisung;
+Lucas Schäfer;Zürich;08.04.2025;118,78;10 %;7;Lebensmittel;3,1;Bar;Lieferung verspätet
+William Bäcker;Nürnberg;01.09.2025;267,24;0 %;11;Bücher;2,5;Bar;Größe passt nicht
+Fatima Müller;München;11.09.2025;197,70;0 %;8;Lebensmittel;3,9;Karte;Lieferung verspätet
+Lucas Müller;München;25.07.2025;311,30;10 %;3;Gerät;4,8;Bar;Lieferung verspätet
+Sofia Müller;Straße am Main;12.03.2025;591,53;10 %;3;Lebensmittel;3,6;Karte;Lieferung verspätet
+Oliver Groß;Nürnberg;10.05.2025;398,86;15 %;19;Gerät;2,6;Karte;"ok; zufrieden"
+Thomas Müller;Köln;24.02.2025;656,77;15 %;11;Lebensmittel;4,3;Überweisung;Lieferung verspätet
+Grace Müller;Nürnberg;24.03.2025;236,88;10 %;14;Lebensmittel;1,1;Bar;"ok; zufrieden"
+Thomas Groß;München;29.09.2025;662,14;5 %;5;Gerät;1,3;Bar;Lieferung verspätet
+Zoe Weiß;Köln;10.07.2025;349,39;5 %;7;Lebensmittel;1,4;Karte;"ok; zufrieden"
+Dev Weiß;Straße am Main;04.01.2025;235,69;15 %;17;Bücher;3,3;Karte;"ok; zufrieden"
+Mei Weiß;Zürich;02.05.2025;215,37;15 %;5;Gerät;1,6;Bar;"ok; zufrieden"
+Fatima Weiß;München;11.07.2025;173,43;5 %;2;Bücher;3,1;Überweisung;"ok; zufrieden"
+William Weiß;München;29.03.2025;749,67;0 %;7;Bücher;2,3;Karte;"ok; zufrieden"
+Noah Bäcker;Nürnberg;17.03.2025;3.408,56;5 %;10;Gerät;1,6;Bar;
+Mateo Weiß;Wien;02.09.2025;73,61;0 %;1;Kleidung;1,3;Überweisung;
+Charlotte Weiß;Graz;25.03.2025;124,42;10 %;14;Gerät;3,4;Überweisung;
+Jack Schäfer;Nürnberg;03.08.2025;459,45;10 %;7;Kleidung;4,9;Überweisung;
+Thomas Bäcker;Nürnberg;31.07.2025;4.100,93;0 %;8;Bücher;1,1;Überweisung;"ok; zufrieden"
+Jack Weiß;München;15.08.2025;250,85;5 %;16;Gerät;3,0;Karte;Größe passt nicht
+Wei Groß;Graz;16.09.2025;34,46;0 %;8;Kleidung;4,7;Karte;"ok; zufrieden"
+Omar Bäcker;Düsseldorf;02.01.2025;901,61;5 %;16;Kleidung;2,1;Karte;"ok; zufrieden"
+Sienna Schäfer;Nürnberg;16.06.2025;404,98;5 %;4;Gerät;3,4;Bar;Lieferung verspätet
+Henry Bäcker;Straße am Main;19.06.2025;299,35;15 %;3;Kleidung;3,1;Karte;Größe passt nicht
+Sienna Weiß;Graz;02.10.2025;421,85;0 %;18;Lebensmittel;4,4;Karte;"ok; zufrieden"
+Isla Schäfer;München;27.06.2025;1.237,23;15 %;17;Bücher;2,4;Bar;
+Fatima Bäcker;München;04.05.2025;116,66;0 %;9;Kleidung;3,1;Karte;"ok; zufrieden"
+Ava Bäcker;München;07.03.2025;484,67;5 %;9;Kleidung;3,4;Bar;Lieferung verspätet
+Amelia Bäcker;Nürnberg;23.04.2025;338,97;15 %;15;Bücher;4,5;Bar;Lieferung verspätet
+Mateo Weiß;Straße am Main;11.05.2025;146,64;0 %;16;Kleidung;4,1;Karte;Größe passt nicht
+Priya Müller;Köln;28.04.2025;233,99;10 %;4;Gerät;3,8;Überweisung;Größe passt nicht
+Henry Bäcker;München;09.04.2025;305,45;0 %;1;Bücher;1,4;Bar;
+Aroha Groß;Straße am Main;11.07.2025;183,26;0 %;15;Kleidung;3,2;Überweisung;"ok; zufrieden"
+Sienna Weiß;Nürnberg;13.02.2025;1.423,21;0 %;3;Gerät;1,5;Bar;"ok; zufrieden"
+Liam Weiß;Zürich;21.06.2025;7.687,88;15 %;19;Kleidung;3,4;Überweisung;
+Charlotte Weiß;Wien;15.08.2025;175,01;10 %;18;Kleidung;3,9;Bar;"ok; zufrieden"
+Dev Groß;Wien;27.09.2025;850,77;15 %;17;Bücher;4,0;Überweisung;"ok; zufrieden"
+James Schäfer;Nürnberg;30.01.2025;89,62;10 %;1;Gerät;1,8;Überweisung;
+Grace Weiß;Graz;24.03.2025;547,96;15 %;3;Kleidung;1,6;Bar;Lieferung verspätet
+Amelia Schäfer;Wien;05.07.2025;584,68;15 %;12;Kleidung;4,8;Karte;Größe passt nicht
+Sienna Groß;München;08.03.2025;1.872,77;0 %;15;Bücher;2,4;Karte;Größe passt nicht
+Kai Groß;Köln;10.04.2025;494,11;5 %;4;Lebensmittel;1,6;Karte;
+Mei Müller;Straße am Main;19.07.2025;220,16;5 %;4;Bücher;1,9;Überweisung;Größe passt nicht
+Chloe Schäfer;Straße am Main;04.03.2025;187,40;10 %;10;Kleidung;3,5;Überweisung;Lieferung verspätet
+Mei Groß;Straße am Main;19.03.2025;719,40;5 %;15;Kleidung;1,1;Überweisung;Lieferung verspätet
+Hannah Groß;Düsseldorf;07.01.2025;5.858,32;10 %;15;Gerät;4,0;Bar;"ok; zufrieden"
+Ruby Müller;Köln;21.05.2025;477,20;15 %;8;Bücher;2,6;Karte;Größe passt nicht
+Kai Bäcker;Nürnberg;08.08.2025;253,25;10 %;8;Lebensmittel;4,2;Karte;
+Mia Groß;Düsseldorf;21.09.2025;381,10;15 %;12;Kleidung;1,4;Karte;
+Arjun Bäcker;Straße am Main;08.07.2025;631,65;10 %;18;Lebensmittel;4,2;Karte;
+Leo Groß;Düsseldorf;05.01.2025;205,71;5 %;3;Bücher;3,0;Überweisung;Lieferung verspätet
+Sofia Schäfer;Düsseldorf;11.03.2025;489,20;10 %;2;Gerät;1,8;Bar;
+Ella Groß;Graz;19.06.2025;134,58;5 %;8;Lebensmittel;4,6;Überweisung;
+Tane Schäfer;Zürich;31.08.2025;176,57;5 %;17;Lebensmittel;1,9;Bar;"ok; zufrieden"
+Sofia Weiß;Wien;21.02.2025;1.055,09;5 %;8;Lebensmittel;1,3;Überweisung;
+Oliver Groß;Wien;06.08.2025;380,72;5 %;12;Bücher;1,3;Überweisung;Größe passt nicht
+Olivia Bäcker;München;06.06.2025;256,96;15 %;6;Lebensmittel;4,9;Überweisung;"ok; zufrieden"
+Ava Müller;Nürnberg;15.08.2025;54,64;15 %;17;Kleidung;2,0;Karte;Größe passt nicht
+Isla Groß;Graz;15.08.2025;222,15;0 %;18;Lebensmittel;1,1;Karte;
+Kai Bäcker;Graz;08.03.2025;4.341,72;5 %;3;Gerät;1,5;Überweisung;"ok; zufrieden"
+Noah Groß;Zürich;22.04.2025;42,13;10 %;9;Kleidung;3,1;Bar;
+William Schäfer;Köln;19.06.2025;690,20;0 %;13;Gerät;2,3;Karte;
+Jack Müller;Zürich;07.10.2025;331,46;15 %;15;Gerät;3,0;Karte;
+Fatima Weiß;Nürnberg;12.06.2025;98,58;10 %;7;Bücher;1,2;Karte;Lieferung verspätet
+Ethan Groß;Köln;08.10.2025;1.089,77;5 %;6;Kleidung;3,6;Überweisung;
+Ava Bäcker;Düsseldorf;05.10.2025;174,32;15 %;10;Gerät;4,8;Karte;Größe passt nicht
+Sofia Schäfer;Düsseldorf;07.07.2025;172,71;0 %;4;Bücher;2,3;Karte;"ok; zufrieden"
+Rupert Schäfer;Straße am Main;23.06.2025;606,09;0 %;18;Bücher;3,2;Überweisung;"ok; zufrieden"
+Sienna Groß;München;05.04.2025;1.256,37;10 %;17;Bücher;4,8;Karte;Größe passt nicht
+Omar Groß;Köln;26.03.2025;232,68;5 %;1;Bücher;3,7;Karte;Größe passt nicht
+Omar Schäfer;Straße am Main;13.07.2025;697,44;10 %;4;Lebensmittel;2,7;Überweisung;
+Zoe Bäcker;Wien;01.08.2025;235,09;10 %;17;Kleidung;3,4;Bar;"ok; zufrieden"
+Omar Müller;München;18.01.2025;189,91;15 %;3;Lebensmittel;4,3;Karte;
+Olivia Bäcker;Köln;30.04.2025;715,67;15 %;2;Bücher;1,4;Bar;
+Thomas Müller;Wien;20.05.2025;122,41;15 %;4;Kleidung;4,5;Bar;
+Hugo Müller;Zürich;01.03.2025;358,67;15 %;8;Lebensmittel;1,2;Überweisung;
+James Bäcker;Köln;24.01.2025;381,96;15 %;11;Kleidung;3,0;Karte;Lieferung verspätet
+Arjun Weiß;Düsseldorf;02.08.2025;581,49;15 %;2;Kleidung;1,8;Bar;Größe passt nicht
+Ethan Weiß;Graz;25.04.2025;180,32;10 %;18;Bücher;4,8;Karte;"ok; zufrieden"
+Thomas Müller;Graz;15.09.2025;337,83;10 %;17;Bücher;1,6;Überweisung;Lieferung verspätet
+Hugo Bäcker;Wien;20.04.2025;99,36;15 %;14;Lebensmittel;1,9;Überweisung;
+Omar Müller;Düsseldorf;28.03.2025;2.217,18;0 %;5;Gerät;2,1;Überweisung;"ok; zufrieden"
+Mateo Groß;Graz;24.06.2025;180,64;15 %;1;Gerät;2,5;Bar;Lieferung verspätet
+Ella Schäfer;Nürnberg;13.01.2025;121,91;0 %;12;Gerät;4,9;Karte;Lieferung verspätet
+Kai Müller;München;07.10.2025;683,62;15 %;5;Kleidung;2,7;Karte;"ok; zufrieden"
+Sofia Müller;Zürich;27.08.2025;129,90;0 %;4;Lebensmittel;1,5;Karte;Lieferung verspätet
+Oliver Weiß;Zürich;26.04.2025;211,69;0 %;6;Gerät;4,4;Überweisung;
+Aroha Schäfer;München;21.05.2025;312,02;15 %;14;Gerät;3,5;Bar;Größe passt nicht
+Zoe Groß;München;08.01.2025;2.130,71;10 %;9;Gerät;1,5;Überweisung;
+Isla Weiß;Düsseldorf;21.10.2025;409,42;5 %;6;Kleidung;3,3;Karte;Lieferung verspätet
+Zoe Weiß;Düsseldorf;11.09.2025;100,36;15 %;9;Gerät;3,5;Überweisung;"ok; zufrieden"
+Mei Weiß;Zürich;26.01.2025;144,57;10 %;19;Lebensmittel;1,1;Bar;Lieferung verspätet
+Oliver Groß;Zürich;05.08.2025;1.051,72;5 %;14;Kleidung;2,8;Überweisung;
+Chloe Müller;Wien;13.03.2025;231,17;10 %;9;Kleidung;4,0;Überweisung;"ok; zufrieden"
+Noah Schäfer;Köln;05.10.2025;2.324,12;0 %;18;Bücher;3,3;Überweisung;
+Hannah Weiß;Graz;02.06.2025;1.110,43;10 %;6;Lebensmittel;1,5;Karte;Lieferung verspätet
+Grace Müller;Wien;14.04.2025;161,09;0 %;4;Kleidung;1,6;Karte;"ok; zufrieden"
+Amelia Weiß;München;14.06.2025;507,29;5 %;16;Bücher;4,4;Karte;Lieferung verspätet
+Wei Schäfer;Straße am Main;25.08.2025;387,56;15 %;10;Bücher;1,9;Karte;"ok; zufrieden"
+Olivia Weiß;Straße am Main;27.09.2025;1.963,53;15 %;4;Gerät;4,9;Bar;Größe passt nicht
+Fatima Weiß;München;02.06.2025;437,30;10 %;18;Bücher;4,8;Karte;Lieferung verspätet
+Sienna Schäfer;Köln;23.10.2025;716,59;0 %;3;Gerät;4,3;Bar;"ok; zufrieden"
+Layla Weiß;München;27.01.2025;192,17;10 %;12;Lebensmittel;1,5;Bar;
+Hannah Bäcker;Graz;09.02.2025;440,22;10 %;10;Gerät;4,3;Überweisung;Lieferung verspätet
+Dev Schäfer;Köln;22.05.2025;130,16;15 %;10;Gerät;4,5;Bar;Lieferung verspätet
+Ruby Schäfer;München;29.07.2025;715,88;10 %;19;Bücher;2,1;Bar;"ok; zufrieden"
+Sofia Weiß;Zürich;20.05.2025;57,61;0 %;15;Lebensmittel;4,5;Karte;"ok; zufrieden"
+Ethan Müller;Graz;12.10.2025;248,66;10 %;15;Bücher;3,0;Bar;Größe passt nicht
+Mateo Schäfer;Wien;24.01.2025;199,62;10 %;19;Lebensmittel;4,6;Bar;Lieferung verspätet
+Omar Müller;Düsseldorf;20.03.2025;310,49;15 %;2;Lebensmittel;4,9;Karte;Größe passt nicht
+Olivia Müller;München;05.06.2025;82,76;5 %;1;Bücher;1,2;Karte;Lieferung verspätet
+Kai Schäfer;Nürnberg;25.10.2025;155,88;15 %;1;Kleidung;2,1;Karte;Lieferung verspätet
+Ava Weiß;Düsseldorf;15.10.2025;12.734,52;15 %;18;Lebensmittel;3,0;Bar;Größe passt nicht
+Grace Weiß;Zürich;30.07.2025;768,92;15 %;18;Gerät;4,9;Karte;Größe passt nicht
+Leo Groß;Zürich;29.03.2025;159,02;5 %;12;Kleidung;4,9;Bar;Größe passt nicht
+Leo Schäfer;Zürich;03.09.2025;464,78;5 %;13;Kleidung;2,9;Karte;"ok; zufrieden"
+Chloe Bäcker;Zürich;31.05.2025;1.489,92;5 %;9;Lebensmittel;3,2;Überweisung;Lieferung verspätet
+Sofia Müller;Straße am Main;11.09.2025;315,71;10 %;7;Kleidung;1,3;Bar;Größe passt nicht
+Ava Schäfer;Düsseldorf;28.04.2025;627,60;0 %;19;Lebensmittel;4,8;Karte;Größe passt nicht
+Olivia Groß;München;20.05.2025;963,30;15 %;15;Bücher;1,8;Bar;Lieferung verspätet
+Ava Bäcker;Straße am Main;12.07.2025;267,34;0 %;15;Gerät;1,1;Bar;
+Ruby Müller;Nürnberg;17.10.2025;494,64;5 %;18;Kleidung;3,1;Überweisung;Lieferung verspätet
+Liam Weiß;Graz;17.08.2025;180,24;5 %;17;Kleidung;4,8;Bar;Lieferung verspätet
+William Groß;Wien;25.09.2025;241,76;0 %;2;Bücher;3,5;Bar;Größe passt nicht
+Kai Groß;Zürich;21.07.2025;412,65;15 %;14;Lebensmittel;3,4;Bar;Größe passt nicht
+Ruby Weiß;Köln;02.02.2025;340,40;5 %;16;Bücher;3,1;Bar;"ok; zufrieden"
+Sofia Bäcker;Graz;20.05.2025;282,60;15 %;11;Kleidung;1,9;Bar;Größe passt nicht
+Leo Weiß;Straße am Main;24.05.2025;122,97;15 %;19;Kleidung;4,6;Karte;Lieferung verspätet
+Jack Müller;Graz;10.06.2025;835,76;10 %;13;Kleidung;1,7;Bar;"ok; zufrieden"
+Liam Weiß;Köln;06.01.2025;938,13;0 %;15;Kleidung;2,4;Karte;
+Fatima Schäfer;Graz;11.06.2025;310,51;0 %;13;Kleidung;1,2;Karte;
+Ethan Müller;Nürnberg;14.04.2025;103,41;15 %;10;Bücher;1,0;Bar;
+Mateo Schäfer;Nürnberg;03.04.2025;363,79;10 %;4;Lebensmittel;3,8;Überweisung;"ok; zufrieden"
+Ruby Müller;Köln;27.02.2025;449,75;0 %;1;Lebensmittel;4,4;Überweisung;"ok; zufrieden"
+Ella Weiß;Düsseldorf;27.08.2025;2.012,74;15 %;8;Gerät;1,6;Überweisung;"ok; zufrieden"
+Kai Groß;Köln;12.01.2025;1.068,60;5 %;19;Bücher;3,4;Überweisung;Größe passt nicht
+Oliver Groß;Köln;26.02.2025;928,25;15 %;16;Lebensmittel;1,7;Karte;Lieferung verspätet
+Mia Bäcker;Wien;15.05.2025;208,27;0 %;15;Gerät;2,2;Überweisung;"ok; zufrieden"
+Hugo Müller;Nürnberg;01.06.2025;53,02;15 %;8;Lebensmittel;4,0;Bar;Größe passt nicht
+Priya Groß;Graz;14.07.2025;446,20;15 %;11;Bücher;2,2;Karte;Lieferung verspätet
+Oliver Groß;Wien;25.06.2025;919,70;0 %;16;Kleidung;4,5;Überweisung;Größe passt nicht
+Ella Bäcker;Zürich;17.01.2025;770,64;5 %;3;Gerät;2,2;Überweisung;"ok; zufrieden"
+Mateo Müller;München;12.01.2025;298,03;15 %;19;Lebensmittel;4,9;Karte;
+Omar Bäcker;Köln;28.06.2025;263,42;0 %;19;Kleidung;1,0;Überweisung;Lieferung verspätet
+Lucas Schäfer;Graz;26.02.2025;444,61;10 %;16;Kleidung;3,8;Bar;Lieferung verspätet
+Olivia Bäcker;München;07.01.2025;1.168,59;0 %;8;Lebensmittel;2,6;Bar;Größe passt nicht
+Amelia Müller;München;25.03.2025;1.577,68;15 %;14;Kleidung;4,9;Karte;Lieferung verspätet
+Layla Schäfer;Köln;18.07.2025;271,74;10 %;18;Kleidung;4,0;Bar;"ok; zufrieden"
+Hannah Bäcker;Düsseldorf;05.06.2025;412,57;5 %;5;Kleidung;2,8;Bar;
+Ella Bäcker;Zürich;06.07.2025;343,64;0 %;4;Kleidung;3,9;Bar;Größe passt nicht
+Henry Groß;Düsseldorf;17.03.2025;537,78;15 %;18;Gerät;3,0;Überweisung;"ok; zufrieden"
+Ethan Müller;Straße am Main;28.04.2025;200,55;0 %;17;Bücher;2,9;Karte;Lieferung verspätet
+Hannah Groß;Zürich;25.02.2025;68,91;10 %;8;Gerät;1,2;Bar;Größe passt nicht
+Oliver Groß;Straße am Main;06.05.2025;327,70;10 %;12;Kleidung;2,0;Karte;"ok; zufrieden"
+Hugo Bäcker;Köln;13.07.2025;2.047,53;0 %;4;Bücher;3,0;Karte;
+Henry Weiß;Düsseldorf;19.01.2025;193,27;15 %;3;Gerät;1,3;Karte;Lieferung verspätet
+Aroha Schäfer;Köln;15.06.2025;133,66;15 %;1;Lebensmittel;3,9;Bar;Lieferung verspätet
+Isla Müller;Nürnberg;26.02.2025;209,17;10 %;4;Kleidung;4,6;Karte;Lieferung verspätet
+Kai Schäfer;Zürich;06.03.2025;2.080,14;5 %;19;Gerät;5,0;Bar;Größe passt nicht
+Grace Groß;Nürnberg;16.01.2025;479,54;0 %;13;Bücher;4,3;Überweisung;
+William Groß;Straße am Main;06.01.2025;137,84;15 %;14;Bücher;3,6;Bar;Lieferung verspätet
+Priya Weiß;Düsseldorf;03.02.2025;1.010,80;15 %;3;Kleidung;3,7;Überweisung;Größe passt nicht
+Mia Schäfer;Zürich;16.02.2025;614,40;0 %;16;Gerät;4,5;Karte;Größe passt nicht
+Lucas Bäcker;Düsseldorf;23.02.2025;66,26;10 %;11;Bücher;1,4;Karte;"ok; zufrieden"
+Tane Weiß;Graz;04.03.2025;820,84;0 %;17;Gerät;1,4;Bar;Größe passt nicht
+Amelia Müller;Nürnberg;10.02.2025;999,36;0 %;6;Kleidung;2,9;Bar;"ok; zufrieden"
+Liam Weiß;Straße am Main;16.06.2025;1.142,83;10 %;9;Lebensmittel;2,1;Karte;Lieferung verspätet
+Tane Müller;Graz;04.08.2025;3.051,58;10 %;7;Bücher;3,7;Überweisung;
+Thomas Weiß;Wien;18.02.2025;1.058,85;15 %;12;Bücher;2,2;Bar;"ok; zufrieden"
+Layla Bäcker;Graz;28.08.2025;62,73;15 %;11;Gerät;1,6;Karte;Größe passt nicht
+Grace Bäcker;Wien;15.10.2025;1.165,05;10 %;16;Gerät;1,5;Bar;"ok; zufrieden"
+Lucas Weiß;München;09.10.2025;623,72;5 %;13;Gerät;3,8;Bar;"ok; zufrieden"
+Leo Bäcker;Straße am Main;07.05.2025;1.106,15;15 %;2;Bücher;3,5;Karte;
+Olivia Groß;Nürnberg;06.03.2025;833,23;15 %;10;Lebensmittel;4,5;Überweisung;Lieferung verspätet
+Ethan Müller;Graz;27.07.2025;1.388,59;10 %;7;Lebensmittel;2,3;Bar;"ok; zufrieden"
+Omar Bäcker;Köln;13.02.2025;1.063,21;5 %;11;Bücher;2,5;Überweisung;
+Hannah Bäcker;Düsseldorf;23.10.2025;421,90;10 %;3;Lebensmittel;4,1;Karte;Lieferung verspätet
+Grace Weiß;Zürich;09.09.2025;368,36;5 %;18;Bücher;2,6;Karte;Lieferung verspätet
+Aroha Groß;Graz;02.03.2025;242,83;5 %;11;Lebensmittel;4,2;Überweisung;Größe passt nicht
+Charlotte Schäfer;München;03.09.2025;158,51;15 %;2;Kleidung;2,8;Bar;Lieferung verspätet
+Isla Bäcker;Düsseldorf;16.01.2025;243,70;0 %;9;Gerät;2,9;Überweisung;Lieferung verspätet
+Fatima Bäcker;Köln;29.03.2025;2.828,58;15 %;6;Lebensmittel;4,3;Karte;Größe passt nicht
+Sofia Müller;Straße am Main;12.02.2025;343,92;15 %;19;Gerät;3,1;Überweisung;Größe passt nicht
+Anika Müller;München;22.09.2025;989,04;5 %;16;Bücher;3,9;Bar;Lieferung verspätet
+Sienna Groß;Zürich;11.08.2025;563,97;15 %;12;Gerät;4,0;Bar;"ok; zufrieden"
+Ella Schäfer;Köln;06.09.2025;820,91;5 %;17;Gerät;3,9;Karte;
+Mia Weiß;Düsseldorf;06.09.2025;358,69;0 %;19;Lebensmittel;2,3;Überweisung;Lieferung verspätet
+Mia Bäcker;Wien;30.03.2025;1.335,83;0 %;16;Lebensmittel;4,0;Bar;Lieferung verspätet
+Dev Müller;Graz;30.05.2025;161,20;5 %;16;Kleidung;3,0;Bar;
+Mia Weiß;Nürnberg;26.10.2025;605,63;10 %;6;Bücher;3,9;Karte;Lieferung verspätet
+Noah Müller;Graz;11.10.2025;85,07;0 %;1;Gerät;2,9;Bar;Lieferung verspätet
+Mateo Bäcker;Wien;30.07.2025;570,49;15 %;15;Lebensmittel;3,2;Überweisung;
+Dev Groß;Düsseldorf;02.07.2025;196,95;10 %;12;Gerät;1,2;Bar;"ok; zufrieden"
+Mateo Schäfer;Düsseldorf;05.10.2025;238,09;10 %;16;Gerät;2,3;Karte;Größe passt nicht
+Mia Groß;Graz;29.08.2025;220,71;5 %;3;Lebensmittel;2,1;Überweisung;Größe passt nicht
+Kai Müller;Nürnberg;03.07.2025;1.298,73;0 %;14;Lebensmittel;2,8;Karte;Lieferung verspätet
+Omar Schäfer;München;16.05.2025;1.038,04;15 %;16;Bücher;2,2;Karte;Größe passt nicht
+Mateo Schäfer;München;21.01.2025;308,44;0 %;18;Bücher;1,7;Bar;Lieferung verspätet
+Isla Bäcker;Zürich;22.10.2025;240,70;15 %;5;Gerät;4,7;Karte;Lieferung verspätet
+Hugo Müller;Düsseldorf;26.08.2025;987,07;10 %;18;Kleidung;4,5;Bar;Lieferung verspätet
+Leo Groß;München;20.09.2025;3.348,83;15 %;6;Bücher;2,6;Überweisung;Lieferung verspätet
+Mateo Bäcker;München;13.02.2025;226,76;5 %;5;Gerät;3,3;Überweisung;
+Layla Müller;Straße am Main;19.08.2025;323,27;10 %;14;Kleidung;3,2;Karte;
+Leo Weiß;Graz;08.09.2025;228,00;10 %;9;Gerät;3,6;Bar;"ok; zufrieden"
+Ruby Weiß;Wien;16.01.2025;30,79;15 %;15;Bücher;1,5;Bar;"ok; zufrieden"
+Dev Groß;München;13.05.2025;176,29;10 %;10;Lebensmittel;3,7;Überweisung;Größe passt nicht
+William Bäcker;Straße am Main;08.07.2025;71,17;15 %;6;Gerät;1,6;Karte;Größe passt nicht
+Sofia Bäcker;Wien;27.08.2025;1.263,57;10 %;14;Gerät;3,1;Karte;
+Noah Bäcker;Wien;23.05.2025;854,63;5 %;8;Bücher;1,7;Bar;"ok; zufrieden"
+James Schäfer;Zürich;10.02.2025;200,56;10 %;5;Gerät;1,4;Karte;Lieferung verspätet
+Tane Bäcker;Düsseldorf;05.08.2025;161,40;0 %;13;Gerät;3,9;Bar;
+Jack Müller;Düsseldorf;04.05.2025;191,67;5 %;2;Kleidung;4,7;Überweisung;Größe passt nicht
+Lucas Weiß;Wien;18.07.2025;98,42;15 %;16;Kleidung;2,0;Überweisung;Größe passt nicht
+Ethan Müller;München;05.05.2025;31,84;0 %;9;Gerät;4,1;Bar;Größe passt nicht
+Liam Groß;Düsseldorf;19.01.2025;329,02;0 %;5;Lebensmittel;2,2;Überweisung;"ok; zufrieden"
+Arjun Müller;Nürnberg;26.05.2025;140,44;10 %;18;Lebensmittel;3,1;Bar;"ok; zufrieden"
+James Müller;Wien;13.01.2025;242,54;10 %;3;Lebensmittel;4,4;Überweisung;
+Thomas Bäcker;Köln;21.04.2025;461,96;15 %;17;Lebensmittel;3,1;Bar;
+Wei Müller;Nürnberg;05.02.2025;172,29;10 %;19;Gerät;1,6;Bar;"ok; zufrieden"
+Rupert Schäfer;Nürnberg;01.03.2025;3.270,12;0 %;17;Gerät;3,1;Bar;"ok; zufrieden"
+Amelia Schäfer;Nürnberg;08.06.2025;379,86;0 %;4;Kleidung;2,2;Karte;Größe passt nicht
+Mei Schäfer;Wien;14.06.2025;122,97;10 %;9;Bücher;1,0;Karte;Lieferung verspätet
+Hugo Bäcker;München;18.04.2025;366,93;10 %;11;Lebensmittel;1,0;Überweisung;Lieferung verspätet
+Liam Müller;Wien;29.09.2025;268,11;5 %;12;Lebensmittel;4,4;Bar;Lieferung verspätet
+Wei Weiß;Düsseldorf;06.02.2025;237,33;5 %;2;Kleidung;1,9;Bar;
+Rupert Weiß;Straße am Main;18.03.2025;859,40;15 %;10;Gerät;2,4;Bar;"ok; zufrieden"
+Anika Weiß;Straße am Main;28.04.2025;289,51;5 %;17;Kleidung;3,5;Bar;Größe passt nicht
+Sienna Bäcker;München;11.07.2025;173,14;10 %;18;Lebensmittel;1,0;Bar;
+Lucas Groß;Köln;14.04.2025;1.613,55;15 %;11;Bücher;1,9;Karte;Größe passt nicht
+Liam Schäfer;Düsseldorf;08.10.2025;301,14;0 %;18;Lebensmittel;1,3;Karte;"ok; zufrieden"
+Layla Weiß;Zürich;21.01.2025;830,34;0 %;4;Gerät;1,1;Karte;"ok; zufrieden"
+William Müller;Wien;03.08.2025;1.384,61;10 %;9;Bücher;3,8;Bar;"ok; zufrieden"
+Aroha Bäcker;Zürich;14.03.2025;1.057,35;0 %;11;Lebensmittel;4,9;Karte;Größe passt nicht
+Ruby Müller;Zürich;14.05.2025;527,83;10 %;6;Kleidung;3,2;Überweisung;
+Thomas Groß;Nürnberg;30.08.2025;229,08;15 %;19;Bücher;1,9;Überweisung;
+Mateo Schäfer;Wien;03.05.2025;1.611,42;0 %;18;Gerät;2,5;Karte;Lieferung verspätet
+Ella Groß;Graz;09.01.2025;759,53;0 %;9;Gerät;3,4;Überweisung;Größe passt nicht
+Olivia Weiß;München;11.07.2025;170,86;10 %;5;Gerät;4,9;Karte;"ok; zufrieden"
+Zoe Schäfer;Düsseldorf;07.10.2025;1.038,88;10 %;12;Gerät;2,5;Bar;
+Ethan Weiß;Graz;17.10.2025;198,60;15 %;8;Gerät;2,1;Bar;"ok; zufrieden"
+Rupert Groß;Graz;19.02.2025;124,46;10 %;4;Kleidung;4,2;Bar;Lieferung verspätet
+Liam Schäfer;Wien;11.06.2025;292,89;5 %;4;Bücher;2,2;Karte;Lieferung verspätet
+Jack Schäfer;Düsseldorf;20.01.2025;848,80;0 %;1;Lebensmittel;3,8;Bar;Größe passt nicht
+Fatima Groß;Düsseldorf;09.07.2025;384,78;0 %;11;Bücher;4,8;Überweisung;
+Sienna Müller;Zürich;24.05.2025;301,11;15 %;9;Kleidung;3,2;Karte;Größe passt nicht
+Wei Schäfer;Köln;17.07.2025;847,36;5 %;13;Gerät;3,4;Karte;Größe passt nicht
+Oliver Bäcker;Graz;23.08.2025;70,38;5 %;5;Gerät;1,6;Überweisung;"ok; zufrieden"
+Hannah Schäfer;Straße am Main;07.07.2025;499,72;0 %;6;Gerät;4,1;Karte;Lieferung verspätet
+James Weiß;Zürich;02.07.2025;101,47;5 %;2;Lebensmittel;2,6;Bar;Lieferung verspätet
+Anika Schäfer;Nürnberg;22.10.2025;185,06;15 %;18;Bücher;4,6;Überweisung;Lieferung verspätet
+Thomas Bäcker;Straße am Main;13.01.2025;641,48;0 %;19;Gerät;4,4;Bar;"ok; zufrieden"
+Zoe Groß;Düsseldorf;17.09.2025;59,70;0 %;11;Kleidung;5,0;Karte;Größe passt nicht
+Dev Bäcker;Wien;23.07.2025;586,89;10 %;6;Lebensmittel;2,7;Überweisung;Größe passt nicht
+Olivia Weiß;Zürich;29.08.2025;858,94;15 %;19;Bücher;1,9;Karte;"ok; zufrieden"
+Dev Bäcker;Graz;15.08.2025;64,94;10 %;11;Bücher;2,3;Bar;Lieferung verspätet
+Mia Groß;Graz;02.09.2025;289,98;10 %;11;Bücher;2,7;Karte;
+Kai Weiß;München;06.04.2025;86,27;5 %;13;Kleidung;3,5;Bar;Lieferung verspätet
+Omar Schäfer;Nürnberg;21.10.2025;96,10;5 %;15;Kleidung;2,9;Karte;
+Ella Weiß;Köln;04.04.2025;1.045,40;0 %;2;Kleidung;1,8;Bar;
+Ella Schäfer;Köln;01.08.2025;211,32;15 %;19;Kleidung;3,9;Karte;Lieferung verspätet
+Wei Groß;München;10.10.2025;3.623,05;5 %;6;Gerät;1,6;Karte;Größe passt nicht
+Mei Groß;Wien;08.03.2025;622,78;15 %;14;Lebensmittel;2,1;Bar;Lieferung verspätet
+Zoe Müller;Wien;27.04.2025;58,33;5 %;18;Bücher;2,6;Karte;Lieferung verspätet
+Chloe Müller;Nürnberg;06.10.2025;929,01;5 %;1;Kleidung;1,8;Überweisung;Lieferung verspätet
+Olivia Weiß;Nürnberg;19.09.2025;927,08;5 %;11;Bücher;1,8;Karte;Lieferung verspätet
+Grace Schäfer;Straße am Main;27.03.2025;589,76;5 %;7;Kleidung;4,3;Karte;Lieferung verspätet
+James Groß;Zürich;29.05.2025;339,45;10 %;16;Lebensmittel;1,9;Überweisung;
+Noah Schäfer;Wien;28.01.2025;131,83;15 %;6;Kleidung;1,4;Überweisung;Lieferung verspätet
+Grace Groß;Straße am Main;15.02.2025;1.654,81;5 %;10;Lebensmittel;2,5;Überweisung;"ok; zufrieden"
+Aroha Groß;Düsseldorf;22.07.2025;1.241,56;15 %;16;Lebensmittel;4,2;Überweisung;Lieferung verspätet
+Ethan Weiß;Köln;27.07.2025;807,23;5 %;9;Gerät;2,1;Bar;
+William Bäcker;Nürnberg;22.04.2025;1.035,71;15 %;5;Lebensmittel;3,6;Überweisung;Lieferung verspätet
+Ava Weiß;Wien;12.10.2025;462,31;0 %;16;Lebensmittel;4,8;Karte;Größe passt nicht
+William Weiß;Graz;30.06.2025;507,96;0 %;6;Gerät;3,8;Überweisung;Lieferung verspätet
+Hugo Groß;Graz;12.07.2025;352,47;0 %;3;Lebensmittel;1,2;Überweisung;
+Mia Weiß;Wien;27.09.2025;289,53;15 %;12;Bücher;1,8;Überweisung;Lieferung verspätet
+Aroha Schäfer;München;11.02.2025;978,58;15 %;19;Gerät;1,6;Überweisung;Größe passt nicht
+Kai Müller;München;13.07.2025;125,72;0 %;6;Lebensmittel;3,4;Bar;Größe passt nicht
+Thomas Weiß;Köln;24.10.2025;104,47;10 %;12;Gerät;4,4;Bar;Größe passt nicht
+Hannah Groß;Düsseldorf;09.09.2025;472,38;15 %;11;Kleidung;4,6;Karte;
+Aroha Bäcker;Straße am Main;17.01.2025;1.227,90;10 %;19;Kleidung;1,9;Bar;Lieferung verspätet
+Ethan Groß;Köln;13.09.2025;473,40;5 %;3;Bücher;1,1;Bar;Größe passt nicht
+Ava Bäcker;Zürich;02.03.2025;79,78;5 %;7;Kleidung;2,2;Karte;Größe passt nicht
+Wei Groß;Nürnberg;09.07.2025;574,64;5 %;19;Gerät;2,5;Überweisung;"ok; zufrieden"
+Omar Groß;Köln;24.06.2025;997,71;10 %;17;Lebensmittel;1,5;Karte;
+Mia Bäcker;Nürnberg;01.03.2025;950,33;5 %;6;Gerät;2,6;Karte;
+Anika Weiß;Wien;18.04.2025;1.083,59;0 %;11;Lebensmittel;1,1;Karte;
+Isla Bäcker;Düsseldorf;14.01.2025;1.124,78;0 %;4;Kleidung;3,6;Karte;
+Rupert Müller;München;23.01.2025;495,23;5 %;16;Kleidung;2,0;Bar;
+Hugo Bäcker;Düsseldorf;11.10.2025;669,30;5 %;2;Lebensmittel;3,7;Bar;Lieferung verspätet
+Fatima Bäcker;Straße am Main;21.08.2025;593,44;0 %;11;Lebensmittel;2,5;Überweisung;"ok; zufrieden"
+Amelia Bäcker;München;25.01.2025;800,15;15 %;10;Kleidung;2,1;Überweisung;Lieferung verspätet
+Mia Schäfer;Düsseldorf;20.05.2025;214,34;5 %;9;Kleidung;1,7;Überweisung;Größe passt nicht
+Noah Bäcker;Straße am Main;15.05.2025;1.688,91;15 %;6;Lebensmittel;1,4;Bar;Größe passt nicht
+Priya Bäcker;Graz;02.04.2025;327,20;10 %;14;Bücher;1,3;Bar;"ok; zufrieden"
+Amelia Schäfer;Nürnberg;14.04.2025;314,29;5 %;19;Lebensmittel;2,3;Karte;
+Wei Müller;Wien;26.09.2025;375,67;10 %;16;Lebensmittel;1,4;Karte;Größe passt nicht
+Anika Bäcker;Straße am Main;23.07.2025;354,01;0 %;2;Gerät;3,5;Karte;
+Hannah Groß;Düsseldorf;18.05.2025;247,48;0 %;18;Lebensmittel;3,1;Karte;
+Jack Weiß;Köln;08.06.2025;692,98;10 %;13;Bücher;1,1;Karte;
+Wei Müller;Straße am Main;07.02.2025;553,12;0 %;4;Bücher;3,5;Bar;"ok; zufrieden"
+Mei Bäcker;Nürnberg;10.09.2025;1.038,30;0 %;11;Kleidung;1,3;Überweisung;Lieferung verspätet
+Sofia Weiß;Straße am Main;02.04.2025;146,08;15 %;15;Gerät;4,6;Karte;Größe passt nicht
+Priya Müller;Straße am Main;20.09.2025;376,80;0 %;14;Lebensmittel;4,1;Überweisung;
+Dev Schäfer;Köln;13.02.2025;7.180,45;10 %;4;Gerät;4,9;Karte;Lieferung verspätet
+Kai Weiß;München;03.09.2025;244,59;10 %;3;Bücher;1,6;Karte;
+Sofia Bäcker;Düsseldorf;04.04.2025;242,08;10 %;5;Lebensmittel;4,9;Überweisung;
+Mei Bäcker;Köln;09.10.2025;147,29;15 %;4;Lebensmittel;4,1;Bar;Größe passt nicht
+Olivia Weiß;Köln;22.08.2025;255,46;0 %;2;Kleidung;1,6;Überweisung;Lieferung verspätet
+Dev Bäcker;Düsseldorf;19.05.2025;1.187,95;15 %;14;Bücher;3,3;Karte;"ok; zufrieden"
+William Bäcker;Wien;22.08.2025;428,57;0 %;3;Kleidung;5,0;Karte;Größe passt nicht
+Hugo Schäfer;Düsseldorf;04.08.2025;29,59;5 %;6;Kleidung;4,1;Karte;
+Chloe Müller;Köln;28.09.2025;1.441,34;0 %;14;Bücher;3,5;Bar;Lieferung verspätet
+Tane Weiß;Zürich;15.01.2025;1.007,49;0 %;13;Kleidung;3,6;Überweisung;
+Rupert Schäfer;München;30.06.2025;619,61;5 %;17;Gerät;4,9;Überweisung;
+Mateo Groß;Düsseldorf;20.03.2025;160,50;10 %;16;Gerät;2,2;Bar;
+Chloe Bäcker;Düsseldorf;22.03.2025;222,95;15 %;4;Kleidung;2,6;Bar;"ok; zufrieden"
+Arjun Groß;Köln;01.03.2025;467,48;15 %;13;Lebensmittel;2,0;Bar;
+Fatima Weiß;Nürnberg;24.09.2025;178,45;0 %;3;Kleidung;3,6;Überweisung;"ok; zufrieden"
+Mateo Weiß;Köln;09.06.2025;610,04;0 %;9;Kleidung;3,2;Bar;Größe passt nicht
+Mateo Bäcker;Düsseldorf;17.09.2025;176,18;0 %;15;Gerät;2,1;Karte;
+William Schäfer;Zürich;18.10.2025;327,30;10 %;3;Kleidung;2,3;Überweisung;Lieferung verspätet
+Kai Müller;Köln;01.10.2025;146,73;10 %;8;Bücher;2,5;Überweisung;"ok; zufrieden"
+Grace Schäfer;Straße am Main;08.01.2025;429,11;15 %;3;Bücher;1,1;Bar;Lieferung verspätet
+Priya Schäfer;München;18.01.2025;553,79;5 %;7;Gerät;4,1;Karte;Lieferung verspätet
+Chloe Groß;Düsseldorf;06.05.2025;549,88;10 %;1;Lebensmittel;4,2;Überweisung;
+Omar Schäfer;Straße am Main;16.03.2025;3.185,33;10 %;10;Kleidung;3,1;Bar;Größe passt nicht
+Leo Groß;Straße am Main;02.08.2025;138,23;15 %;9;Lebensmittel;2,9;Überweisung;Lieferung verspätet
+Ruby Bäcker;München;03.06.2025;523,91;10 %;5;Gerät;2,1;Überweisung;"ok; zufrieden"
+Hannah Bäcker;Düsseldorf;09.02.2025;715,45;10 %;8;Kleidung;2,2;Karte;Größe passt nicht
+Sienna Müller;Zürich;19.03.2025;110,78;5 %;17;Lebensmittel;4,8;Karte;"ok; zufrieden"
+Ella Weiß;Straße am Main;21.01.2025;934,11;15 %;15;Kleidung;1,6;Karte;"ok; zufrieden"
+Ava Müller;Zürich;10.04.2025;1.072,18;5 %;3;Bücher;4,2;Bar;"ok; zufrieden"
+Sofia Groß;Köln;27.03.2025;430,11;10 %;10;Gerät;4,3;Bar;"ok; zufrieden"
+Rupert Schäfer;Köln;23.01.2025;1.338,01;10 %;14;Bücher;5,0;Bar;Lieferung verspätet
+Sienna Groß;Zürich;15.07.2025;437,86;10 %;7;Lebensmittel;4,3;Überweisung;Größe passt nicht
+Layla Müller;Zürich;22.06.2025;159,88;5 %;10;Kleidung;2,2;Überweisung;
+Tane Bäcker;Nürnberg;26.05.2025;55,33;15 %;16;Gerät;3,9;Überweisung;Größe passt nicht
+Mateo Müller;München;18.02.2025;382,92;5 %;9;Lebensmittel;1,2;Karte;
+Anika Müller;Düsseldorf;22.05.2025;424,49;0 %;15;Gerät;2,9;Karte;
+Mia Groß;Straße am Main;18.03.2025;1.767,72;5 %;18;Kleidung;2,4;Karte;Größe passt nicht
+Dev Groß;Straße am Main;17.02.2025;55,08;0 %;13;Lebensmittel;4,2;Bar;"ok; zufrieden"
+Thomas Weiß;Straße am Main;28.09.2025;255,66;5 %;15;Kleidung;5,0;Bar;"ok; zufrieden"
+Liam Bäcker;Straße am Main;07.07.2025;1.034,02;15 %;10;Lebensmittel;4,5;Bar;Lieferung verspätet
+Rupert Weiß;Graz;12.07.2025;321,47;0 %;2;Gerät;4,7;Karte;Lieferung verspätet
+Thomas Groß;Straße am Main;09.08.2025;428,22;0 %;10;Lebensmittel;4,6;Karte;"ok; zufrieden"
+James Weiß;Wien;28.01.2025;159,02;5 %;3;Gerät;2,4;Überweisung;Größe passt nicht
+Wei Müller;Straße am Main;16.09.2025;276,21;15 %;19;Kleidung;3,8;Bar;"ok; zufrieden"
+Chloe Schäfer;Wien;04.10.2025;1.290,69;10 %;8;Gerät;1,5;Überweisung;"ok; zufrieden"
+Mateo Schäfer;Nürnberg;12.09.2025;325,69;15 %;18;Kleidung;4,7;Karte;Größe passt nicht
+Liam Groß;Straße am Main;13.04.2025;342,80;10 %;19;Bücher;4,8;Überweisung;
+Mia Müller;Zürich;08.02.2025;346,62;5 %;12;Gerät;2,0;Überweisung;"ok; zufrieden"
+Chloe Müller;Zürich;31.03.2025;146,00;0 %;14;Gerät;4,9;Karte;Größe passt nicht
+Ava Schäfer;Straße am Main;19.09.2025;194,87;10 %;10;Lebensmittel;3,2;Karte;Größe passt nicht
+Grace Weiß;Düsseldorf;20.07.2025;622,15;5 %;6;Bücher;1,3;Bar;"ok; zufrieden"
+Thomas Schäfer;Straße am Main;17.04.2025;58,25;0 %;13;Kleidung;2,6;Karte;"ok; zufrieden"
+Chloe Groß;Wien;30.08.2025;401,73;0 %;5;Gerät;2,2;Bar;Größe passt nicht
+Ava Bäcker;Düsseldorf;22.06.2025;632,30;10 %;17;Kleidung;3,6;Karte;
+Amelia Müller;Graz;24.10.2025;1.701,59;0 %;18;Bücher;1,3;Bar;Lieferung verspätet
+Thomas Weiß;Graz;27.07.2025;184,71;5 %;9;Lebensmittel;1,4;Bar;Größe passt nicht
+Wei Weiß;Düsseldorf;16.08.2025;2.238,03;10 %;17;Bücher;4,2;Überweisung;Größe passt nicht
+Mei Schäfer;Graz;14.04.2025;212,71;15 %;3;Bücher;2,1;Bar;Lieferung verspätet
+Layla Weiß;Nürnberg;24.07.2025;890,38;10 %;11;Kleidung;4,6;Karte;Größe passt nicht
+Oliver Weiß;Nürnberg;11.10.2025;238,53;5 %;16;Gerät;1,7;Bar;
+Hannah Bäcker;Köln;16.09.2025;1.002,38;15 %;18;Gerät;2,8;Karte;Lieferung verspätet
+Dev Weiß;München;08.07.2025;732,74;5 %;15;Gerät;2,2;Karte;Größe passt nicht
+Charlotte Groß;Zürich;06.08.2025;531,57;5 %;9;Lebensmittel;2,8;Karte;
+Aroha Müller;Graz;15.02.2025;301,95;15 %;16;Kleidung;3,5;Überweisung;Lieferung verspätet
+Grace Schäfer;Köln;22.03.2025;1.012,89;15 %;9;Kleidung;2,1;Karte;Größe passt nicht
+Priya Groß;Nürnberg;09.03.2025;172,81;5 %;15;Bücher;1,8;Bar;"ok; zufrieden"
+Wei Schäfer;Nürnberg;09.09.2025;196,99;5 %;14;Bücher;2,1;Bar;Lieferung verspätet
+Ava Bäcker;Straße am Main;13.08.2025;751,39;15 %;9;Gerät;3,6;Bar;
+Priya Weiß;Köln;18.10.2025;316,51;10 %;18;Lebensmittel;3,9;Bar;Lieferung verspätet
+Wei Bäcker;Straße am Main;18.01.2025;83,11;10 %;8;Kleidung;1,8;Karte;
+Fatima Bäcker;Köln;24.03.2025;411,25;15 %;15;Gerät;3,2;Bar;"ok; zufrieden"
+William Müller;Graz;02.03.2025;1.105,72;0 %;15;Gerät;1,7;Karte;Größe passt nicht
+Mateo Schäfer;Straße am Main;22.05.2025;194,01;15 %;18;Bücher;2,5;Bar;Lieferung verspätet
+Grace Müller;München;30.05.2025;129,29;0 %;4;Gerät;1,2;Bar;"ok; zufrieden"
+Ella Groß;Straße am Main;22.01.2025;1.531,48;0 %;4;Kleidung;4,0;Karte;Lieferung verspätet
+Omar Schäfer;Nürnberg;29.09.2025;32,68;5 %;14;Lebensmittel;2,1;Überweisung;Größe passt nicht
+Olivia Schäfer;Köln;26.06.2025;4.970,83;0 %;2;Gerät;3,2;Bar;Lieferung verspätet
+William Groß;München;09.05.2025;1.080,87;0 %;5;Gerät;3,1;Überweisung;Größe passt nicht
+Ruby Groß;Köln;11.09.2025;733,94;15 %;17;Bücher;2,3;Karte;"ok; zufrieden"
+Mia Schäfer;München;01.02.2025;748,44;0 %;9;Bücher;4,8;Überweisung;Größe passt nicht
+Oliver Müller;Wien;31.08.2025;1.135,08;10 %;14;Lebensmittel;2,8;Bar;
+Rupert Weiß;Köln;23.04.2025;576,32;5 %;4;Lebensmittel;3,9;Karte;
+Rupert Weiß;Düsseldorf;20.02.2025;296,50;10 %;3;Lebensmittel;3,0;Überweisung;"ok; zufrieden"
+Layla Müller;Straße am Main;02.10.2025;495,68;5 %;11;Gerät;3,1;Bar;Lieferung verspätet
+Sofia Schäfer;Zürich;05.06.2025;1.798,88;10 %;18;Kleidung;4,8;Karte;
+Liam Bäcker;Straße am Main;19.07.2025;1.075,90;5 %;2;Bücher;3,8;Karte;
+Jack Schäfer;Wien;16.05.2025;216,04;15 %;14;Bücher;3,2;Überweisung;"ok; zufrieden"
+William Bäcker;Nürnberg;30.09.2025;575,86;15 %;15;Lebensmittel;2,3;Bar;Lieferung verspätet
+William Weiß;Wien;08.05.2025;234,64;5 %;7;Bücher;2,4;Karte;"ok; zufrieden"
+Liam Schäfer;Straße am Main;16.02.2025;1.368,76;5 %;6;Gerät;4,6;Überweisung;"ok; zufrieden"
+Isla Weiß;Düsseldorf;28.09.2025;265,97;5 %;10;Bücher;2,0;Bar;"ok; zufrieden"
+Anika Groß;Düsseldorf;13.04.2025;433,20;5 %;11;Kleidung;1,4;Karte;"ok; zufrieden"
+Arjun Bäcker;Düsseldorf;11.08.2025;656,10;0 %;6;Bücher;4,3;Karte;"ok; zufrieden"
+Hannah Müller;Graz;02.08.2025;178,28;5 %;12;Lebensmittel;3,2;Karte;"ok; zufrieden"
+Rupert Müller;Graz;23.04.2025;217,44;10 %;9;Kleidung;1,4;Karte;
+Amelia Schäfer;Düsseldorf;16.03.2025;4.209,93;5 %;9;Kleidung;2,2;Karte;Lieferung verspätet
+Zoe Schäfer;München;12.08.2025;1.384,87;10 %;3;Gerät;3,6;Bar;"ok; zufrieden"
+Hugo Groß;Nürnberg;01.08.2025;386,68;15 %;19;Lebensmittel;4,6;Karte;
+Ava Schäfer;Nürnberg;22.10.2025;100,46;0 %;4;Gerät;3,8;Überweisung;"ok; zufrieden"
+Zoe Müller;München;15.09.2025;652,81;5 %;10;Kleidung;4,4;Überweisung;"ok; zufrieden"
+Oliver Müller;Wien;18.05.2025;386,53;10 %;14;Kleidung;3,1;Bar;Lieferung verspätet
+Chloe Bäcker;München;24.01.2025;216,74;0 %;8;Kleidung;3,1;Karte;"ok; zufrieden"
+Ruby Müller;Wien;14.01.2025;354,12;5 %;4;Gerät;1,8;Überweisung;
+Chloe Weiß;Graz;27.06.2025;88,42;5 %;11;Kleidung;4,6;Bar;
+Zoe Weiß;Nürnberg;20.01.2025;234,95;5 %;15;Lebensmittel;3,1;Karte;
+Ruby Groß;Straße am Main;17.03.2025;98,06;0 %;12;Bücher;1,4;Überweisung;Größe passt nicht
+Charlotte Müller;Zürich;06.05.2025;524,37;5 %;16;Gerät;3,9;Karte;Lieferung verspätet
+Lucas Groß;Zürich;11.01.2025;458,19;10 %;3;Lebensmittel;4,2;Überweisung;
+Arjun Schäfer;Graz;07.07.2025;409,76;0 %;12;Gerät;1,9;Bar;Größe passt nicht
+Layla Weiß;Nürnberg;14.08.2025;848,06;10 %;5;Lebensmittel;3,4;Karte;Lieferung verspätet
+Olivia Groß;Nürnberg;27.10.2025;679,20;5 %;6;Bücher;3,0;Bar;Größe passt nicht
+Hannah Bäcker;München;27.07.2025;367,27;15 %;4;Kleidung;1,9;Bar;Größe passt nicht
+Omar Bäcker;Zürich;09.01.2025;443,98;5 %;16;Kleidung;1,5;Überweisung;Größe passt nicht
+Tane Weiß;Düsseldorf;03.02.2025;251,18;10 %;1;Gerät;1,2;Karte;"ok; zufrieden"
+Aroha Müller;Graz;11.02.2025;604,20;5 %;4;Gerät;4,1;Bar;
+Noah Bäcker;Düsseldorf;21.10.2025;478,85;15 %;3;Gerät;1,6;Karte;Lieferung verspätet
+Mei Schäfer;Graz;29.03.2025;238,53;15 %;19;Lebensmittel;2,9;Karte;Lieferung verspätet
+Jack Bäcker;Köln;08.03.2025;527,39;0 %;5;Gerät;2,2;Überweisung;
+Sofia Müller;München;20.05.2025;532,17;0 %;14;Bücher;1,3;Überweisung;Lieferung verspätet
+Mateo Schäfer;Köln;07.07.2025;1.689,00;15 %;2;Lebensmittel;2,1;Karte;"ok; zufrieden"
+Amelia Bäcker;Wien;18.06.2025;241,99;10 %;16;Gerät;2,2;Karte;"ok; zufrieden"
+Oliver Bäcker;Zürich;11.10.2025;66,09;10 %;2;Bücher;4,2;Überweisung;"ok; zufrieden"
+Mia Müller;Düsseldorf;24.03.2025;699,57;0 %;12;Kleidung;3,4;Karte;
+Charlotte Müller;Wien;20.08.2025;96,15;5 %;2;Bücher;4,7;Bar;Größe passt nicht
+William Bäcker;Wien;03.03.2025;516,50;10 %;10;Gerät;4,9;Überweisung;Lieferung verspätet
+Rupert Müller;München;12.01.2025;1.721,95;5 %;12;Lebensmittel;2,4;Karte;Größe passt nicht
+William Bäcker;Düsseldorf;01.01.2025;262,40;0 %;5;Lebensmittel;3,3;Bar;"ok; zufrieden"
+Noah Groß;Straße am Main;08.04.2025;194,29;10 %;9;Kleidung;2,3;Bar;"ok; zufrieden"
+Rupert Bäcker;Köln;22.01.2025;170,33;15 %;16;Kleidung;1,8;Überweisung;
+Mateo Weiß;Düsseldorf;18.08.2025;63,62;5 %;17;Lebensmittel;3,6;Karte;Lieferung verspätet
+Amelia Schäfer;Düsseldorf;10.05.2025;726,85;5 %;12;Kleidung;1,3;Karte;Größe passt nicht
+Lucas Schäfer;Straße am Main;05.10.2025;916,53;0 %;16;Lebensmittel;1,3;Überweisung;Größe passt nicht
+Grace Weiß;Wien;31.08.2025;41,33;10 %;2;Gerät;3,6;Überweisung;Größe passt nicht
+Wei Schäfer;Düsseldorf;19.06.2025;1.037,03;15 %;6;Lebensmittel;2,5;Bar;Größe passt nicht
+Henry Groß;Zürich;07.08.2025;309,24;0 %;19;Kleidung;2,2;Überweisung;Lieferung verspätet
+Rupert Bäcker;München;02.08.2025;387,76;5 %;8;Gerät;2,5;Bar;Größe passt nicht
+Hugo Groß;Graz;09.09.2025;61,08;15 %;9;Bücher;4,5;Karte;Lieferung verspätet
+Anika Groß;Köln;17.05.2025;251,06;10 %;13;Gerät;2,7;Bar;Lieferung verspätet
+Mateo Weiß;München;20.07.2025;250,34;10 %;16;Lebensmittel;3,6;Karte;Größe passt nicht
+Anika Weiß;München;18.04.2025;53,73;15 %;1;Kleidung;2,5;Überweisung;Größe passt nicht
+Ruby Müller;Wien;14.04.2025;628,41;0 %;12;Bücher;4,3;Karte;Lieferung verspätet
+Oliver Groß;München;04.05.2025;515,93;5 %;16;Gerät;3,8;Karte;
+Grace Weiß;Nürnberg;18.04.2025;733,15;15 %;17;Kleidung;4,9;Bar;
+Noah Müller;Nürnberg;08.08.2025;101,49;10 %;6;Lebensmittel;3,5;Überweisung;Lieferung verspätet
+Amelia Müller;Düsseldorf;25.10.2025;145,17;0 %;3;Kleidung;2,6;Überweisung;"ok; zufrieden"
+Wei Schäfer;Graz;27.03.2025;184,88;0 %;7;Bücher;2,4;Bar;Größe passt nicht
+Rupert Schäfer;Straße am Main;20.05.2025;116,77;10 %;17;Gerät;2,9;Überweisung;
+Leo Groß;Straße am Main;15.07.2025;208,06;10 %;16;Bücher;3,6;Karte;Lieferung verspätet
+Fatima Müller;Düsseldorf;06.06.2025;807,40;15 %;13;Kleidung;1,3;Überweisung;"ok; zufrieden"
+Hannah Müller;München;01.03.2025;125,86;15 %;17;Gerät;3,4;Karte;Größe passt nicht
+Henry Bäcker;Nürnberg;06.06.2025;300,80;10 %;1;Kleidung;3,2;Überweisung;Größe passt nicht
+Olivia Bäcker;Köln;03.04.2025;392,03;15 %;11;Gerät;3,5;Überweisung;"ok; zufrieden"
+Noah Müller;Nürnberg;16.04.2025;1.290,08;0 %;2;Gerät;4,0;Bar;"ok; zufrieden"
+Isla Müller;Straße am Main;31.05.2025;210,11;10 %;14;Gerät;2,7;Überweisung;
+Olivia Schäfer;Zürich;18.09.2025;288,31;0 %;15;Lebensmittel;3,5;Karte;"ok; zufrieden"
+Aroha Schäfer;Wien;24.04.2025;405,55;15 %;1;Bücher;4,8;Bar;
+Ella Groß;Düsseldorf;09.07.2025;2.324,05;0 %;2;Bücher;2,9;Bar;Lieferung verspätet
+Ella Schäfer;Wien;12.02.2025;106,78;10 %;4;Lebensmittel;3,6;Überweisung;"ok; zufrieden"
+Amelia Weiß;Graz;21.07.2025;267,93;0 %;4;Gerät;2,2;Überweisung;Lieferung verspätet
+Fatima Müller;Straße am Main;05.01.2025;1.877,42;0 %;11;Gerät;3,8;Bar;Größe passt nicht
+Omar Weiß;Graz;21.07.2025;1.095,06;5 %;5;Lebensmittel;3,1;Bar;"ok; zufrieden"
+Zoe Bäcker;Graz;04.05.2025;374,07;10 %;8;Lebensmittel;4,9;Karte;"ok; zufrieden"
+Henry Bäcker;Nürnberg;21.06.2025;362,60;5 %;1;Lebensmittel;5,0;Überweisung;"ok; zufrieden"
+Grace Schäfer;München;13.10.2025;550,95;15 %;5;Gerät;3,7;Überweisung;Lieferung verspätet
+Ella Weiß;Düsseldorf;19.10.2025;176,37;10 %;6;Kleidung;1,7;Überweisung;
+Sienna Müller;Köln;01.06.2025;126,86;0 %;10;Kleidung;1,5;Bar;
+Ruby Weiß;München;28.03.2025;519,64;10 %;18;Lebensmittel;4,4;Bar;Größe passt nicht
+William Weiß;Köln;17.08.2025;480,83;10 %;13;Bücher;4,2;Karte;Größe passt nicht
+Ella Groß;Straße am Main;20.08.2025;97,92;0 %;5;Lebensmittel;2,1;Bar;Lieferung verspätet
+Rupert Bäcker;München;15.05.2025;68,52;0 %;15;Bücher;2,6;Bar;"ok; zufrieden"
+Priya Weiß;Graz;03.06.2025;276,17;10 %;16;Gerät;3,3;Überweisung;
+Sienna Bäcker;Straße am Main;18.07.2025;75,94;10 %;11;Bücher;3,0;Bar;"ok; zufrieden"
+Kai Bäcker;Nürnberg;13.01.2025;219,73;5 %;10;Kleidung;4,5;Überweisung;
+Fatima Schäfer;Köln;15.03.2025;524,85;10 %;10;Lebensmittel;4,0;Karte;
+Ruby Müller;Düsseldorf;19.09.2025;253,47;5 %;7;Kleidung;4,2;Bar;"ok; zufrieden"
+William Groß;Wien;19.10.2025;399,31;10 %;13;Lebensmittel;2,0;Überweisung;Lieferung verspätet
+Oliver Weiß;Graz;11.08.2025;1.286,63;15 %;1;Kleidung;4,8;Bar;Größe passt nicht
+Leo Weiß;Nürnberg;15.09.2025;163,98;5 %;11;Lebensmittel;4,5;Bar;"ok; zufrieden"
+Mia Müller;Köln;18.02.2025;260,26;10 %;15;Bücher;4,2;Karte;"ok; zufrieden"
+Dev Bäcker;Düsseldorf;26.06.2025;1.748,89;10 %;14;Kleidung;2,4;Bar;Größe passt nicht
+Jack Groß;Wien;12.04.2025;1.198,93;15 %;15;Bücher;4,1;Bar;Lieferung verspätet
+Rupert Groß;München;18.09.2025;3.138,47;5 %;17;Gerät;1,3;Karte;Größe passt nicht
+Liam Schäfer;Düsseldorf;07.04.2025;2.050,27;5 %;12;Kleidung;1,4;Karte;"ok; zufrieden"
+Layla Bäcker;Straße am Main;22.09.2025;1.326,02;5 %;10;Gerät;1,1;Bar;"ok; zufrieden"
+Charlotte Groß;Graz;12.04.2025;106,48;0 %;12;Lebensmittel;2,5;Überweisung;"ok; zufrieden"
+Amelia Müller;Düsseldorf;16.07.2025;420,14;5 %;9;Bücher;3,7;Bar;
+Fatima Groß;Köln;04.06.2025;538,26;10 %;7;Bücher;3,9;Bar;"ok; zufrieden"
+Omar Groß;Zürich;28.09.2025;565,62;0 %;3;Kleidung;1,3;Überweisung;Größe passt nicht
+Henry Groß;Wien;25.05.2025;3.667,07;10 %;8;Lebensmittel;2,3;Bar;
+Leo Bäcker;Wien;05.07.2025;424,51;0 %;4;Lebensmittel;2,2;Karte;Größe passt nicht
+Mateo Weiß;München;11.01.2025;200,58;10 %;11;Gerät;1,4;Bar;Größe passt nicht
+Chloe Weiß;München;20.04.2025;505,80;15 %;3;Gerät;2,5;Bar;
+Priya Weiß;Zürich;14.03.2025;719,36;0 %;13;Lebensmittel;1,2;Bar;
+Mia Weiß;Düsseldorf;03.04.2025;865,18;15 %;17;Kleidung;2,6;Karte;"ok; zufrieden"
+Tane Weiß;Zürich;07.05.2025;2.918,11;15 %;3;Gerät;4,6;Karte;Größe passt nicht
+Noah Groß;Köln;21.04.2025;171,92;10 %;12;Gerät;3,3;Karte;"ok; zufrieden"
+Arjun Groß;Nürnberg;23.08.2025;213,07;5 %;9;Kleidung;4,2;Karte;
+Mia Bäcker;Düsseldorf;18.02.2025;167,74;0 %;12;Lebensmittel;1,3;Karte;
+Olivia Schäfer;Köln;01.04.2025;131,29;15 %;8;Lebensmittel;1,6;Karte;Größe passt nicht
+Olivia Schäfer;Straße am Main;17.02.2025;1.321,22;10 %;9;Lebensmittel;4,1;Überweisung;
+Mateo Bäcker;Graz;21.03.2025;45,92;0 %;18;Gerät;1,4;Bar;Größe passt nicht
+Tane Weiß;München;12.05.2025;999,65;15 %;7;Kleidung;4,3;Karte;
+Priya Bäcker;Straße am Main;17.02.2025;160,44;5 %;17;Lebensmittel;2,4;Überweisung;"ok; zufrieden"
+Lucas Müller;Zürich;16.08.2025;373,92;5 %;13;Bücher;2,1;Karte;Größe passt nicht
+Charlotte Weiß;Straße am Main;31.03.2025;150,60;10 %;10;Kleidung;2,6;Bar;Größe passt nicht
+Rupert Müller;Nürnberg;25.05.2025;2.260,00;5 %;2;Kleidung;1,5;Karte;Lieferung verspätet
+Chloe Schäfer;Wien;12.07.2025;224,94;10 %;6;Bücher;3,5;Karte;
+Fatima Müller;Köln;04.06.2025;58,00;15 %;10;Kleidung;2,5;Bar;Lieferung verspätet
+Olivia Bäcker;Nürnberg;30.07.2025;791,85;10 %;2;Lebensmittel;2,9;Bar;"ok; zufrieden"
+Anika Bäcker;Straße am Main;10.09.2025;577,49;5 %;17;Gerät;2,1;Überweisung;"ok; zufrieden"
+Zoe Weiß;Nürnberg;28.04.2025;2.014,00;0 %;13;Kleidung;3,4;Überweisung;"ok; zufrieden"
+Ethan Schäfer;Zürich;19.06.2025;447,31;15 %;2;Kleidung;2,7;Karte;Lieferung verspätet
+Layla Groß;Düsseldorf;01.01.2025;126,71;15 %;16;Bücher;2,5;Karte;Größe passt nicht
+Leo Müller;Köln;29.09.2025;137,39;5 %;7;Bücher;2,1;Karte;
+Henry Weiß;München;25.04.2025;1.099,11;10 %;2;Bücher;4,0;Karte;Lieferung verspätet
+Chloe Müller;Zürich;08.08.2025;237,43;0 %;17;Kleidung;3,1;Karte;Größe passt nicht
+Henry Groß;Nürnberg;17.03.2025;1.111,92;0 %;8;Gerät;4,5;Karte;Größe passt nicht
+Layla Weiß;Düsseldorf;15.03.2025;252,05;15 %;13;Bücher;1,5;Karte;
+Arjun Bäcker;Wien;22.06.2025;170,18;0 %;12;Lebensmittel;2,8;Überweisung;Größe passt nicht
+Wei Schäfer;Nürnberg;30.01.2025;616,03;5 %;15;Lebensmittel;4,8;Bar;"ok; zufrieden"
+Sofia Schäfer;Düsseldorf;31.03.2025;378,10;15 %;9;Gerät;1,3;Karte;"ok; zufrieden"
+Ella Weiß;Zürich;05.10.2025;148,13;0 %;10;Kleidung;3,7;Überweisung;Größe passt nicht
+Zoe Weiß;Düsseldorf;22.10.2025;278,94;10 %;12;Bücher;2,3;Überweisung;
+James Bäcker;Düsseldorf;26.10.2025;153,94;15 %;16;Lebensmittel;3,6;Bar;
+Lucas Bäcker;Nürnberg;06.03.2025;1.716,10;10 %;1;Bücher;1,8;Karte;
+Leo Schäfer;Zürich;11.04.2025;174,98;15 %;6;Kleidung;3,2;Überweisung;"ok; zufrieden"
+Ella Weiß;Köln;05.05.2025;811,68;15 %;2;Kleidung;2,1;Karte;Größe passt nicht
+Mia Müller;Düsseldorf;21.08.2025;1.205,57;15 %;17;Lebensmittel;4,3;Karte;"ok; zufrieden"
+Anika Müller;München;14.10.2025;132,16;15 %;1;Bücher;1,4;Bar;"ok; zufrieden"
+Layla Müller;München;26.07.2025;124,55;15 %;10;Gerät;4,3;Bar;
+Thomas Bäcker;München;14.06.2025;389,19;15 %;9;Lebensmittel;4,6;Überweisung;Größe passt nicht
+Lucas Groß;Nürnberg;19.01.2025;355,14;5 %;13;Gerät;3,7;Karte;"ok; zufrieden"
+Jack Schäfer;Graz;08.10.2025;57,38;10 %;3;Kleidung;4,3;Karte;Lieferung verspätet
+Tane Groß;Graz;12.10.2025;111,46;15 %;1;Gerät;2,6;Karte;
+Rupert Bäcker;Zürich;27.06.2025;270,08;10 %;15;Gerät;3,0;Karte;Lieferung verspätet
+Anika Weiß;Köln;19.03.2025;77,26;10 %;14;Gerät;4,8;Bar;
+Amelia Weiß;Straße am Main;19.07.2025;81,06;0 %;15;Kleidung;2,4;Bar;Lieferung verspätet
+Thomas Bäcker;Graz;20.05.2025;318,88;0 %;4;Bücher;3,7;Karte;Lieferung verspätet
+Oliver Weiß;Düsseldorf;17.09.2025;155,57;15 %;2;Bücher;1,9;Bar;"ok; zufrieden"
+Mateo Bäcker;Düsseldorf;03.05.2025;385,77;0 %;8;Lebensmittel;4,0;Karte;Lieferung verspätet
+Ethan Groß;Köln;27.06.2025;1.108,24;0 %;17;Bücher;3,2;Karte;Größe passt nicht
+Hannah Weiß;Straße am Main;08.08.2025;733,24;10 %;8;Lebensmittel;2,6;Überweisung;Größe passt nicht
+Dev Schäfer;Graz;20.02.2025;1.342,96;10 %;6;Lebensmittel;1,8;Überweisung;"ok; zufrieden"
+Mia Müller;Köln;22.02.2025;2.147,61;10 %;6;Lebensmittel;3,0;Überweisung;"ok; zufrieden"
+Anika Weiß;Straße am Main;17.07.2025;634,70;10 %;4;Bücher;1,8;Überweisung;"ok; zufrieden"
+Kai Schäfer;München;13.10.2025;1.104,44;5 %;6;Bücher;3,7;Bar;"ok; zufrieden"
+Rupert Müller;Köln;10.06.2025;254,87;15 %;13;Lebensmittel;3,4;Überweisung;Größe passt nicht
+Kai Müller;Köln;16.06.2025;954,72;0 %;2;Gerät;2,9;Überweisung;"ok; zufrieden"
+Thomas Müller;Nürnberg;01.08.2025;106,91;15 %;1;Gerät;5,0;Bar;"ok; zufrieden"
+Ruby Müller;Wien;05.09.2025;89,70;10 %;6;Gerät;1,6;Bar;Größe passt nicht
+Ethan Groß;Wien;20.08.2025;65,27;0 %;19;Lebensmittel;3,8;Überweisung;Lieferung verspätet
+Fatima Groß;Straße am Main;15.07.2025;335,29;15 %;6;Gerät;3,8;Bar;
+Ethan Schäfer;Köln;13.10.2025;1.095,20;10 %;17;Lebensmittel;4,9;Bar;
+Thomas Weiß;Graz;11.03.2025;415,18;0 %;4;Gerät;3,0;Karte;Lieferung verspätet
+Ethan Weiß;Köln;13.10.2025;124,29;0 %;15;Gerät;1,4;Bar;
+Priya Groß;Nürnberg;20.10.2025;284,39;15 %;7;Kleidung;4,9;Überweisung;Lieferung verspätet
+Mia Groß;Zürich;04.05.2025;392,54;5 %;7;Lebensmittel;4,5;Überweisung;"ok; zufrieden"
+Fatima Weiß;Düsseldorf;15.08.2025;183,59;5 %;3;Gerät;1,8;Überweisung;Größe passt nicht
+Ruby Schäfer;München;20.04.2025;429,34;15 %;7;Kleidung;4,5;Karte;
+Tane Bäcker;Zürich;22.07.2025;285,46;10 %;13;Gerät;3,4;Überweisung;Größe passt nicht
+Priya Müller;Graz;17.01.2025;749,78;0 %;1;Kleidung;4,2;Überweisung;"ok; zufrieden"
+Mateo Weiß;Düsseldorf;06.08.2025;495,91;15 %;8;Bücher;2,8;Bar;Größe passt nicht
+Mia Bäcker;Nürnberg;27.03.2025;365,58;5 %;1;Gerät;4,3;Karte;Lieferung verspätet
+William Groß;Nürnberg;26.05.2025;126,18;5 %;9;Gerät;2,5;Überweisung;Lieferung verspätet
+Kai Müller;Düsseldorf;15.08.2025;1.307,64;0 %;2;Bücher;3,4;Bar;"ok; zufrieden"
+Fatima Müller;Nürnberg;17.06.2025;258,92;0 %;2;Bücher;4,8;Überweisung;"ok; zufrieden"
+Hugo Weiß;Zürich;25.04.2025;1.337,36;0 %;3;Kleidung;3,1;Überweisung;"ok; zufrieden"
+James Schäfer;Wien;15.04.2025;207,08;15 %;19;Gerät;4,8;Karte;Größe passt nicht
+Zoe Schäfer;Zürich;28.03.2025;3.940,68;0 %;16;Bücher;4,5;Überweisung;Lieferung verspätet
+Mateo Weiß;Düsseldorf;11.09.2025;1.495,72;10 %;10;Kleidung;1,9;Überweisung;Lieferung verspätet
+Mei Schäfer;Wien;27.05.2025;70,44;15 %;16;Bücher;1,1;Überweisung;Größe passt nicht
+Mei Groß;Wien;03.01.2025;484,24;5 %;17;Gerät;1,1;Bar;Lieferung verspätet
+Ethan Schäfer;Graz;02.09.2025;1.118,53;0 %;14;Kleidung;4,0;Karte;
+Grace Weiß;Zürich;24.06.2025;626,52;15 %;16;Bücher;3,8;Bar;Größe passt nicht
+Mateo Müller;Straße am Main;04.07.2025;220,02;5 %;4;Lebensmittel;2,6;Karte;Größe passt nicht
+Dev Groß;Wien;29.04.2025;497,63;0 %;7;Kleidung;1,1;Bar;Lieferung verspätet
+Fatima Müller;Straße am Main;06.03.2025;1.402,34;5 %;6;Gerät;3,5;Überweisung;"ok; zufrieden"
+Charlotte Groß;Köln;25.01.2025;549,76;0 %;9;Lebensmittel;4,9;Bar;Lieferung verspätet
+Olivia Groß;Nürnberg;11.05.2025;84,57;15 %;13;Lebensmittel;2,6;Karte;
+Aroha Weiß;Köln;16.04.2025;1.220,48;15 %;13;Bücher;2,0;Bar;"ok; zufrieden"
+Mia Schäfer;Wien;07.08.2025;868,58;15 %;8;Bücher;2,6;Überweisung;Lieferung verspätet
+Mia Bäcker;Köln;11.01.2025;258,56;15 %;14;Lebensmittel;3,9;Überweisung;"ok; zufrieden"
+Wei Müller;Wien;18.05.2025;256,51;0 %;3;Gerät;4,6;Karte;Lieferung verspätet
+William Bäcker;Düsseldorf;22.03.2025;483,01;15 %;19;Gerät;4,4;Bar;"ok; zufrieden"
+Ethan Weiß;Straße am Main;22.08.2025;886,93;5 %;1;Bücher;3,9;Überweisung;Lieferung verspätet
+Amelia Weiß;München;15.01.2025;442,95;10 %;2;Bücher;4,3;Karte;Größe passt nicht
+Noah Weiß;Düsseldorf;10.02.2025;244,13;5 %;4;Lebensmittel;3,2;Karte;Größe passt nicht
+Rupert Müller;Wien;17.01.2025;347,52;5 %;19;Gerät;4,6;Überweisung;"ok; zufrieden"
+Jack Bäcker;Nürnberg;21.07.2025;357,40;5 %;12;Lebensmittel;4,1;Bar;Lieferung verspätet
+Omar Weiß;Köln;25.08.2025;877,67;5 %;14;Lebensmittel;2,7;Bar;Lieferung verspätet
+Mateo Bäcker;Düsseldorf;17.08.2025;711,23;15 %;5;Bücher;2,4;Überweisung;
+Anika Groß;Wien;01.08.2025;1.053,55;10 %;5;Lebensmittel;3,4;Überweisung;
+Liam Weiß;München;13.05.2025;922,34;0 %;17;Lebensmittel;3,9;Bar;"ok; zufrieden"
+Layla Bäcker;Zürich;15.06.2025;388,36;10 %;8;Kleidung;4,1;Bar;Lieferung verspätet
+Ruby Müller;Straße am Main;18.07.2025;751,40;10 %;1;Gerät;1,3;Karte;
+Aroha Müller;Köln;28.01.2025;1.145,61;15 %;17;Gerät;2,1;Bar;
+Layla Bäcker;Straße am Main;30.03.2025;256,73;15 %;14;Lebensmittel;2,8;Bar;Lieferung verspätet
+Liam Schäfer;Straße am Main;30.09.2025;173,48;10 %;14;Gerät;3,7;Bar;Lieferung verspätet
+Arjun Müller;Köln;01.03.2025;770,80;5 %;6;Kleidung;1,2;Überweisung;"ok; zufrieden"
+Charlotte Groß;Köln;22.03.2025;7.758,35;15 %;7;Bücher;1,3;Bar;Lieferung verspätet
+Liam Müller;Graz;14.10.2025;235,21;10 %;18;Lebensmittel;2,6;Überweisung;
+Henry Bäcker;Düsseldorf;02.10.2025;655,08;5 %;12;Bücher;2,4;Karte;Größe passt nicht
+Thomas Müller;Wien;06.01.2025;87,90;10 %;4;Kleidung;1,7;Überweisung;Lieferung verspätet
+Henry Weiß;Düsseldorf;02.02.2025;1.705,87;10 %;5;Kleidung;3,4;Karte;"ok; zufrieden"
+Kai Weiß;Wien;23.04.2025;147,61;15 %;7;Gerät;3,0;Karte;Lieferung verspätet
+Layla Müller;Nürnberg;13.03.2025;869,48;0 %;12;Bücher;3,2;Karte;
+Zoe Weiß;Graz;20.02.2025;76,83;0 %;14;Kleidung;2,7;Karte;Größe passt nicht
+Fatima Weiß;Straße am Main;20.10.2025;287,29;10 %;4;Bücher;3,4;Überweisung;Lieferung verspätet
+Thomas Bäcker;Nürnberg;24.02.2025;586,29;5 %;3;Lebensmittel;1,1;Karte;
+Mateo Schäfer;Wien;12.05.2025;359,48;5 %;4;Bücher;2,5;Überweisung;Lieferung verspätet
+Zoe Müller;Graz;03.01.2025;298,89;10 %;17;Bücher;1,4;Überweisung;Lieferung verspätet
+Ava Bäcker;Graz;01.02.2025;1.714,87;5 %;16;Bücher;4,3;Karte;Größe passt nicht
+Mateo Bäcker;Nürnberg;27.04.2025;858,65;15 %;12;Gerät;3,7;Bar;Lieferung verspätet
+Mei Weiß;Düsseldorf;21.09.2025;1.243,74;10 %;14;Lebensmittel;4,1;Karte;Größe passt nicht
+Ava Müller;München;09.02.2025;1.136,42;0 %;18;Kleidung;4,0;Bar;Lieferung verspätet
+Mei Weiß;Nürnberg;10.06.2025;338,38;0 %;1;Bücher;4,6;Bar;
+Mei Weiß;Zürich;14.09.2025;61,94;10 %;15;Bücher;2,4;Überweisung;
+Henry Weiß;Wien;08.09.2025;918,92;5 %;6;Bücher;3,0;Karte;"ok; zufrieden"
+Sofia Bäcker;Graz;17.08.2025;1.170,15;5 %;5;Gerät;3,9;Überweisung;Größe passt nicht
+Hugo Weiß;Köln;09.05.2025;235,76;0 %;19;Bücher;4,5;Bar;Größe passt nicht
+Thomas Müller;Düsseldorf;06.09.2025;234,06;0 %;19;Kleidung;3,9;Bar;
+Tane Groß;München;15.02.2025;681,83;10 %;9;Gerät;4,9;Bar;Größe passt nicht
+Liam Weiß;München;08.07.2025;359,99;0 %;15;Kleidung;2,2;Karte;Lieferung verspätet
+Sienna Weiß;München;05.07.2025;384,90;10 %;6;Gerät;3,6;Überweisung;
+Henry Bäcker;Wien;29.06.2025;2.165,85;5 %;17;Kleidung;3,6;Bar;Lieferung verspätet
+Sienna Weiß;Straße am Main;02.07.2025;179,89;0 %;9;Gerät;2,6;Karte;"ok; zufrieden"
+Noah Schäfer;Graz;18.04.2025;201,36;5 %;13;Lebensmittel;4,2;Karte;
+Oliver Weiß;Graz;26.09.2025;607,44;10 %;6;Kleidung;2,0;Überweisung;
+Hugo Schäfer;Düsseldorf;17.03.2025;919,10;15 %;17;Lebensmittel;2,5;Bar;"ok; zufrieden"
+Dev Bäcker;Nürnberg;18.03.2025;474,80;0 %;7;Gerät;4,1;Bar;Größe passt nicht
+Amelia Müller;Zürich;18.06.2025;550,49;0 %;10;Bücher;4,1;Karte;"ok; zufrieden"
+Henry Groß;Köln;07.08.2025;231,92;10 %;17;Gerät;2,2;Überweisung;
+Olivia Bäcker;Straße am Main;08.02.2025;342,03;15 %;1;Lebensmittel;2,5;Überweisung;
+Thomas Bäcker;Köln;21.06.2025;2.244,43;0 %;17;Bücher;4,2;Überweisung;
+Kai Groß;Nürnberg;04.02.2025;417,52;5 %;6;Bücher;1,2;Karte;Größe passt nicht
+Chloe Weiß;Wien;18.02.2025;304,17;5 %;6;Kleidung;4,5;Karte;Lieferung verspätet
+Sofia Schäfer;München;27.08.2025;998,31;0 %;17;Bücher;2,9;Karte;
+Dev Groß;Köln;09.01.2025;240,26;15 %;2;Lebensmittel;4,6;Karte;"ok; zufrieden"
+Jack Müller;Nürnberg;05.07.2025;300,19;15 %;10;Bücher;2,0;Bar;Größe passt nicht
+William Müller;Nürnberg;29.09.2025;503,66;10 %;16;Kleidung;1,7;Bar;Lieferung verspätet
+Henry Groß;Wien;24.09.2025;295,24;15 %;16;Gerät;4,3;Überweisung;Lieferung verspätet
+Noah Weiß;Wien;08.01.2025;543,70;5 %;11;Kleidung;4,3;Überweisung;Größe passt nicht
+Hannah Weiß;Nürnberg;03.09.2025;165,16;15 %;9;Lebensmittel;3,3;Karte;Größe passt nicht
+Jack Weiß;München;08.08.2025;244,31;0 %;6;Lebensmittel;4,3;Überweisung;"ok; zufrieden"
+Fatima Bäcker;Zürich;25.06.2025;156,54;10 %;12;Gerät;1,6;Überweisung;"ok; zufrieden"
+Sienna Müller;Wien;28.01.2025;825,00;5 %;5;Kleidung;3,1;Karte;"ok; zufrieden"
+William Groß;München;03.06.2025;350,96;5 %;1;Bücher;2,2;Überweisung;"ok; zufrieden"
+Sofia Müller;Straße am Main;25.06.2025;573,99;15 %;17;Bücher;3,3;Karte;Lieferung verspätet
+Leo Müller;Wien;28.02.2025;116,73;15 %;11;Lebensmittel;1,6;Karte;Lieferung verspätet
+Tane Bäcker;Wien;26.01.2025;151,57;0 %;6;Gerät;3,1;Bar;"ok; zufrieden"
+Fatima Weiß;Nürnberg;14.10.2025;2.775,82;5 %;8;Lebensmittel;1,9;Überweisung;Größe passt nicht
+Wei Schäfer;Straße am Main;12.08.2025;111,07;0 %;16;Kleidung;2,6;Bar;Lieferung verspätet
+Zoe Schäfer;Zürich;07.07.2025;345,37;10 %;18;Lebensmittel;4,4;Karte;"ok; zufrieden"
+Lucas Weiß;Nürnberg;21.01.2025;1.474,10;0 %;4;Gerät;1,7;Karte;
+Leo Weiß;Zürich;17.01.2025;367,65;15 %;8;Bücher;3,3;Bar;"ok; zufrieden"
+Amelia Schäfer;Nürnberg;05.05.2025;1.098,95;0 %;10;Bücher;1,3;Überweisung;Größe passt nicht
+Hugo Weiß;Nürnberg;24.05.2025;106,75;10 %;19;Lebensmittel;4,4;Karte;
+Chloe Groß;Graz;30.07.2025;729,00;10 %;3;Bücher;4,2;Bar;
+Isla Schäfer;Köln;14.04.2025;702,47;0 %;14;Gerät;4,9;Bar;
+Anika Müller;Zürich;03.06.2025;406,81;10 %;16;Gerät;4,8;Überweisung;Größe passt nicht
+Ethan Schäfer;Düsseldorf;06.02.2025;66,71;5 %;18;Bücher;4,9;Überweisung;
+Aroha Schäfer;München;24.05.2025;498,58;0 %;8;Lebensmittel;1,7;Karte;Größe passt nicht
+Olivia Weiß;Köln;06.01.2025;228,05;10 %;12;Gerät;1,7;Karte;Größe passt nicht
+Wei Bäcker;Zürich;24.10.2025;174,53;0 %;19;Gerät;3,8;Bar;Lieferung verspätet
+Liam Bäcker;Straße am Main;16.03.2025;147,94;5 %;14;Bücher;1,4;Karte;"ok; zufrieden"
+Liam Müller;Straße am Main;22.02.2025;887,20;5 %;17;Bücher;2,1;Bar;Lieferung verspätet
+Sofia Weiß;Nürnberg;28.05.2025;733,92;15 %;19;Bücher;4,4;Bar;Lieferung verspätet
+Oliver Schäfer;Wien;03.01.2025;221,28;10 %;6;Bücher;4,2;Überweisung;Größe passt nicht
+Fatima Bäcker;Graz;31.05.2025;165,43;15 %;1;Bücher;1,6;Bar;Größe passt nicht
+Sienna Weiß;Graz;04.01.2025;160,18;5 %;11;Bücher;4,6;Bar;"ok; zufrieden"
+Thomas Groß;München;27.06.2025;739,39;0 %;16;Bücher;1,7;Karte;Lieferung verspätet
+Priya Weiß;München;07.08.2025;1.342,79;15 %;6;Lebensmittel;4,5;Karte;"ok; zufrieden"
+Omar Bäcker;Wien;31.05.2025;1.274,26;0 %;3;Gerät;3,8;Überweisung;
+Anika Bäcker;München;16.04.2025;379,17;5 %;17;Lebensmittel;3,8;Karte;Größe passt nicht
+Omar Groß;Düsseldorf;23.01.2025;104,29;15 %;14;Bücher;1,1;Bar;Größe passt nicht
+Anika Weiß;München;04.06.2025;44,43;0 %;15;Gerät;5,0;Bar;
+Anika Müller;Zürich;25.03.2025;204,06;5 %;17;Lebensmittel;3,8;Karte;"ok; zufrieden"
+Sofia Müller;Wien;26.05.2025;829,54;5 %;11;Bücher;5,0;Überweisung;"ok; zufrieden"
+Olivia Müller;Straße am Main;24.04.2025;76,74;0 %;16;Bücher;2,1;Bar;Lieferung verspätet
+Ella Bäcker;Wien;12.05.2025;368,47;15 %;18;Gerät;2,5;Karte;Lieferung verspätet
+Amelia Müller;München;19.09.2025;1.414,09;10 %;16;Bücher;1,6;Karte;Lieferung verspätet
+Ella Müller;Wien;30.09.2025;1.836,31;15 %;15;Bücher;3,0;Überweisung;Größe passt nicht
+Leo Weiß;Straße am Main;02.06.2025;827,85;15 %;1;Lebensmittel;2,3;Überweisung;
+Priya Weiß;Düsseldorf;10.09.2025;97,57;15 %;10;Bücher;2,8;Bar;"ok; zufrieden"
+Ava Weiß;München;04.01.2025;724,47;10 %;2;Gerät;2,1;Karte;Lieferung verspätet
+Tane Müller;München;21.07.2025;152,88;15 %;16;Gerät;3,7;Überweisung;
+Noah Schäfer;München;04.02.2025;539,56;0 %;3;Kleidung;1,5;Überweisung;"ok; zufrieden"
+Mia Schäfer;München;31.03.2025;440,40;15 %;13;Gerät;3,2;Bar;
+Charlotte Schäfer;Straße am Main;10.05.2025;1.139,58;10 %;14;Bücher;1,2;Karte;"ok; zufrieden"
+Rupert Groß;Köln;08.01.2025;2.739,91;10 %;4;Bücher;1,5;Karte;Größe passt nicht
+Layla Weiß;Nürnberg;10.10.2025;1.233,77;5 %;8;Kleidung;2,7;Karte;
+Ella Müller;München;12.10.2025;1.541,83;15 %;6;Bücher;3,6;Karte;Lieferung verspätet
+Kai Schäfer;München;04.08.2025;940,19;5 %;6;Lebensmittel;3,1;Überweisung;Größe passt nicht
+Arjun Groß;Nürnberg;10.03.2025;1.619,35;5 %;2;Kleidung;4,7;Karte;Lieferung verspätet
+Leo Groß;Wien;11.01.2025;2.887,23;0 %;14;Kleidung;2,9;Überweisung;
+Mateo Schäfer;Straße am Main;22.03.2025;726,18;15 %;3;Lebensmittel;1,4;Überweisung;Lieferung verspätet
+Oliver Groß;München;29.03.2025;2.811,96;15 %;17;Bücher;4,1;Bar;Lieferung verspätet
+Arjun Müller;Wien;05.07.2025;1.315,65;5 %;10;Bücher;4,1;Karte;
+Wei Weiß;Nürnberg;27.09.2025;534,17;15 %;10;Bücher;4,5;Überweisung;"ok; zufrieden"
+Arjun Weiß;Köln;22.01.2025;213,00;5 %;14;Gerät;3,4;Überweisung;Lieferung verspätet
+Ella Schäfer;Zürich;15.06.2025;434,32;10 %;12;Gerät;1,9;Überweisung;
+Amelia Bäcker;Graz;19.01.2025;1.824,44;15 %;6;Bücher;1,6;Bar;
+Amelia Müller;Wien;23.04.2025;571,15;0 %;19;Kleidung;1,6;Überweisung;Lieferung verspätet
+Ava Müller;Düsseldorf;17.06.2025;21,05;5 %;18;Lebensmittel;1,3;Bar;Lieferung verspätet
+Layla Groß;Nürnberg;26.05.2025;461,40;15 %;8;Bücher;4,0;Karte;Größe passt nicht
+Chloe Bäcker;Zürich;07.06.2025;312,64;0 %;1;Lebensmittel;4,6;Karte;Lieferung verspätet
+William Bäcker;Wien;15.05.2025;527,15;5 %;12;Gerät;4,7;Überweisung;
+Dev Groß;Nürnberg;19.02.2025;85,37;10 %;11;Kleidung;1,9;Bar;"ok; zufrieden"
+Kai Müller;Nürnberg;30.05.2025;175,62;5 %;1;Lebensmittel;2,4;Bar;
+Priya Müller;Düsseldorf;19.08.2025;165,68;15 %;8;Kleidung;4,0;Bar;
+Anika Groß;Düsseldorf;19.06.2025;1.918,42;0 %;18;Bücher;3,6;Bar;
+Omar Weiß;Nürnberg;11.09.2025;126,11;5 %;11;Gerät;3,7;Karte;"ok; zufrieden"
+Omar Bäcker;Zürich;20.09.2025;1.179,06;0 %;14;Kleidung;1,5;Überweisung;
+Oliver Weiß;Köln;26.03.2025;932,93;5 %;19;Gerät;3,2;Karte;Größe passt nicht
+Lucas Bäcker;Zürich;13.06.2025;178,64;0 %;9;Bücher;4,8;Überweisung;Lieferung verspätet
+Mia Müller;Graz;04.03.2025;470,88;15 %;14;Bücher;1,8;Überweisung;Lieferung verspätet
+William Schäfer;Düsseldorf;16.05.2025;158,99;10 %;17;Bücher;4,7;Bar;Größe passt nicht
+Mei Müller;Köln;23.07.2025;996,90;10 %;2;Kleidung;3,0;Überweisung;Größe passt nicht
+Wei Müller;Nürnberg;26.05.2025;679,82;10 %;3;Bücher;2,3;Karte;
+Wei Schäfer;Wien;29.01.2025;276,80;15 %;8;Kleidung;1,1;Karte;Größe passt nicht
+William Schäfer;Zürich;24.06.2025;2.447,98;0 %;1;Lebensmittel;4,9;Karte;"ok; zufrieden"
+Kai Schäfer;Wien;25.08.2025;1.000,81;15 %;5;Bücher;2,5;Bar;
+Mateo Bäcker;München;25.05.2025;180,57;15 %;12;Bücher;4,7;Karte;Größe passt nicht
+Grace Bäcker;Düsseldorf;12.06.2025;188,18;5 %;8;Gerät;4,4;Karte;"ok; zufrieden"
+Amelia Groß;Köln;12.03.2025;840,49;5 %;19;Lebensmittel;4,3;Bar;Größe passt nicht
+Mia Schäfer;Zürich;22.04.2025;402,60;5 %;10;Kleidung;4,8;Karte;Größe passt nicht
+Kai Bäcker;Wien;11.07.2025;163,93;10 %;7;Lebensmittel;1,2;Bar;"ok; zufrieden"
+Thomas Groß;Düsseldorf;15.04.2025;293,76;10 %;13;Lebensmittel;4,6;Bar;
+Omar Weiß;München;11.08.2025;189,13;10 %;12;Kleidung;2,0;Bar;"ok; zufrieden"
+Mateo Weiß;Graz;09.10.2025;303,54;10 %;11;Gerät;4,7;Überweisung;
+Rupert Müller;Zürich;29.06.2025;270,11;0 %;15;Gerät;2,6;Bar;
+Noah Bäcker;Zürich;04.03.2025;229,77;15 %;1;Gerät;4,4;Überweisung;
+Isla Weiß;Nürnberg;19.07.2025;807,12;5 %;14;Lebensmittel;2,3;Bar;Größe passt nicht
+Omar Müller;Düsseldorf;07.05.2025;181,42;10 %;9;Bücher;1,5;Karte;
+Amelia Bäcker;München;31.07.2025;392,76;0 %;3;Bücher;3,3;Bar;
+Mateo Bäcker;Wien;21.06.2025;322,96;10 %;5;Kleidung;3,1;Karte;"ok; zufrieden"
+Ava Müller;Wien;21.03.2025;150,02;15 %;5;Gerät;2,5;Überweisung;
+Oliver Groß;Köln;02.08.2025;372,31;5 %;15;Bücher;4,3;Karte;"ok; zufrieden"
+Tane Schäfer;Zürich;25.02.2025;127,08;0 %;3;Lebensmittel;3,4;Überweisung;Größe passt nicht
+Omar Groß;München;21.10.2025;342,65;5 %;14;Gerät;1,4;Bar;"ok; zufrieden"
+Amelia Müller;Graz;21.02.2025;1.256,13;10 %;15;Bücher;3,5;Karte;"ok; zufrieden"
+Omar Müller;Nürnberg;02.08.2025;230,68;5 %;10;Lebensmittel;3,8;Bar;
+Charlotte Müller;Düsseldorf;04.06.2025;580,06;0 %;10;Kleidung;2,7;Überweisung;
+Oliver Müller;Wien;12.02.2025;82,12;5 %;18;Kleidung;3,9;Bar;Lieferung verspätet
+Dev Bäcker;Nürnberg;19.06.2025;180,29;5 %;1;Kleidung;3,9;Bar;Größe passt nicht
+Leo Weiß;Düsseldorf;18.02.2025;2.839,36;15 %;9;Gerät;1,5;Karte;Größe passt nicht
+Hannah Weiß;München;20.07.2025;71,97;10 %;16;Gerät;2,1;Überweisung;"ok; zufrieden"
+Leo Schäfer;Nürnberg;16.05.2025;1.915,65;10 %;14;Bücher;3,2;Überweisung;"ok; zufrieden"
+Jack Weiß;München;21.02.2025;473,75;15 %;2;Kleidung;1,4;Bar;"ok; zufrieden"
+Aroha Müller;Köln;19.09.2025;125,73;15 %;11;Bücher;1,4;Überweisung;Größe passt nicht
+Zoe Schäfer;Düsseldorf;23.01.2025;1.341,08;10 %;7;Lebensmittel;3,6;Bar;Größe passt nicht
+Jack Schäfer;Zürich;19.02.2025;191,77;5 %;9;Gerät;1,6;Karte;Größe passt nicht
+Sofia Schäfer;München;10.01.2025;553,70;0 %;9;Gerät;3,9;Überweisung;Lieferung verspätet
+Liam Groß;Köln;26.07.2025;511,74;5 %;12;Lebensmittel;2,2;Überweisung;Größe passt nicht
+Ava Bäcker;Düsseldorf;01.04.2025;440,70;0 %;5;Bücher;4,5;Bar;Größe passt nicht
+William Bäcker;Düsseldorf;05.04.2025;103,99;0 %;16;Kleidung;3,0;Karte;"ok; zufrieden"
+Thomas Groß;Köln;08.08.2025;431,32;0 %;5;Kleidung;2,1;Überweisung;
+Thomas Schäfer;Graz;06.08.2025;817,62;10 %;2;Lebensmittel;3,7;Bar;"ok; zufrieden"
+Olivia Weiß;München;22.08.2025;654,35;0 %;17;Bücher;1,6;Bar;"ok; zufrieden"
+Ruby Bäcker;Düsseldorf;03.09.2025;783,64;15 %;4;Bücher;3,0;Karte;
+Isla Weiß;München;26.04.2025;1.058,50;5 %;16;Lebensmittel;2,7;Karte;
+Kai Bäcker;Zürich;28.02.2025;1.005,87;0 %;17;Kleidung;1,8;Überweisung;"ok; zufrieden"
+Arjun Schäfer;Wien;17.07.2025;174,99;0 %;10;Lebensmittel;2,7;Überweisung;Lieferung verspätet
+Liam Müller;Wien;01.01.2025;602,89;10 %;15;Gerät;1,9;Karte;
+Sofia Groß;München;28.05.2025;1.971,15;5 %;4;Gerät;3,2;Karte;Größe passt nicht
+Kai Bäcker;Graz;14.04.2025;2.351,11;15 %;13;Lebensmittel;4,2;Überweisung;Größe passt nicht
+Hugo Weiß;Zürich;17.07.2025;27,77;0 %;7;Gerät;2,0;Überweisung;Lieferung verspätet
+Priya Groß;Düsseldorf;18.07.2025;314,07;10 %;4;Bücher;3,6;Bar;"ok; zufrieden"
+Liam Groß;Nürnberg;29.01.2025;595,76;15 %;5;Bücher;1,3;Bar;
+William Bäcker;München;02.04.2025;755,30;15 %;19;Gerät;3,9;Bar;Lieferung verspätet
+Thomas Bäcker;Düsseldorf;19.07.2025;171,62;5 %;6;Bücher;1,9;Bar;Größe passt nicht
+Hannah Schäfer;München;19.02.2025;412,91;15 %;18;Kleidung;2,5;Überweisung;"ok; zufrieden"
+William Schäfer;Köln;25.08.2025;277,13;10 %;18;Lebensmittel;2,9;Überweisung;Größe passt nicht
+Noah Schäfer;München;21.05.2025;45,30;15 %;5;Kleidung;2,4;Bar;"ok; zufrieden"
+Hannah Bäcker;Köln;25.06.2025;794,87;5 %;3;Lebensmittel;4,5;Bar;Größe passt nicht
+Lucas Groß;Düsseldorf;05.05.2025;3.095,23;10 %;11;Bücher;1,4;Karte;Größe passt nicht
+Thomas Bäcker;München;28.05.2025;2.612,28;0 %;8;Kleidung;5,0;Bar;
