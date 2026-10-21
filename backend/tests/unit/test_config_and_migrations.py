@@ -46,9 +46,27 @@ def test_production_requires_an_https_issuer() -> None:
         Settings(**{**BASE, "auth_issuer": "http://web.example"}, environment="production")  # type: ignore[arg-type]
 
 
-def test_production_rejects_a_custom_s3_endpoint() -> None:
+def test_production_rejects_a_custom_s3_endpoint_without_a_public_https_one() -> None:
     with pytest.raises(ValidationError, match="S3_ENDPOINT_URL"):
         Settings(**BASE, environment="production", s3_endpoint_url="http://s3:9000")  # type: ignore[arg-type]
+    with pytest.raises(ValidationError, match="S3_PUBLIC_ENDPOINT_URL"):
+        Settings(
+            **BASE,  # type: ignore[arg-type]
+            environment="production",
+            s3_endpoint_url="http://s3:9000",
+            s3_public_endpoint_url="http://files.example",
+        )
+
+
+def test_production_accepts_self_hosted_storage_behind_https() -> None:
+    settings = Settings(
+        **BASE,  # type: ignore[arg-type]
+        environment="production",
+        events_allowed_origins="https://web.example",
+        s3_endpoint_url="http://s3:9000",
+        s3_public_endpoint_url="https://files.example",
+    )
+    assert settings.s3_public_endpoint_url == "https://files.example"
 
 
 def test_security_critical_settings_have_no_defaults(monkeypatch: pytest.MonkeyPatch) -> None:

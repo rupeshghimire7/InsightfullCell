@@ -187,8 +187,16 @@ class Settings(BaseSettings):
                 raise ValueError("AUTH_JWKS_URL must be https in production")
             if not self.auth_issuer.startswith("https://"):
                 raise ValueError("AUTH_ISSUER must be https in production (the web app's URL)")
-            if self.s3_endpoint_url is not None:
-                raise ValueError("S3_ENDPOINT_URL must be unset in production (use AWS S3)")
+            # AWS S3: both unset. Self-hosted S3-compatible storage (deploy/azure): the API
+            # talks to it on a private network, and browsers get presigned https URLs.
+            public = self.s3_public_endpoint_url
+            if public is not None and not public.startswith("https://"):
+                raise ValueError("S3_PUBLIC_ENDPOINT_URL must be https in production")
+            if self.s3_endpoint_url is not None and public is None:
+                raise ValueError(
+                    "S3_ENDPOINT_URL needs S3_PUBLIC_ENDPOINT_URL (the https address browsers "
+                    "upload to) in production; leave both unset for AWS S3"
+                )
             if any(not o.startswith("https://") for o in self.events_origins):
                 raise ValueError("EVENTS_ALLOWED_ORIGINS must list https origins in production")
         return self
