@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { Button } from "@/components/ui/button";
-import { Info } from "@/components/ui/icons";
+import { Eye, EyeSlash, Info } from "@/components/ui/icons";
 import { ProblemAlert } from "@/components/ui/problem-alert";
 import { authClient } from "@/lib/auth-client";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/lib/auth-constants";
@@ -22,12 +22,14 @@ type Action = "password" | "google";
 type Status =
   { kind: "idle" } | { kind: "busy"; action: Action } | { kind: "error"; message: string };
 
-type FieldName = "name" | "email" | "password";
+type FieldName = "name" | "email" | "password" | "confirmPassword";
 type FieldErrors = Partial<Record<FieldName, string>>;
 interface Values {
   name: string;
   email: string;
   password: string;
+  /** Registration only: the password typed again. Checked here, never sent. */
+  confirmPassword: string;
 }
 
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -66,6 +68,11 @@ export function validate(mode: SignInMode, action: "password", values: Values) {
     if (mode === "sign-in" && !values.password) errors.password = "Enter your password.";
     if (mode === "register" && values.password.length < PASSWORD_MIN_LENGTH) {
       errors.password = `Use at least ${PASSWORD_MIN_LENGTH} characters.`;
+    }
+    if (mode === "register" && !values.confirmPassword) {
+      errors.confirmPassword = "Type your password again.";
+    } else if (mode === "register" && values.confirmPassword !== values.password) {
+      errors.confirmPassword = "The passwords don’t match.";
     }
   }
   return errors;
@@ -142,6 +149,7 @@ export function SignInForm({
       name: (data.get("name") ?? "").toString().trim(),
       email: (data.get("email") ?? "").toString().trim(),
       password: (data.get("password") ?? "").toString(),
+      confirmPassword: (data.get("confirmPassword") ?? "").toString(),
     };
     const errors = validate(mode, action, values);
     setFieldErrors(errors);
@@ -166,7 +174,11 @@ export function SignInForm({
     setStatus({ kind: "busy", action: "password" });
     const error = await settle(() =>
       registering
-        ? authClient.signUp.email(values)
+        ? authClient.signUp.email({
+            name: values.name,
+            email: values.email,
+            password: values.password,
+          })
         : authClient.signIn.email({ email: values.email, password: values.password }),
     );
     if (error) {
@@ -238,15 +250,20 @@ export function SignInForm({
           hint={registering ? `At least ${PASSWORD_MIN_LENGTH} characters.` : undefined}
         >
           {(props) => (
-            <input
+            <PasswordInput
               {...props}
               name="password"
-              type="password"
               autoComplete={registering ? "new-password" : "current-password"}
-              maxLength={PASSWORD_MAX_LENGTH}
             />
           )}
         </Field>
+        {registering ? (
+          <Field label="Confirm password" error={fieldErrors.confirmPassword}>
+            {(props) => (
+              <PasswordInput {...props} name="confirmPassword" autoComplete="new-password" />
+            )}
+          </Field>
+        ) : null}
         <Button type="submit" loading={busy === "password"} disabled={!hydrated} className="w-full">
           {registering
             ? busy === "password"
@@ -295,6 +312,41 @@ interface FieldInputProps {
   "aria-invalid"?: true;
   "aria-describedby"?: string;
   className: string;
+}
+
+/**
+ * A password input with an eye button that shows or hides what was typed. The button comes after
+ * the input in tab order, names what it will do ("Show password" / "Hide password") and never
+ * submits the form.
+ */
+function PasswordInput({
+  className,
+  ...props
+}: FieldInputProps & { name: string; autoComplete: string }) {
+  const [visible, setVisible] = useState(false);
+  const Icon = visible ? EyeSlash : Eye;
+  return (
+    <div className="relative">
+      <input
+        {...props}
+        type={visible ? "text" : "password"}
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        maxLength={PASSWORD_MAX_LENGTH}
+        className={`${className} pr-11`}
+      />
+      <button
+        type="button"
+        onClick={() => setVisible((shown) => !shown)}
+        aria-label={visible ? "Hide password" : "Show password"}
+        aria-controls={props.id}
+        className="absolute top-1/2 right-1 grid size-8 -translate-y-1/2 place-items-center rounded-control text-muted hover:bg-bg hover:text-text pointer-coarse:size-9"
+      >
+        <Icon aria-hidden="true" className="size-4.5" />
+      </button>
+    </div>
+  );
 }
 
 /** A labelled input with an optional hint and an error the input is described by. */

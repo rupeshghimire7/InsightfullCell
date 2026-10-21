@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { NavLink } from "@/components/shell/nav-link";
 import { UserMenu } from "@/components/shell/user-menu";
+import { LogoMark } from "@/components/ui/brand";
 
 /** Global chrome: skip link, header landmark, navigation, main landmark. */
 export function AppShell({
@@ -26,7 +27,7 @@ export function AppShell({
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
           <div className="flex min-w-0 items-center gap-4 sm:gap-6">
             <Link href={home} className="flex shrink-0 items-center gap-2 font-semibold">
-              <span aria-hidden="true" className="size-3.5 rounded-[3px] bg-accent" />
+              <LogoMark size={28} />
               <span className="hidden sm:inline">InsightfulCell</span>
               <span className="sr-only sm:hidden">InsightfulCell</span>
             </Link>

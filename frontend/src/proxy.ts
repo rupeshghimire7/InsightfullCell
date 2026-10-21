@@ -45,7 +45,9 @@ export const config = {
   matcher: [
     {
       // Upload parts relayed to storage skip it: a proxy buffers request bodies (up to 10 MB).
-      source: "/((?!_next/static|_next/image|favicon.ico|api/storage/).*)",
+      // Icons and the manifest skip it too, so they load before sign-in (no redirect).
+      source:
+        "/((?!_next/static|_next/image|favicon.ico|icons/|manifest.webmanifest|api/storage/).*)",
       missing: [{ type: "header", key: "next-router-prefetch" }],
     },
   ],

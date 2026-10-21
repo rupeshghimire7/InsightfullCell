@@ -128,6 +128,10 @@ describe("SignInForm: registration", () => {
     const password = screen.getByLabelText("Password");
     expect(password).toHaveAttribute("autocomplete", "new-password");
     expect(password).toHaveAccessibleDescription("At least 8 characters.");
+    expect(screen.getByLabelText("Confirm password")).toHaveAttribute(
+      "autocomplete",
+      "new-password",
+    );
     expect(linkButton()).toHaveAttribute("href", "/sign-in/email?mode=register");
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/sign-in");
     expect(await axe(container)).toHaveNoViolations();
@@ -143,7 +147,39 @@ describe("SignInForm: registration", () => {
     expect(screen.getByLabelText("Password")).toHaveAccessibleDescription(
       /Use at least 8 characters/,
     );
+    expect(screen.getByLabelText("Confirm password")).toHaveAccessibleDescription(
+      "Type your password again.",
+    );
     expect(signUpEmail).not.toHaveBeenCalled();
+  });
+
+  it("refuses passwords that don't match and focuses the confirmation", async () => {
+    const user = userEvent.setup();
+    form({ mode: "register" });
+    await user.type(screen.getByLabelText("Name"), "Ada");
+    await user.type(screen.getByLabelText("Email address"), "ada@example.com");
+    await user.type(screen.getByLabelText("Password"), "analytical engine");
+    await user.type(screen.getByLabelText("Confirm password"), "analytical engines");
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+    const confirm = screen.getByLabelText("Confirm password");
+    expect(confirm).toHaveFocus();
+    expect(confirm).toHaveAccessibleDescription("The passwords don’t match.");
+    expect(signUpEmail).not.toHaveBeenCalled();
+  });
+
+  it("shows and hides each password with its eye button", async () => {
+    const user = userEvent.setup();
+    form({ mode: "register" });
+    const password = screen.getByLabelText("Password");
+    const [showPassword, showConfirm] = screen.getAllByRole("button", { name: "Show password" });
+    expect(password).toHaveAttribute("type", "password");
+    await user.click(showPassword!);
+    expect(password).toHaveAttribute("type", "text");
+    expect(showPassword).toHaveAccessibleName("Hide password");
+    expect(screen.getByLabelText("Confirm password")).toHaveAttribute("type", "password");
+    await user.click(showPassword!);
+    expect(password).toHaveAttribute("type", "password");
+    expect(showConfirm).toHaveAttribute("type", "button");
   });
 
   it("creates the account and enters the app", async () => {
@@ -152,6 +188,7 @@ describe("SignInForm: registration", () => {
     await user.type(screen.getByLabelText("Name"), " Ada Lovelace ");
     await user.type(screen.getByLabelText("Email address"), "ada@example.com");
     await user.type(screen.getByLabelText("Password"), "analytical engine");
+    await user.type(screen.getByLabelText("Confirm password"), "analytical engine");
     await user.click(screen.getByRole("button", { name: "Create account" }));
     expect(signUpEmail).toHaveBeenCalledWith({
       name: "Ada Lovelace",
@@ -170,7 +207,8 @@ describe("SignInForm: registration", () => {
     form({ mode: "register" });
     await user.type(screen.getByLabelText("Name"), "Ada");
     await user.type(screen.getByLabelText("Email address"), "ada@example.com");
-    await user.type(screen.getByLabelText("Password"), "analytical engine{Enter}");
+    await user.type(screen.getByLabelText("Password"), "analytical engine");
+    await user.type(screen.getByLabelText("Confirm password"), "analytical engine{Enter}");
     expect(await screen.findByRole("alert")).toHaveTextContent("already exists");
   });
 });
@@ -274,14 +312,27 @@ describe("SignInForm: Google and link errors", () => {
 });
 
 describe("validate", () => {
-  const ok = { name: "Ada", email: "ada@example.com", password: "12345678" };
+  const ok = {
+    name: "Ada",
+    email: "ada@example.com",
+    password: "12345678",
+    confirmPassword: "12345678",
+  };
   it("accepts a password of exactly the minimum length at registration", () => {
     expect(validate("register", "password", ok)).toEqual({});
     expect(validate("register", "password", { ...ok, password: "1234567" })).toHaveProperty(
       "password",
     );
   });
-  it("never asks for a name when signing in", () => {
-    expect(validate("sign-in", "password", { ...ok, name: "" })).toEqual({});
+  it("never asks for a name or a confirmation when signing in", () => {
+    expect(validate("sign-in", "password", { ...ok, name: "", confirmPassword: "" })).toEqual({});
+  });
+  it("asks for the password again at registration, and the same one", () => {
+    expect(validate("register", "password", { ...ok, confirmPassword: "" })).toEqual({
+      confirmPassword: "Type your password again.",
+    });
+    expect(validate("register", "password", { ...ok, confirmPassword: "12345679" })).toEqual({
+      confirmPassword: "The passwords don’t match.",
+    });
   });
 });

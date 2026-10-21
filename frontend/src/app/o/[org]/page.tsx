@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { DatasetTable } from "@/components/datasets/dataset-table";
 import { UploadDropzone } from "@/components/upload/upload-dropzone";
+import { LogoMark } from "@/components/ui/brand";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Database } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/page-header";
@@ -31,6 +32,7 @@ export default async function HomePage({
   return (
     <>
       <PageHeader
+        leading={<LogoMark size={72} className="hidden drop-shadow-sm sm:block" />}
         title="Home"
         description="Upload a table, then analyse it. Each file is checked against what you uploaded before anything is computed from it."
       />

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { EmailLinkForm } from "@/components/auth/email-link-form";
+import { Brand } from "@/components/ui/brand";
 import { ServiceUnavailable } from "@/components/ui/service-unavailable";
 import { MAGIC_LINK_TTL_SECONDS } from "@/lib/auth-constants";
 import { getEnv } from "@/lib/env";
@@ -32,9 +33,8 @@ export default async function EmailLinkPage({
   return (
     <main id="main" className="flex min-h-dvh items-center justify-center px-4 py-12 sm:px-8">
       <div className="w-full max-w-[400px]">
-        <p className="flex items-center gap-2 text-sm font-semibold">
-          <span aria-hidden="true" className="size-3 rounded-[3px] bg-accent" />
-          InsightfulCell
+        <p className="text-sm">
+          <Brand size={28} />
         </p>
         <h1 className="mt-6 text-2xl font-semibold">Email me a sign-in link</h1>
         <p className="mt-1 mb-8 text-muted">

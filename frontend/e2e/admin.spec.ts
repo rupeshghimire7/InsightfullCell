@@ -36,7 +36,13 @@ test("the admin dashboard opens only with the key", async ({ page, context }) =>
   await dialog.getByRole("button", { name: "Unlock dashboard" }).click();
   await expect(page.getByRole("heading", { name: "Admin dashboard", level: 1 })).toBeVisible();
   await expect(page.getByRole("meter", { name: "Model spend against the cap" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "People and their usage" })).toBeVisible();
+  // The people list: a table, or (when this runs before anyone has registered) its empty note.
+  await expect(page.getByRole("heading", { name: "People", level: 2 })).toBeVisible();
+  await expect(
+    page
+      .getByRole("table", { name: "People and their usage" })
+      .or(page.getByText("Nobody has signed up yet.")),
+  ).toBeVisible();
 
   const cookie = (await context.cookies()).find((c) => c.name.endsWith("ic_admin"));
   expect(cookie?.httpOnly).toBe(true);

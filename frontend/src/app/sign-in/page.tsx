@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { SignInForm } from "@/components/auth/sign-in-form";
+import { Brand } from "@/components/ui/brand";
 import { ServiceUnavailable } from "@/components/ui/service-unavailable";
 import { getEnv } from "@/lib/env";
 import { googleSignIn, linkDelivery } from "@/lib/sign-in-options";
@@ -40,9 +41,8 @@ export default async function SignInPage({
       <div className="flex items-center justify-center px-4 py-12 sm:px-8">
         <div className="w-full max-w-[400px]">
           <div className="lg:hidden">
-            <p className="flex items-center gap-2 text-sm font-semibold">
-              <span aria-hidden="true" className="size-3 rounded-[3px] bg-accent" />
-              InsightfulCell
+            <p className="text-sm">
+              <Brand size={28} />
             </p>
             <p className="mt-1 text-sm text-muted">{TAGLINE}</p>
           </div>
@@ -74,9 +74,8 @@ export default async function SignInPage({
         aria-labelledby="promise-title"
         className="relative hidden flex-col justify-between overflow-hidden bg-brand-panel p-12 text-brand-panel-text lg:order-first lg:flex xl:p-16"
       >
-        <p className="flex items-center gap-2 font-semibold">
-          <span aria-hidden="true" className="size-3.5 rounded-[3px] bg-brand-panel-text" />
-          InsightfulCell
+        <p className="text-lg">
+          <Brand size={44} />
         </p>
         <div className="max-w-lg space-y-5">
           <h2

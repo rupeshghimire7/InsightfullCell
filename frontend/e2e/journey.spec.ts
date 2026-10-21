@@ -16,7 +16,8 @@ async function register(page: Page, email: string, name = "E2E Person") {
   await page.goto("/sign-in?mode=register");
   await page.getByLabel("Name").fill(name);
   await page.getByLabel("Email address").fill(email);
-  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+  await page.getByLabel("Confirm password").fill(PASSWORD);
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/o\/[0-9a-f-]{36}$/);
 }
@@ -250,7 +251,8 @@ test("register with a password, sign out, sign back in", async ({ page }) => {
   await expectNoAxeViolations(page);
   await page.getByLabel("Name").fill("E2E Person");
   await page.getByLabel("Email address").fill(email);
-  await page.getByLabel("Password").fill(password);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByLabel("Confirm password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/o\/[0-9a-f-]{36}$/);
   await expect(page.getByText("No datasets yet")).toBeVisible();
@@ -258,10 +260,10 @@ test("register with a password, sign out, sign back in", async ({ page }) => {
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/sign-in$/);
   await page.getByLabel("Email address").fill(email);
-  await page.getByLabel("Password").fill("not the password");
+  await page.getByLabel("Password", { exact: true }).fill("not the password");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(problemAlert(page)).toContainText("email and password don’t match");
-  await page.getByLabel("Password").fill(password);
+  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/o\/[0-9a-f-]{36}$/);
 });
