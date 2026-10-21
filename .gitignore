@@ -6,7 +6,7 @@
 *.key
 *.p12
 *.pfx
-# Deployment: real values live only on the server (deploy/azure/README.md)
+# Deployment: real values live only on the server (deploy/aws/README.md)
 deploy/**/*.env
 !deploy/**/*.env.example
 deploy/**/backups/

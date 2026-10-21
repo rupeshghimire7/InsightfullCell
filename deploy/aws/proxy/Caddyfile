@@ -1,0 +1,23 @@
+# One block per public hostname. After editing: docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
+{
+	# Let's Encrypt sends certificate expiry warnings here.
+	email sandeshpaudel81@gmail.com
+}
+
+# --- InsightfulCell (deploy/aws in the InsightfullCell repo)
+app.ic.rgproject.me {
+	encode zstd gzip
+	reverse_proxy ic-web:3000
+}
+
+api.ic.rgproject.me {
+	# Live progress is a server-sent event stream: pass every event on at once, unbuffered.
+	reverse_proxy ic-api:8000 {
+		flush_interval -1
+	}
+}
+
+# --- Next project: give its containers unique names, join the edge network, then e.g.
+# app.project2.rgproject.me {
+# 	reverse_proxy p2-web:3000
+# }

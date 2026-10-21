@@ -1,0 +1,27 @@
+# The one public entry point for every project on this host: Caddy on ports 80 and 443, with
+# automatic HTTPS certificates. Copy this folder to ~/proxy on the server and run it from there:
+#   docker network create edge && docker compose up -d
+# Each project joins the external `edge` network and gets a block in the Caddyfile.
+name: proxy
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [edge]
+    restart: unless-stopped
+
+volumes:
+  caddy_data:  # certificates: keep this volume, or Let's Encrypt rate limits can bite
+  caddy_config:
+
+networks:
+  edge:
+    external: true
