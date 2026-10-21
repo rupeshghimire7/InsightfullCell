@@ -19,7 +19,8 @@ import { run } from "../lib/runs-fixtures";
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push, refresh: vi.fn() }) }));
 
-describe("fact inspector", () => {
+// Renders a whole report section; slow under coverage on a busy machine.
+describe("fact inspector", { timeout: 30_000 }, () => {
   it("opens a citation's fact and returns focus to the chip", async () => {
     const facts = report().facts;
     render(

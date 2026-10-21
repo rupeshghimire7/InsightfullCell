@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  declaredBodyTooLarge,
   FORWARDED_REQUEST_HEADERS,
   FORWARDED_RESPONSE_HEADERS,
   isTrustedOrigin,
+  MAX_BODY_BYTES,
   resolveBackendPath,
 } from "@/lib/backend-policy";
 import { buildCsp } from "@/lib/csp";
@@ -94,6 +96,17 @@ describe("isTrustedOrigin", () => {
     expect(isTrustedOrigin("POST", tunnel, [app, tunnel])).toBe(true);
     expect(isTrustedOrigin("DELETE", tunnel, [app])).toBe(false);
     expect(isTrustedOrigin("POST", "https://other.ngrok-free.app", [app, tunnel])).toBe(false);
+  });
+});
+
+describe("declaredBodyTooLarge", () => {
+  it("refuses only a declared length over the limit", () => {
+    expect(declaredBodyTooLarge(String(MAX_BODY_BYTES))).toBe(false);
+    expect(declaredBodyTooLarge(String(MAX_BODY_BYTES + 1))).toBe(true);
+  });
+  it("leaves a missing or malformed length to the check after reading", () => {
+    expect(declaredBodyTooLarge(null)).toBe(false);
+    expect(declaredBodyTooLarge("abc")).toBe(false);
   });
 });
 

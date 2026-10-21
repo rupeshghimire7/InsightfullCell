@@ -42,6 +42,18 @@ export const FORWARDED_RESPONSE_HEADERS = [
 ] as const;
 
 /**
+ * Largest request body forwarded to the API. Everything the browser sends through this proxy is
+ * small JSON (file bytes go to storage directly), so a bigger body is refused before it is read.
+ */
+export const MAX_BODY_BYTES = 2 * 1024 * 1024;
+
+/** Whether a declared `Content-Length` is over the limit (a missing or bad one is not). */
+export function declaredBodyTooLarge(contentLength: string | null): boolean {
+  const length = Number(contentLength ?? "");
+  return Number.isFinite(length) && length > MAX_BODY_BYTES;
+}
+
+/**
  * Mutations must come from this app's own pages (defence in depth next to SameSite=Lax), at any
  * of the origins it is served at (`appOrigins`).
  */

@@ -43,7 +43,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("DataSidebar", () => {
+// A 100-row table in jsdom (and axe over it) is slow under coverage on a busy machine.
+describe("DataSidebar", { timeout: 60_000 }, () => {
   it("opens beside the report with the rows, personal data hidden, and passes axe", async () => {
     const user = userEvent.setup();
     const { container } = render(<DataSidebar runId="run-1" />);
@@ -64,7 +65,7 @@ describe("DataSidebar", () => {
     expect(within(panel).getAllByText("empty").length).toBeGreaterThan(0);
     expect(document.body.dataset.dataPanel).toBe("open");
     expect(await axe(container)).toHaveNoViolations();
-  }, 20_000);
+  });
 
   it("pages through the rows", async () => {
     const user = userEvent.setup();
