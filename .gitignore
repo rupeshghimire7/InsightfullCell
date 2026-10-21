@@ -1,10 +1,15 @@
-# Design baseline, kept local
-# INITIAL_DOCS/
-
 # Secrets and local configuration (commit the *.example files instead)
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+# Deployment: real values live only on the server (deploy/azure/README.md)
+deploy/**/*.env
+!deploy/**/*.env.example
+deploy/**/backups/
 
 # Scratch space for scripts/e2e.sh
 .e2e/
@@ -13,10 +18,15 @@
 __pycache__/
 *.py[cod]
 .venv/
+*.egg-info/
+build/
+dist/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.import_linter_cache/
 .coverage
+.coverage.*
 coverage.xml
 htmlcov/
 
@@ -29,25 +39,34 @@ playwright-report/
 test-results/
 *.tsbuildinfo
 next-env.d.ts
+.pnpm-store/
+npm-debug.log*
+pnpm-debug.log*
+
+# Tool caches and output
+graphify-out/
+*.log
+*.dump
 
 # Editors and OS
 .idea/
 .vscode/*
 !.vscode/extensions.json
+*.swp
+*~
 .DS_Store
-.import_linter_cache/
+Thumbs.db
 
-
-# extras
+# Kept local by choice (design baseline, notes, reports, ADRs)
+INITIAL_DOCS/
+docs/
+reports/
+.claude/
 CHANGELOG.md
 CLAUDE.md
 SETUP_MANUAL.md
-INITIAL_DOCS/
-docs/
-.claude/
+# progress.md
 review_cr.jsonl
 sample_data/*.py
 sample_data/*.txt
 sample_data/*.md
-sample_data/README.md
-reports/
