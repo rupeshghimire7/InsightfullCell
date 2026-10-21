@@ -50,6 +50,7 @@ TENANT_TABLES = (
     "app.llm_spend",
     "app.llm_spend_holds",
     "app.llm_spend_totals",
+    "app.llm_spend_provider_totals",
     "app.user_activity",
     "app.usage_counters",
     "app.llm_calls",

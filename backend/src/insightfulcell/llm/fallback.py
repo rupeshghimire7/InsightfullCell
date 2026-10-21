@@ -5,9 +5,10 @@ provider that is out of quota or failing is skipped quickly (its breaker or paus
 once) while the backup serves. Both share the ledger and the spend cap.
 
 The backup is not tried when trying it cannot help or must not happen: the privacy check
-blocked the request (that data must not go to a second provider either), the spend cap has no
-room, or the run's or organisation's token budget is spent. When both fail, the caller falls
-back to the rules, as with one model.
+blocked the request (that data must not go to a second provider either), the overall or the
+person's spend cap has no room, or the run's or organisation's token budget is spent. A main
+provider at its own cap (``spend_cap_provider``) is the backup's turn: its cap is separate.
+When both fail, the caller falls back to the rules, as with one model.
 """
 
 from __future__ import annotations

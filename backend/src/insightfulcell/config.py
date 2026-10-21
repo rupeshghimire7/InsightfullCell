@@ -17,6 +17,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 MIB = 1024 * 1024
 MIN_ADMIN_KEY_LENGTH = 32
+#: Values that mean "no limit" for a spend cap (blank too: Compose passes unset values so).
+NO_LIMIT = frozenset({"", "none", "na", "n/a", "unlimited"})
 
 
 class Settings(BaseSettings):
@@ -125,8 +127,15 @@ class Settings(BaseSettings):
     # Spend cap (all users together, for the life of this database): a call is made only if its
     # worst-case cost still fits, so the total can never pass it; past it, runs use the rules.
     # Costs are kept in USD (provider prices) and converted with a fixed rate; set it at or
-    # above the real rate so the cap errs on the safe side. 0 makes no paid calls at all.
-    llm_spend_cap_aud: Decimal = Field(default=Decimal("4.00"), ge=0, le=Decimal(100_000))
+    # above the real rate so the cap errs on the safe side. 0 makes no paid calls at all;
+    # ``none`` (or ``na``) is no overall limit.
+    llm_spend_cap_aud: Decimal | None = Field(default=Decimal("4.00"), ge=0, le=Decimal(100_000))
+    # A cap per provider, on top of the overall one, in AUD (``none``/``na``/blank: no limit).
+    # A provider at its cap is skipped and the backup, a different provider, may still serve.
+    llm_spend_cap_gemini_aud: Decimal | None = Field(default=None, ge=0, le=Decimal(100_000))
+    llm_spend_cap_openai_aud: Decimal | None = Field(default=None, ge=0, le=Decimal(100_000))
+    llm_spend_cap_anthropic_aud: Decimal | None = Field(default=None, ge=0, le=Decimal(100_000))
+    llm_spend_cap_deepseek_aud: Decimal | None = Field(default=None, ge=0, le=Decimal(100_000))
     llm_usd_to_aud: Decimal = Field(default=Decimal("1.60"), gt=0, le=Decimal(10))
     # Optional cap per person (0: off), so one tester cannot use up everyone's budget.
     llm_user_spend_cap_aud: Decimal = Field(default=Decimal(0), ge=0, le=Decimal(100_000))
@@ -154,6 +163,20 @@ class Settings(BaseSettings):
     def _blank_is_unset(cls, value: object) -> object:
         # Compose passes unset optional values as empty strings.
         return None if isinstance(value, str) and not value.strip() else value
+
+    @field_validator(
+        "llm_spend_cap_aud",
+        "llm_spend_cap_gemini_aud",
+        "llm_spend_cap_openai_aud",
+        "llm_spend_cap_anthropic_aud",
+        "llm_spend_cap_deepseek_aud",
+        mode="before",
+    )
+    @classmethod
+    def _no_limit(cls, value: object) -> object:
+        if isinstance(value, str) and value.strip().lower() in NO_LIMIT:
+            return None
+        return value
 
     @field_validator("llm_prices_json")
     @classmethod
@@ -193,8 +216,25 @@ class Settings(BaseSettings):
         }.get(provider)
 
     @property
-    def llm_spend_cap_usd(self) -> Decimal:
-        return (self.llm_spend_cap_aud / self.llm_usd_to_aud).quantize(Decimal("0.000001"))
+    def llm_spend_cap_usd(self) -> Decimal | None:
+        return self._usd(self.llm_spend_cap_aud)
+
+    @property
+    def provider_spend_caps_aud(self) -> dict[str, Decimal | None]:
+        """Each provider's own cap (``None``: no limit of its own)."""
+        return {
+            "gemini": self.llm_spend_cap_gemini_aud,
+            "openai": self.llm_spend_cap_openai_aud,
+            "anthropic": self.llm_spend_cap_anthropic_aud,
+            "deepseek": self.llm_spend_cap_deepseek_aud,
+        }
+
+    @property
+    def provider_spend_caps_usd(self) -> dict[str, Decimal | None]:
+        return {p: self._usd(cap) for p, cap in self.provider_spend_caps_aud.items()}
+
+    def _usd(self, aud: Decimal | None) -> Decimal | None:
+        return None if aud is None else (aud / self.llm_usd_to_aud).quantize(Decimal("0.000001"))
 
     @property
     def llm_user_spend_cap_usd(self) -> Decimal:

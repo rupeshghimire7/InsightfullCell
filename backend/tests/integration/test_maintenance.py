@@ -289,13 +289,15 @@ async def test_maintenance_functions_return_ids_only_and_are_not_public(
         ("ensure_verification_partitions", False, True),
         # Internal: only the delete functions (running as the owner) may call it.
         ("erase_runs", False, False),
+        ("llm_spend_by_provider", False, True),
         ("llm_spend_record", False, True),
         ("llm_spend_reserve", False, True),
         ("purge_idempotency_keys", False, True),
         ("reviews_due", False, True),
         ("runs_without_live_job", False, True),
         ("storage_purges_due", False, True),
-        # Triggers on uploads and runs: nobody calls them directly.
+        # Triggers on uploads, runs and the spend ledger: nobody calls them directly.
+        ("track_provider_spend", False, False),
         ("track_run_started", False, False),
         ("track_upload_completed", False, False),
         ("track_upload_started", False, False),

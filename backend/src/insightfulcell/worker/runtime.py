@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 from types import TracebackType
 
 import procrastinate
@@ -106,6 +107,7 @@ def build_gateway(settings: Settings, db: TenantDatabase) -> FallbackModel:
         label=settings.llm_usage_label,
         hold_seconds=settings.llm_spend_hold_seconds,
         usd_to_aud=settings.llm_usd_to_aud,
+        provider_caps_usd=settings.provider_spend_caps_usd,
     )
     primary = _gateway(settings, db, spend, build_transport(settings), models_for(settings))
     backup_transport = build_fallback_transport(settings)
@@ -123,7 +125,10 @@ def build_gateway(settings: Settings, db: TenantDatabase) -> FallbackModel:
         logger.info(
             "language model spend cap",
             extra={
-                "cap_aud": str(settings.llm_spend_cap_aud),
+                "cap_aud": _cap(settings.llm_spend_cap_aud),
+                "provider_caps_aud": {
+                    p: _cap(cap) for p, cap in settings.provider_spend_caps_aud.items()
+                },
                 "user_cap_aud": str(settings.llm_user_spend_cap_aud),
                 "usd_to_aud": str(settings.llm_usd_to_aud),
                 "label": settings.llm_usage_label,
@@ -131,6 +136,10 @@ def build_gateway(settings: Settings, db: TenantDatabase) -> FallbackModel:
             },
         )
     return model
+
+
+def _cap(aud: Decimal | None) -> str:
+    return "none" if aud is None else str(aud)
 
 
 def _gateway(  # noqa: PLR0913  (one gateway per provider, same settings)

@@ -31,14 +31,21 @@ class FakeSpend:
     refuse: str | None = None
     broken: bool = False
     reserved: list[Decimal] = field(default_factory=list)
+    providers: list[str] = field(default_factory=list)
     settled: list[tuple[CallRecord, Decimal, bool]] = field(default_factory=list)
 
     async def reserve(
-        self, org_id: UUID, run_id: UUID | None, amount_usd: Decimal, input_usd: Decimal
+        self,
+        org_id: UUID,
+        run_id: UUID | None,
+        provider: str,
+        amount_usd: Decimal,
+        input_usd: Decimal,
     ) -> SpendHold:
         if self.broken:
             raise RuntimeError("database down")
         self.reserved.append(amount_usd)
+        self.providers.append(provider)
         if self.refuse:
             return SpendHold(None, amount_usd, input_usd, refused=self.refuse)
         return SpendHold(uuid4(), amount_usd, input_usd)
@@ -203,6 +210,13 @@ class TestFallbackModel:
         assert caught.value.reason == reason
         assert backup_transport.calls == []
 
+    async def test_a_main_provider_at_its_own_cap_hands_over_to_the_backup(self) -> None:
+        main, _, main_spend = capped(FakeTransport([ok()]), FakeSpend(refuse="spend_cap_provider"))
+        backup, _, backup_spend = capped(FakeTransport([ok()], provider="openai"), models=_MINI)
+        assert (await FallbackModel(main, backup).complete(request())).provider == "openai"
+        # Each reservation names its provider, so each counts against that provider's cap.
+        assert (main_spend.providers, backup_spend.providers) == (["gemini"], ["openai"])
+
     async def test_never_with_data_the_privacy_check_blocked(self) -> None:
         main, _, _ = capped(FakeTransport([ok()]))
         backup_transport = FakeTransport([ok()], provider="openai")
@@ -295,6 +309,22 @@ class TestSettings:
         chosen = settings(llm_spend_cap_aud=Decimal("4.00"), llm_usd_to_aud=Decimal("1.60"))
         assert chosen.llm_spend_cap_usd == Decimal("2.500000")
         assert chosen.llm_user_spend_cap_usd == 0
+        # A cap per provider, and "none" (any spelling of no limit) for no limit at all.
+        mixed = settings(
+            llm_spend_cap_aud="NA",
+            llm_spend_cap_gemini_aud="none",
+            llm_spend_cap_openai_aud="4.50",
+            llm_usd_to_aud=Decimal("1.50"),
+        )
+        assert mixed.llm_spend_cap_usd is None
+        assert mixed.provider_spend_caps_usd == {
+            "gemini": None,
+            "openai": Decimal("3.000000"),
+            "anthropic": None,
+            "deepseek": None,
+        }
+        with pytest.raises(ValidationError):
+            settings(llm_spend_cap_openai_aud="-1")
         with pytest.raises(ValidationError):
             settings(llm_spend_cap_aud=Decimal(-1))
         with pytest.raises(ValidationError):

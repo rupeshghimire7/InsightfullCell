@@ -98,8 +98,9 @@ class CallRecord:
 
 @dataclass(frozen=True, slots=True)
 class SpendHold:
-    """A reservation against the spend cap for one attempt. ``refused`` (``spend_cap`` or
-    ``spend_cap_user``) when the cap has no room for it; then nothing is reserved."""
+    """A reservation against the spend caps for one attempt. ``refused`` (``spend_cap``,
+    ``spend_cap_provider`` or ``spend_cap_user``) when a cap has no room for it; then nothing
+    is reserved."""
 
     id: UUID | None
     amount_usd: Decimal  # worst case: estimated input and the full output limit
@@ -109,7 +110,12 @@ class SpendHold:
 
 class SpendGuard(Protocol):
     async def reserve(
-        self, org_id: UUID, run_id: UUID | None, amount_usd: Decimal, input_usd: Decimal
+        self,
+        org_id: UUID,
+        run_id: UUID | None,
+        provider: str,
+        amount_usd: Decimal,
+        input_usd: Decimal,
     ) -> SpendHold: ...
 
     async def settle(
@@ -364,7 +370,9 @@ class LLMGateway:
         input_usd = _usd(per_input * input_tokens)
         amount = _usd(per_input * input_tokens + per_output * self._config.max_output_tokens)
         try:
-            hold = await self._spend.reserve(request.org_id, request.run_id, amount, input_usd)
+            hold = await self._spend.reserve(
+                request.org_id, request.run_id, provider, amount, input_usd
+            )
         except Exception as exc:
             logger.exception("could not check the model spend cap: not calling the model")
             raise ModelUnavailable(

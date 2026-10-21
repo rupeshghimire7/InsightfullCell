@@ -66,8 +66,8 @@ class ModelReply:
 class ModelUnavailable(Exception):
     """No usable model answer: the caller falls back to its deterministic path. ``reason`` is
     a stable code (disabled, budget_run, budget_org, breaker_open, payload_blocked, timeout,
-    provider_error, invalid_output, refused, spend_cap, spend_cap_user, spend_unavailable,
-    price_unknown) and safe to show."""
+    provider_error, invalid_output, refused, spend_cap, spend_cap_provider, spend_cap_user,
+    spend_unavailable, price_unknown) and safe to show."""
 
     def __init__(self, reason: str, detail: str = "") -> None:
         super().__init__(f"{reason}: {detail}" if detail else reason)
