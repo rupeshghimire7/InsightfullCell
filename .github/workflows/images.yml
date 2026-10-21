@@ -1,0 +1,65 @@
+# Build the production images and push them to GitHub's container registry, so a small server
+# (deploy/aws, a 1 GB t3.micro) only pulls them: it has too little memory to run `next build`.
+#   ghcr.io/<owner>/insightfullcell-api        API and worker
+#   ghcr.io/<owner>/insightfullcell-web        web app
+#   ghcr.io/<owner>/insightfullcell-web-tools  web build stage, for the sign-in table migration
+# Each is tagged `latest` and with the commit SHA (deploy one exactly with IC_IMAGE_TAG=<sha>).
+name: Images
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", "frontend/**", ".github/workflows/images.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  # x86 for t3 instances. For Graviton (t4g) use linux/arm64, or both: "linux/amd64,linux/arm64"
+  # (arm64 is built under emulation here, so it is much slower).
+  PLATFORMS: linux/amd64
+
+jobs:
+  image:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: api, context: backend, target: "" }
+          - { name: web, context: frontend, target: "" }
+          - { name: web-tools, context: frontend, target: build }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+        if: contains(env.PLATFORMS, 'arm64')
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image name
+        id: meta
+        # Registry names must be lower case; the owner may not be.
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/insightfullcell-${{ matrix.name }}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          target: ${{ matrix.target }}
+          platforms: ${{ env.PLATFORMS }}
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:latest
+            ${{ steps.meta.outputs.image }}:${{ github.sha }}
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

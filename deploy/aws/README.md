@@ -1,6 +1,7 @@
 # Deploying InsightfulCell on AWS
 
-One EC2 instance runs everything with Docker Compose. A shared Caddy proxy serves HTTPS for
+One free-tier EC2 instance (t3.micro) runs everything with Docker Compose. GitHub Actions builds
+the images, because a 1 GB server cannot build the web app, and the server only pulls them. A shared Caddy proxy serves HTTPS for
 `app.ic.rgproject.me` and `api.ic.rgproject.me`, and can serve other projects under
 `*.project2.rgproject.me` later. Uploads go to S3, and nightly database backups go to a second
 bucket.
@@ -16,14 +17,25 @@ browser ──https──▶ Caddy (proxy, :443) ──edge network──▶ ic-
 | File | What it is |
 |---|---|
 | `compose.yml` | postgres, api, worker and web, plus the one-off `migrate` and `auth-migrate` steps |
-| `deploy.sh` | Builds, creates the database roles, migrates and starts everything. Run it on every update |
+| `deploy.sh` | Pulls the images, creates the database roles, migrates and starts everything. Run it on every update |
+| `../../.github/workflows/images.yml` | Builds the three images on every push to `main` and pushes them to `ghcr.io` |
 | `init-env.sh` | First-time copy of the `*.example` files, with fresh random secrets |
 | `backup.sh` | `pg_dump` to S3, run from cron |
 | `proxy/` | The shared Caddy proxy for every project on the host. Copy it to `~/proxy` |
 | `iam-policy.json`, `s3-cors.json` | The instance role's permissions and the upload bucket's CORS rule |
 
-**Cost:** about 30–40 USD a month, or less with a savings plan. That covers a `t4g.medium`
-(~25 USD), 30 GB of gp3 (~3 USD), a public IPv4 address (~3.6 USD) and S3 (cents).
+**Cost:** a t3.micro and up to 30 GB of gp3 are covered by the free tier, but check
+**Billing → Free tier** for what your account gets: accounts opened since July 2025 get credits
+instead of 12 free months. Outside the free tier, expect about 3.6 USD a month for the public IPv4
+address, plus cents for S3. Building images on GitHub Actions and storing them in `ghcr.io` is
+free for a public repository.
+
+**What 1 GB of memory means:** PostgreSQL, the API, the worker and the web app fit, with the 4 GB
+swap from step 6 absorbing spikes. The worker runs one analysis at a time
+(`WORKER_CONCURRENCY=1`), and large files are slow. When that starts to hurt, resize the instance
+to a `t3.small` (2 GB) or `t3.medium` (4 GB): stop it, change its type, and start it again. The
+images are x86, so a Graviton `t4g` instance needs arm64 images first (`PLATFORMS` in
+`images.yml`).
 
 **Why PostgreSQL runs in a container, not RDS:** the first migration creates a `BYPASSRLS`
 role (`ic_maintenance`), and that needs a real superuser. RDS's master user is not one, so
@@ -72,8 +84,8 @@ Replace these placeholders throughout:
 | Setting | Value |
 |---|---|
 | Name | `rgproject-1` |
-| AMI | **Ubuntu Server 24.04 LTS**, architecture **64-bit (Arm)** |
-| Type | **t4g.medium** (2 vCPU, 4 GB). Analyses use memory, so don't go smaller |
+| AMI | **Ubuntu Server 24.04 LTS**, architecture **64-bit (x86)** |
+| Type | **t3.micro** (free tier: 2 vCPU, 1 GB) |
 | Key pair | Create one (`rgproject.pem`) and keep it safe |
 | Network | Default VPC, public subnet, auto-assign public IP |
 | Security group | New, `rgproject-web`: **SSH 22 from My IP**, **HTTP 80** and **HTTPS 443** from anywhere (add **Custom UDP 443** from anywhere for HTTP/3) |
@@ -116,7 +128,7 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
 sudo apt-get update && sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 sudo usermod -aG docker ubuntu
 
-# 4 GB swap: building the images can briefly use more memory than the instance has
+# 4 GB swap: on 1 GB of memory the four containers need it, and an analysis spikes past it
 sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
 echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
@@ -165,17 +177,35 @@ nano web.env                  # S3_PUBLIC_ORIGIN (same bucket and region)
 Save the admin dashboard key that `init-env.sh` printed. The secrets exist only in these three
 files on the server (`chmod 600`, ignored by git).
 
-## Step 10: Deploy
+## Step 10: Publish the images (once)
+
+The `Images` workflow runs on every push to `main` that touches `backend/` or `frontend/`. To
+run it now: **GitHub → repo → Actions → Images → Run workflow**. It takes about 10 minutes and
+publishes three packages:
+
+```
+ghcr.io/rupeshghimire7/insightfullcell-api
+ghcr.io/rupeshghimire7/insightfullcell-web
+ghcr.io/rupeshghimire7/insightfullcell-web-tools
+```
+New packages are **private**, even in a public repository. Make each one public, so the server
+can pull without a token: **github.com/rupeshghimire7 → Packages → *package* → Package settings
+→ Change visibility → Public**. Only the repository owner can do this. The images contain no
+secrets; all configuration is read at start-up.
+
+If the images live under another account (a fork, say), add
+`IC_IMAGE_PREFIX=ghcr.io/<owner>/insightfullcell` to `.env`.
+
+## Step 11: Deploy
 
 ```bash
 ./deploy.sh
 ```
-The first run builds both images, which takes about 10 minutes on a `t4g.medium`. Then it
-creates the database roles, runs the API migrations and the sign-in table migration, and
+The first run pulls the images, which takes a couple of minutes. Then it creates the database roles, runs the API migrations and the sign-in table migration, and
 starts `api`, `worker` and `web`. It ends with `docker compose ps`, which shows all three as
 running, with api and web `healthy`.
 
-## Step 11: Check it works
+## Step 12: Check it works
 
 1. Open **https://app.ic.rgproject.me**. You should see the padlock and the sign-in page.
 2. Register, then upload a file from `sample_data/`. Open the browser dev tools. The **Network**
@@ -187,7 +217,7 @@ running, with api and web `healthy`.
    docker compose -f ~/proxy/compose.yml logs -f caddy
    ```
 
-## Step 12: Optional extras
+## Step 13: Optional extras
 
 - **Email sign-in links:** add the domain `ic.rgproject.me` at resend.com and copy the DNS
   records it shows into Namecheap (Advanced DNS; hosts there are relative, so `send.ic`, not
@@ -197,7 +227,7 @@ running, with api and web `healthy`.
   `https://app.ic.rgproject.me/api/auth/callback/google`, set both values in `web.env`, and run
   `docker compose up -d web`.
 
-## Step 13: Nightly backups
+## Step 14: Nightly backups
 
 ```bash
 ./backup.sh                   # try it once, then check that the file is in the backups bucket
@@ -215,7 +245,9 @@ included.
 
 | Task | Command (in `~/InsightfullCell/deploy/aws`) |
 |---|---|
-| Deploy an update | `git pull && ./deploy.sh` |
+| Deploy an update | Push to `main`, wait for the **Images** workflow to go green, then `git pull && ./deploy.sh` |
+| Deploy one exact build | `IC_IMAGE_TAG=<commit sha> ./deploy.sh` |
+| Roll back | `IC_IMAGE_TAG=<previous good sha> ./deploy.sh` (fine while no migration changed the schema since) |
 | Change a setting | edit `backend.env` / `web.env`, then `docker compose up -d` |
 | Restart one part | `docker compose restart worker` |
 | Status / logs | `docker compose ps`, `docker compose logs -f --tail 100 api` |
@@ -266,4 +298,7 @@ same passwords, with your backups.
 | Worker log: `NoCredentialsError` / storage unavailable | Instance role not attached, or metadata hop limit still 1 (EC2 → Actions → Instance settings → Modify instance metadata options) |
 | Analyses stay "queued" | The worker isn't running: `docker compose ps worker`, `docker compose logs worker` |
 | Sign-in: "403 Invalid origin" | The site was opened at an address other than `BETTER_AUTH_URL` |
-| Build killed / exit 137 | Out of memory. Check that swap is on (`swapon --show`) |
+| `JavaScript heap out of memory` / exit 137 while building | Something built on the server. On a t3.micro, always pull: don't set `IC_BUILD=1`, and run `./deploy.sh`, not `docker compose build` |
+| `pull access denied` / `denied` from ghcr.io | The package is still private (step 10), or the Images workflow hasn't run yet |
+| `no matching manifest for linux/amd64` | Images were built for another architecture. Set `PLATFORMS` in `images.yml` to match the instance |
+| A container restarts with exit 137 | Out of memory at runtime. Check that swap is on (`swapon --show`), keep `WORKER_CONCURRENCY=1`, or resize the instance |

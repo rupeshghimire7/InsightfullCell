@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Build, migrate and (re)start InsightfulCell on this host. Safe to run again on every update:
+# Pull, migrate and (re)start InsightfulCell on this host. Safe to run again on every update:
 #   git pull && deploy/aws/deploy.sh
-# Steps: build images -> database roles -> API migrations -> app login -> sign-in tables -> start.
+# Steps: pull images -> database roles -> API migrations -> app login -> sign-in tables -> start.
+# Images come from GitHub Actions (.github/workflows/images.yml). IC_IMAGE_TAG=<commit sha> deploys
+# that exact build (default: latest); IC_BUILD=1 builds here instead (needs about 4 GB of memory).
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
@@ -19,8 +21,13 @@ psql_owner() {  # psql_owner <sql on stdin>: run as the table owner, passwords a
     -v auth_pw="$IC_AUTH_DB_PASSWORD" -v app_pw="$IC_APP_DB_PASSWORD"
 }
 
-echo "==> Building images"
-docker compose --profile tools build
+if [[ ${IC_BUILD:-0} == 1 ]]; then
+  echo "==> Building images (one at a time, so the Next.js build has the memory to itself)"
+  COMPOSE_PARALLEL_LIMIT=1 docker compose --profile tools build
+else
+  echo "==> Pulling images (tag ${IC_IMAGE_TAG:-latest})"
+  docker compose --profile tools pull
+fi
 
 echo "==> Starting PostgreSQL"
 docker compose up -d --wait postgres
@@ -51,7 +58,7 @@ echo "==> Sign-in tables"
 docker compose run --rm auth-migrate
 
 echo "==> Starting API, worker and web app"
-docker compose up -d --wait --wait-timeout 180 api worker web
+docker compose up -d --no-build --wait --wait-timeout 300 api worker web
 
 docker image prune -f >/dev/null
 docker compose ps

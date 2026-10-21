@@ -1,8 +1,10 @@
 # InsightfulCell on one EC2 host (deploy/aws/README.md). Run from this folder; ./deploy.sh
-# builds, migrates and starts everything.
+# pulls the images, migrates and starts everything.
 # Public traffic arrives through the shared proxy (deploy/aws/proxy) on the `edge` network.
 # PostgreSQL and the worker sit on this project's private network only, with no published ports.
 # Passwords come from ./.env, settings from backend.env and web.env (copy the *.example files).
+# Images are built by GitHub Actions (.github/workflows/images.yml) and pulled; `IC_BUILD=1
+# ./deploy.sh` builds them here instead, which needs about 4 GB of memory.
 name: ic
 
 services:
@@ -24,7 +26,7 @@ services:
     restart: unless-stopped
 
   api:
-    image: ic-api:latest
+    image: ${IC_IMAGE_PREFIX:-ghcr.io/rupeshghimire7/insightfullcell}-api:${IC_IMAGE_TAG:-latest}
     build: ../../backend
     container_name: ic-api
     env_file: backend.env
@@ -38,7 +40,7 @@ services:
     restart: unless-stopped
 
   worker:
-    image: ic-api:latest
+    image: ${IC_IMAGE_PREFIX:-ghcr.io/rupeshghimire7/insightfullcell}-api:${IC_IMAGE_TAG:-latest}
     command: ["python", "-m", "insightfulcell.worker"]
     env_file: backend.env
     environment:
@@ -52,7 +54,7 @@ services:
     restart: unless-stopped
 
   web:
-    image: ic-web:latest
+    image: ${IC_IMAGE_PREFIX:-ghcr.io/rupeshghimire7/insightfullcell}-web:${IC_IMAGE_TAG:-latest}
     build: ../../frontend
     container_name: ic-web
     env_file: web.env
@@ -66,7 +68,7 @@ services:
   # --- one-off deploy steps (profile "tools"; deploy.sh runs them)
 
   migrate:
-    image: ic-api:latest
+    image: ${IC_IMAGE_PREFIX:-ghcr.io/rupeshghimire7/insightfullcell}-api:${IC_IMAGE_TAG:-latest}
     profiles: [tools]
     command: ["alembic", "upgrade", "head"]
     environment:
@@ -78,7 +80,7 @@ services:
 
   auth-migrate:
     # The web image is the standalone server only; the build stage still has the scripts.
-    image: ic-web-tools:latest
+    image: ${IC_IMAGE_PREFIX:-ghcr.io/rupeshghimire7/insightfullcell}-web-tools:${IC_IMAGE_TAG:-latest}
     build:
       context: ../../frontend
       target: build
