@@ -3,12 +3,12 @@ import type { ReactNode } from "react";
 import { LockButton } from "@/components/admin/admin-gate";
 import { LocalTime } from "@/components/ui/local-time";
 import { PageHeader } from "@/components/ui/page-header";
-import type { Account, Overview, UsageUser } from "@/lib/admin-data";
+import type { Account, Overview, ProviderSpend, UsageUser } from "@/lib/admin-data";
 import { PERIODS } from "@/lib/admin-data";
 import { formatBytes, formatCount } from "@/lib/format";
 import { providerLabel } from "@/lib/plans/labels";
 
-/** Everyone's usage, model spend against the cap, and how the stack is configured. */
+/** Everyone's usage, model spend against the caps, and how the stack is configured. */
 export function AdminDashboard({
   overview,
   accounts,
@@ -19,7 +19,7 @@ export function AdminDashboard({
   const rate = Number(overview.config.usd_to_aud);
   const aud = (usd: number) => usd * rate;
   const spend = overview.spend;
-  const capAud = Number(overview.config.spend_cap_aud);
+  const capAud = cap(overview.config.spend_cap_aud);
   const spentAud = aud(Number(spend.total_usd));
   const heldAud = aud(Number(spend.held_usd));
   const people = mergePeople(accounts, overview.users);
@@ -84,6 +84,20 @@ export function AdminDashboard({
           {formatCount(spend.calls)} model calls · {formatCount(spend.backup_calls)} by the backup
         </SpendTile>
       </section>
+
+      <Section
+        title="Spend by provider"
+        note="Since the start, each against its own cap. A provider at its cap is skipped; the backup, if it has room, answers instead."
+      >
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {spend.by_provider.map((p) => (
+            <ProviderTile key={p.provider} row={p} aud={aud} />
+          ))}
+        </div>
+        {spend.by_provider.length === 0 ? (
+          <p className="text-sm text-muted">No model calls yet.</p>
+        ) : null}
+      </Section>
 
       <Section title="Model spend per day" note={`Last ${overview.days} days, in AUD.`}>
         <BarList
@@ -290,10 +304,18 @@ export function AdminDashboard({
                 ? "None"
                 : `${providerLabel(overview.config.fallback_provider) ?? overview.config.fallback_provider}: ${overview.config.fallback_model}`}
             </Pair>
-            <Pair term="Spend cap">
-              {money(capAud)} (US${overview.config.spend_cap_usd} at {overview.config.usd_to_aud}{" "}
-              AUD per USD)
+            <Pair term="Spend cap, all providers">
+              {capAud === null
+                ? "No limit"
+                : `${money(capAud)} (US$${overview.config.spend_cap_usd} at ${overview.config.usd_to_aud} AUD per USD)`}
             </Pair>
+            {Object.entries(overview.config.provider_spend_caps_aud)
+              .filter(([p, c]) => c !== null || spend.by_provider.some((r) => r.provider === p))
+              .map(([p, c]) => (
+                <Pair key={p} term={`${providerLabel(p) ?? p} cap`}>
+                  {c === null ? "No limit" : money(Number(c))}
+                </Pair>
+              ))}
             <Pair term="Cap per person">
               {Number(overview.config.user_spend_cap_aud) > 0
                 ? money(Number(overview.config.user_spend_cap_aud))
@@ -410,7 +432,12 @@ function Tile({ label, value, children }: { label: string; value: string; childr
   );
 }
 
-/** Spend against the cap: the share used, as a meter with its numbers beside it. */
+/** A cap from the API: its amount, or null for no limit. */
+function cap(value: string | null): number | null {
+  return value === null ? null : Number(value);
+}
+
+/** Spend against the overall cap: the share used, as a meter with its numbers beside it. */
 function SpendTile({
   spentAud,
   heldAud,
@@ -419,37 +446,102 @@ function SpendTile({
 }: {
   spentAud: number;
   heldAud: number;
-  capAud: number;
+  capAud: number | null;
   children: ReactNode;
 }) {
-  const share = capAud > 0 ? Math.min(1, spentAud / capAud) : 1;
-  const tone = share >= 0.95 ? "bg-danger" : share >= 0.8 ? "bg-warning" : "bg-chart";
+  return (
+    <CapMeter
+      label="Model spend"
+      meterLabel="Model spend against the cap"
+      spentAud={spentAud}
+      heldAud={heldAud}
+      capAud={capAud}
+      noLimit="No overall limit"
+      reached="Cap reached: runs use the rules"
+    >
+      {children}
+    </CapMeter>
+  );
+}
+
+/** One provider's spend against its own cap. */
+function ProviderTile({ row, aud }: { row: ProviderSpend; aud: (usd: number) => number }) {
+  const name = providerLabel(row.provider) ?? row.provider;
+  return (
+    <CapMeter
+      label={name}
+      meterLabel={`${name} spend against its cap`}
+      spentAud={aud(Number(row.cost_usd))}
+      heldAud={aud(Number(row.held_usd))}
+      capAud={cap(row.cap_aud)}
+      noLimit="No limit of its own"
+      reached="Cap reached: skipped for the backup"
+    >
+      {formatCount(row.calls)} calls
+    </CapMeter>
+  );
+}
+
+function CapMeter({
+  label,
+  meterLabel,
+  spentAud,
+  heldAud,
+  capAud,
+  noLimit,
+  reached,
+  children,
+}: {
+  label: string;
+  meterLabel: string;
+  spentAud: number;
+  heldAud: number;
+  capAud: number | null;
+  noLimit: string;
+  reached: string;
+  children: ReactNode;
+}) {
+  const share = capAud === null ? null : capAud > 0 ? Math.min(1, spentAud / capAud) : 1;
+  const tone =
+    share === null ? "" : share >= 0.95 ? "bg-danger" : share >= 0.8 ? "bg-warning" : "bg-chart";
   const state =
-    share >= 1
-      ? "Cap reached: runs use the rules"
-      : share >= 0.8
-        ? "Nearly at the cap"
-        : "Within the cap";
+    share === null
+      ? noLimit
+      : share >= 1
+        ? reached
+        : share >= 0.8
+          ? "Nearly at the cap"
+          : "Within the cap";
   return (
     <div className="rounded-panel border border-border bg-surface p-4">
-      <p className="text-sm text-muted">Model spend</p>
+      <p className="text-sm text-muted">{label}</p>
       <p className="tabular mt-1 font-mono text-2xl font-semibold">
-        {money(spentAud)} <span className="text-sm font-normal text-muted">of {money(capAud)}</span>
+        {money(spentAud)}{" "}
+        <span className="text-sm font-normal text-muted">
+          {capAud === null ? "no limit" : `of ${money(capAud)}`}
+        </span>
       </p>
-      <div
-        role="meter"
-        aria-label="Model spend against the cap"
-        aria-valuemin={0}
-        aria-valuemax={capAud}
-        aria-valuenow={Number(spentAud.toFixed(4))}
-        aria-valuetext={`${money(spentAud)} of ${money(capAud)}: ${state}`}
-        className="mt-2 h-2 overflow-hidden rounded-full bg-bg"
-      >
+      {share !== null && capAud !== null ? (
         <div
-          className={`h-full rounded-full ${tone}`}
-          style={{ width: `${(share * 100).toFixed(1)}%` }}
+          role="meter"
+          aria-label={meterLabel}
+          aria-valuemin={0}
+          aria-valuemax={capAud}
+          aria-valuenow={Number(spentAud.toFixed(4))}
+          aria-valuetext={`${money(spentAud)} of ${money(capAud)}: ${state}`}
+          className="mt-2 h-2 overflow-hidden rounded-full bg-bg"
+        >
+          <div
+            className={`h-full rounded-full ${tone}`}
+            style={{ width: `${(share * 100).toFixed(1)}%` }}
+          />
+        </div>
+      ) : (
+        <div
+          aria-hidden="true"
+          className="mt-2 h-2 rounded-full border border-dashed border-border"
         />
-      </div>
+      )}
       <p className="mt-1 text-xs text-muted">
         {state}
         {heldAud > 0 ? ` · ${money(heldAud)} reserved by calls in progress` : ""} · {children}

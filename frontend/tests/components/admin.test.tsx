@@ -101,10 +101,30 @@ describe("AdminDashboard", { timeout: 30_000 }, () => {
     const near = overview();
     near.spend.total_usd = 2.4; // A$3.84 of A$4.00
     render(<AdminDashboard overview={near} accounts={accounts} />);
-    expect(screen.getByRole("meter")).toHaveAttribute(
+    expect(screen.getByRole("meter", { name: "Model spend against the cap" })).toHaveAttribute(
       "aria-valuetext",
       expect.stringMatching(/Nearly at the cap/),
     );
+  });
+
+  it("tracks each provider against its own cap, or none", () => {
+    const noOverall = overview();
+    noOverall.config.spend_cap_aud = null;
+    noOverall.config.spend_cap_usd = null;
+    render(<AdminDashboard overview={noOverall} accounts={accounts} />);
+    // US$2.50 x 1.60 = A$4.00 of OpenAI's A$4.50; Gemini has no cap, so no meter.
+    expect(screen.getByRole("meter", { name: "OpenAI spend against its cap" })).toHaveAttribute(
+      "aria-valuetext",
+      expect.stringMatching(/4\.00 of .*4\.50: Nearly at the cap/),
+    );
+    expect(screen.queryByRole("meter", { name: /Gemini/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("meter", { name: "Model spend against the cap" })).toBeNull();
+    expect(screen.getByText("No limit of its own", { exact: false })).toBeInTheDocument();
+    expect(screen.getByText("No overall limit", { exact: false })).toBeInTheDocument();
+    const config = screen.getByText("Spend cap, all providers").nextSibling;
+    expect(config).toHaveTextContent("No limit");
+    expect(screen.getByText("OpenAI cap").nextSibling).toHaveTextContent("4.50");
+    expect(screen.getByText("Gemini cap").nextSibling).toHaveTextContent("No limit");
   });
 
   it("lists people with their sign-in details and usage, deleted accounts too", () => {

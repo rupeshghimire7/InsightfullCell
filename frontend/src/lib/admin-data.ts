@@ -22,6 +22,15 @@ export interface SpendRow {
   latency_p95_ms: number | null;
 }
 
+/** One provider's lifetime spend beside its own cap (`cap_aud` null: no limit). */
+export interface ProviderSpend {
+  provider: string;
+  cost_usd: number;
+  calls: number;
+  held_usd: number;
+  cap_aud: string | null;
+}
+
 export interface UsageUser {
   user_id: string;
   first_seen: string;
@@ -72,6 +81,7 @@ export interface Overview {
     by_model: SpendRow[];
     by_outcome: { provider: string; outcome: string; calls: number }[];
     period_by_provider: Record<string, number>;
+    by_provider: ProviderSpend[];
     by_purpose: { purpose: string; calls: number; cost_usd: number }[];
     by_label: {
       label: string;
@@ -104,8 +114,10 @@ export interface Overview {
     models: Record<string, string>;
     fallback_provider: string;
     fallback_model: string | null;
-    spend_cap_aud: string;
-    spend_cap_usd: string;
+    /** null: no overall limit (only the providers' own caps apply). */
+    spend_cap_aud: string | null;
+    spend_cap_usd: string | null;
+    provider_spend_caps_aud: Record<string, string | null>;
     user_spend_cap_aud: string;
     usd_to_aud: string;
     requests_per_minute: number;

@@ -47,6 +47,10 @@ export function overview(overrides: Partial<Overview> = {}): Overview {
       ],
       by_outcome: [{ provider: "gemini", outcome: "ok", calls: 35 }],
       period_by_provider: { gemini: 1.2, openai: 0.05 },
+      by_provider: [
+        { provider: "gemini", cost_usd: 1.2, calls: 37, held_usd: 0, cap_aud: null },
+        { provider: "openai", cost_usd: 2.5, calls: 3, held_usd: 0, cap_aud: "4.50" },
+      ],
       by_purpose: [{ purpose: "plan", calls: 20, cost_usd: 0.8 }],
       by_label: [
         {
@@ -122,6 +126,7 @@ export function overview(overrides: Partial<Overview> = {}): Overview {
       fallback_model: "gpt-4o-mini",
       spend_cap_aud: "4.00",
       spend_cap_usd: "2.500000",
+      provider_spend_caps_aud: { gemini: null, openai: "4.50", anthropic: null, deepseek: null },
       user_spend_cap_aud: "0",
       usd_to_aud: "1.60",
       requests_per_minute: 10,
