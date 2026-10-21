@@ -13,7 +13,12 @@ export function proxy(request: NextRequest) {
   const env = getEnv();
   const { pathname } = request.nextUrl;
 
-  const isPublic = pathname === "/sign-in" || pathname.startsWith("/api/");
+  // The admin dashboard has its own lock (the admin key), not a person's session.
+  const isPublic =
+    pathname === "/sign-in" ||
+    pathname.startsWith("/sign-in/") ||
+    pathname === "/dashboard" ||
+    pathname.startsWith("/api/");
   if (!isPublic && !getSessionCookie(request)) {
     return NextResponse.redirect(new URL("/sign-in", request.url));
   }

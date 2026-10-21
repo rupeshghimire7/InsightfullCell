@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { apiPublicUrl, appOrigins, parseEnv } from "@/lib/env";
+import {
+  apiPublicUrl,
+  appOrigins,
+  emailLinkAllowed,
+  emailLinkAllowList,
+  parseEnv,
+} from "@/lib/env";
 
 const valid = {
   NODE_ENV: "development",
@@ -32,6 +38,28 @@ describe("parseEnv", () => {
     expect(() => parseEnv({ ...valid, EMAIL_TRANSPORT: "resend" })).toThrow(/RESEND_API_KEY/);
   });
 
+  it("reads the sign-in link allow-list, and refuses anything that is not an address", () => {
+    const env = parseEnv({ ...valid, EMAIL_LINK_ALLOWED_EMAILS: " Owner@Example.com , b@c.io " });
+    expect(emailLinkAllowList(env)).toEqual(["owner@example.com", "b@c.io"]);
+    expect(emailLinkAllowed("OWNER@example.com ", env)).toBe(true);
+    expect(emailLinkAllowed("someone@example.com", env)).toBe(false);
+    expect(emailLinkAllowed("anyone@example.com", parseEnv(valid))).toBe(true);
+    expect(() => parseEnv({ ...valid, EMAIL_LINK_ALLOWED_EMAILS: "not-an-email" })).toThrow(
+      /EMAIL_LINK_ALLOWED_EMAILS/,
+    );
+  });
+
+  it("takes an admin key of 32 characters or more, and treats blank as off", () => {
+    expect(parseEnv({ ...valid, ADMIN_DASHBOARD_KEY: "  " }).ADMIN_DASHBOARD_KEY).toBeUndefined();
+    expect(parseEnv({ ...valid, ADMIN_DASHBOARD_KEY: "k".repeat(32) }).ADMIN_DASHBOARD_KEY).toBe(
+      "k".repeat(32),
+    );
+    expect(() => parseEnv({ ...valid, ADMIN_DASHBOARD_KEY: "short" })).toThrow(
+      /ADMIN_DASHBOARD_KEY/,
+    );
+    expect(parseEnv(valid).ADMIN_SESSION_MINUTES).toBe(30);
+  });
+
   describe("production guards", () => {
     const production = {
       ...valid,
@@ -45,6 +73,16 @@ describe("parseEnv", () => {
       expect(() => parseEnv({ ...production, EMAIL_LINK_SIGN_IN: "on" })).toThrow(
         /console transport/,
       );
+    });
+    it("needs the allow-list while links go out from Resend's test sender", () => {
+      const resend = {
+        ...production,
+        EMAIL_LINK_SIGN_IN: "on",
+        EMAIL_TRANSPORT: "resend",
+        RESEND_API_KEY: "k",
+      };
+      expect(() => parseEnv(resend)).toThrow(/EMAIL_LINK_ALLOWED_EMAILS/);
+      expect(parseEnv({ ...resend, EMAIL_LINK_ALLOWED_EMAILS: "owner@example.com" })).toBeTruthy();
     });
     it("allows it while sign-in links are off (the default): nothing is sent", () => {
       expect(parseEnv(production).EMAIL_LINK_SIGN_IN).toBe("off");

@@ -6,6 +6,15 @@ import { isLoopbackHost } from "@/lib/relay";
  * Server configuration, validated once at first use (not at import time, so `next build` works
  * without secrets). Missing or malformed values fail fast with a message naming the variable.
  */
+/** An optional value that compose may pass as an empty string: blank means unset. */
+const optional = (inner: z.ZodString) =>
+  z.preprocess(
+    (value) => (typeof value === "string" && !value.trim() ? undefined : value),
+    inner.optional(),
+  );
+
+const EMAIL_PATTERN = /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/;
+
 const schema = z
   .object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -40,8 +49,8 @@ const schema = z
     /** Browser-facing origin of object storage; allowed by the CSP `connect-src`. */
     S3_PUBLIC_ORIGIN: z.url(),
 
-    GOOGLE_CLIENT_ID: z.string().min(1).optional(),
-    GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+    GOOGLE_CLIENT_ID: optional(z.string().min(1)),
+    GOOGLE_CLIENT_SECRET: optional(z.string().min(1)),
 
     /**
      * "Email me a sign-in link". Off until a verified mail domain is set up: the button is shown
@@ -50,7 +59,21 @@ const schema = z
     EMAIL_LINK_SIGN_IN: z.enum(["on", "off"]).default("off"),
     EMAIL_TRANSPORT: z.enum(["console", "resend"]).default("console"),
     EMAIL_FROM: z.string().min(3).default("InsightfulCell <onboarding@resend.dev>"),
-    RESEND_API_KEY: z.string().min(1).optional(),
+    RESEND_API_KEY: optional(z.string().min(1)),
+    /**
+     * Who may get a sign-in link, comma separated (blank: anyone). While email goes out from
+     * Resend's test sender, only the Resend account owner can receive it, so list that address.
+     */
+    EMAIL_LINK_ALLOWED_EMAILS: z.string().default(""),
+
+    /**
+     * Unlocks /dashboard (people, usage, model spend). At least 32 random characters; blank
+     * switches the dashboard off (it is then a 404). Read on the server only, never sent to a
+     * browser: the browser gets a short-lived signed cookie instead.
+     */
+    ADMIN_DASHBOARD_KEY: optional(z.string().min(32, "Use at least 32 random characters")),
+    /** How long an unlocked dashboard stays unlocked. */
+    ADMIN_SESSION_MINUTES: z.coerce.number().int().min(5).max(720).default(30),
   })
   .superRefine((env, ctx) => {
     if (Boolean(env.GOOGLE_CLIENT_ID) !== Boolean(env.GOOGLE_CLIENT_SECRET)) {
@@ -73,6 +96,15 @@ const schema = z
         path: ["AUTH_EVENTS_AUDIENCE"],
         message: "Must differ from AUTH_JWT_AUDIENCE, so a ticket can never act as an API token",
       });
+    }
+    for (const entry of listOrigins(env.EMAIL_LINK_ALLOWED_EMAILS)) {
+      if (!EMAIL_PATTERN.test(entry)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["EMAIL_LINK_ALLOWED_EMAILS"],
+          message: `"${entry}" is not an email address`,
+        });
+      }
     }
     for (const entry of listOrigins(env.AUTH_TRUSTED_ORIGINS)) {
       const origin = originOf(entry);
@@ -124,6 +156,18 @@ const schema = z
           code: "custom",
           path: ["BETTER_AUTH_URL"],
           message: "Must be https in production",
+        });
+      }
+      if (
+        env.EMAIL_LINK_SIGN_IN === "on" &&
+        /@resend\.dev>?\s*$/i.test(env.EMAIL_FROM) &&
+        listOrigins(env.EMAIL_LINK_ALLOWED_EMAILS).length === 0
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["EMAIL_LINK_ALLOWED_EMAILS"],
+          message:
+            "Resend's test sender only reaches the Resend account owner: list that address here",
         });
       }
       if (env.EMAIL_LINK_SIGN_IN === "on" && env.EMAIL_TRANSPORT === "console") {
@@ -186,6 +230,17 @@ function isLoopback(value: string): boolean {
 export function appOrigins(env: Env = getEnv()): string[] {
   const extra = listOrigins(env.AUTH_TRUSTED_ORIGINS).map(originOf);
   return [...new Set([new URL(env.BETTER_AUTH_URL).origin, ...extra.filter((o) => o !== null)])];
+}
+
+/** Addresses allowed to get a sign-in link, lower case; empty means anyone. */
+export function emailLinkAllowList(env: Env = getEnv()): string[] {
+  return listOrigins(env.EMAIL_LINK_ALLOWED_EMAILS).map((entry) => entry.toLowerCase());
+}
+
+/** Whether `email` may get a sign-in link. */
+export function emailLinkAllowed(email: string, env: Env = getEnv()): boolean {
+  const allowed = emailLinkAllowList(env);
+  return allowed.length === 0 || allowed.includes(email.trim().toLowerCase());
 }
 
 /** Where browsers reach the API (live progress only; everything else goes through the BFF). */

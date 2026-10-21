@@ -4,17 +4,16 @@ import { APIError } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { jwt, magicLink, organization } from "better-auth/plugins";
 import type { Pool } from "pg";
-import type { LinkDelivery } from "@/components/auth/sign-in-form";
 import {
   MAGIC_LINK_TTL_SECONDS,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
 } from "@/lib/auth-constants";
-import { EmailDeliveryError, isResendApiKey, sendSignInEmail } from "@/lib/email";
-import { appOrigins, getEnv } from "@/lib/env";
+import { EMAIL_NOT_ALLOWED_MESSAGE } from "@/lib/auth-constants";
+import { EmailDeliveryError, sendSignInEmail } from "@/lib/email";
+import { appOrigins, emailLinkAllowed, getEnv } from "@/lib/env";
 import { ac, roles } from "@/lib/permissions";
 import { createIdentity, type OrganizationApi } from "@/lib/identity";
-import { linkDelivery } from "@/lib/sign-in-options";
 
 const DAY = 60 * 60 * 24;
 
@@ -86,14 +85,18 @@ export function buildAuthOptions(pool: Pool, getApi: () => OrganizationApi = unb
               expiresIn: MAGIC_LINK_TTL_SECONDS,
               storeToken: "hashed",
               rateLimit: { window: 60, max: env.AUTH_MAGIC_LINK_RATE_MAX },
-              sendMagicLink: async ({ email, url, metadata }) => {
-                const apiKey = userResendKey(metadata, linkDelivery(env));
+              sendMagicLink: async ({ email, url }) => {
+                // Checked before anything is sent; the answer never names who is allowed.
+                if (!emailLinkAllowed(email, env)) {
+                  throw new APIError("FORBIDDEN", {
+                    code: "EMAIL_NOT_ALLOWED",
+                    message: EMAIL_NOT_ALLOWED_MESSAGE,
+                  });
+                }
                 try {
-                  await sendSignInEmail({ to: email, url }, { apiKey });
+                  await sendSignInEmail({ to: email, url });
                 } catch (error) {
-                  if (error instanceof EmailDeliveryError) {
-                    throw emailProblem(error, Boolean(apiKey));
-                  }
+                  if (error instanceof EmailDeliveryError) throw emailProblem(error);
                   throw error;
                 }
               },
@@ -132,41 +135,13 @@ function unboundApi(): OrganizationApi {
   throw new Error("The auth API is not available while building options for a migration.");
 }
 
-/**
- * The Resend API key a tester typed on the sign-in page, if any (`metadata.resendApiKey`).
- * Accepted only while email is in testing mode (links printed to the log, or sent from Resend's
- * test sender): once a verified domain is configured, the server's own key is the only one used.
- */
-export function userResendKey(metadata: unknown, delivery: LinkDelivery): string | undefined {
-  const supplied =
-    typeof metadata === "object" && metadata !== null
-      ? (metadata as { resendApiKey?: unknown }).resendApiKey
-      : undefined;
-  if (supplied === undefined || supplied === "") return undefined;
-  if (delivery === "email" || delivery === "off") {
-    throw new APIError("BAD_REQUEST", {
-      code: "RESEND_KEY_NOT_ACCEPTED",
-      message: "This server sends sign-in email itself; leave the Resend API key out.",
-    });
-  }
-  if (!isResendApiKey(supplied)) {
-    throw new APIError("BAD_REQUEST", {
-      code: "RESEND_KEY_INVALID",
-      message: "That doesn't look like a Resend API key (they start with re_).",
-    });
-  }
-  return supplied;
-}
-
 /** A failed delivery as an error the sign-in form can explain. Never echoes the key or link. */
-function emailProblem(error: EmailDeliveryError, userKey: boolean): APIError {
+function emailProblem(error: EmailDeliveryError): APIError {
   switch (error.reason) {
     case "invalid-key":
       return new APIError("BAD_REQUEST", {
-        code: userKey ? "RESEND_KEY_INVALID" : "EMAIL_NOT_CONFIGURED",
-        message: userKey
-          ? "Resend didn't accept that API key."
-          : "Sign-in email isn't set up correctly on this server.",
+        code: "EMAIL_NOT_CONFIGURED",
+        message: "Sign-in email isn't set up correctly on this server.",
       });
     case "recipient-not-allowed":
       return new APIError("BAD_REQUEST", {

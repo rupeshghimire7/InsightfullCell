@@ -18,14 +18,11 @@ import { authClient } from "@/lib/auth-client";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/lib/auth-constants";
 
 export type SignInMode = "sign-in" | "register";
-type Action = "password" | "link" | "google";
+type Action = "password" | "google";
 type Status =
-  | { kind: "idle" }
-  | { kind: "busy"; action: Action }
-  | { kind: "sent"; email: string; via: "log" | "email" | "test-sender" }
-  | { kind: "error"; message: string };
+  { kind: "idle" } | { kind: "busy"; action: Action } | { kind: "error"; message: string };
 
-type FieldName = "name" | "email" | "password" | "resendApiKey";
+type FieldName = "name" | "email" | "password";
 type FieldErrors = Partial<Record<FieldName, string>>;
 interface Values {
   name: string;
@@ -33,16 +30,12 @@ interface Values {
   password: string;
 }
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-/** Same rule as the server (`isResendApiKey`); the server checks again. */
-const RESEND_KEY_PATTERN = /^re_[A-Za-z0-9_-]{8,200}$/;
+export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TOO_MANY = "Too many attempts. Wait a minute, then try again.";
 const UNREACHABLE = "We couldn’t reach the server. Check your connection, then try again.";
 const SERVER_PROBLEM = "The server ran into a problem. Try again in a moment.";
 const ORIGIN_REFUSED =
   "Sign-in isn’t allowed from this web address. Open the app at its usual address, or ask whoever runs it to allow this one.";
-const TEST_SENDER_LIMIT =
-  "Resend’s test sender only delivers to the email address that owns the Resend account. Enter that address, or verify a domain in Resend to email anyone.";
 
 /**
  * Where sign-in links go. `log`: printed in the web server's terminal, never emailed.
@@ -60,11 +53,10 @@ export interface SignInFormProps {
   linkDelivery: LinkDelivery;
   /** Message from a failed link verification, shown above the form. */
   initialError?: string;
-  expiresInMinutes: number;
 }
 
 /** What is wrong with the fields an action needs, in field order. Empty when all are valid. */
-export function validate(mode: SignInMode, action: "password" | "link", values: Values) {
+export function validate(mode: SignInMode, action: "password", values: Values) {
   const errors: FieldErrors = {};
   if (mode === "register" && !values.name) errors.name = "Enter your name.";
   if (!EMAIL_PATTERN.test(values.email)) {
@@ -79,7 +71,7 @@ export function validate(mode: SignInMode, action: "password" | "link", values: 
   return errors;
 }
 
-interface AuthError {
+export interface AuthError {
   status?: number;
   code?: string;
 }
@@ -96,7 +88,9 @@ export function transportError(error: AuthError): string | null {
 }
 
 /** Runs an auth client call; a request that never got an answer becomes `{ status: 0 }`. */
-async function settle(call: () => Promise<{ error: AuthError | null }>): Promise<AuthError | null> {
+export async function settle(
+  call: () => Promise<{ error: AuthError | null }>,
+): Promise<AuthError | null> {
   try {
     return (await call()).error;
   } catch {
@@ -107,7 +101,7 @@ async function settle(call: () => Promise<{ error: AuthError | null }>): Promise
 const subscribeNothing = () => () => {};
 
 /** False in the server-rendered HTML, true once React runs in the browser. */
-function useHydrated(): boolean {
+export function useHydrated(): boolean {
   return useSyncExternalStore(
     subscribeNothing,
     () => true,
@@ -128,69 +122,21 @@ export function passwordError(mode: SignInMode, error: AuthError): string {
     : "We couldn’t sign you in. Try again.";
 }
 
-/** Why a sign-in link was not sent, from the server's error code (see `auth-options.ts`). A
- * problem with the typed Resend key is shown on that field instead of above the form. */
-export function linkError(
-  error: AuthError,
-  delivery: LinkDelivery,
-): { message: string; field?: "resendApiKey" } {
-  switch (error.code) {
-    case "RESEND_KEY_INVALID":
-      return {
-        field: "resendApiKey",
-        message: "Resend didn’t accept this API key. Check it (it starts with re_) and try again.",
-      };
-    case "RESEND_RECIPIENT_NOT_ALLOWED":
-      return { message: `We couldn’t send the link. ${TEST_SENDER_LIMIT}` };
-    case "EMAIL_NOT_CONFIGURED":
-      return {
-        message:
-          "Sign-in email isn’t set up correctly on this server. Paste your own Resend API key, or use a password.",
-      };
-  }
-  // A 5xx here is usually the email failing to send, which the delivery-specific text explains.
-  const transport = error.status && error.status >= 500 ? null : transportError(error);
-  if (transport) return { message: transport };
-  return {
-    message:
-      delivery === "resend-test"
-        ? "We couldn’t send the link. While email is in testing mode, links only reach the Resend account owner’s address."
-        : "We couldn’t send the link. Check the address and try again.",
-  };
-}
-
 export function SignInForm({
   mode = "sign-in",
   google,
   linkDelivery,
   initialError,
-  expiresInMinutes,
 }: SignInFormProps) {
   const router = useRouter();
   const hydrated = useHydrated();
   const formRef = useRef<HTMLFormElement>(null);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  /** Testing mode: the step that asks for the tester's own Resend API key is open. */
-  const [askingForKey, setAskingForKey] = useState(false);
   const registering = mode === "register";
-  const testingEmail = linkDelivery !== "email";
-  const linksOff = linkDelivery === "off";
-
-  // Opening the key step moves focus into it; closing it returns focus to the button that opened
-  // it. Skipped on the first render so the page does not grab focus on load.
-  const keyStepMounted = useRef(false);
-  useEffect(() => {
-    if (!keyStepMounted.current) {
-      keyStepMounted.current = true;
-      return;
-    }
-    const target = askingForKey ? '[name="resendApiKey"]' : "[data-link-button]";
-    formRef.current?.querySelector<HTMLElement>(target)?.focus();
-  }, [askingForKey]);
 
   /** Reads the form, shows any field errors and focuses the first; `null` when invalid. */
-  function readValid(action: "password" | "link"): Values | null {
+  function readValid(action: "password"): Values | null {
     const data = new FormData(formRef.current ?? undefined);
     const values: Values = {
       name: (data.get("name") ?? "").toString().trim(),
@@ -230,69 +176,6 @@ export function SignInForm({
     enterApp();
   }
 
-  /** "Email me a sign-in link": sends right away with real email; in testing mode it first asks
-   * for the tester's own Resend API key. */
-  async function onMagicLink() {
-    if (status.kind === "busy" || linksOff) return;
-    const values = readValid("link");
-    if (!values) return;
-    if (testingEmail) {
-      setAskingForKey(true);
-      return;
-    }
-    await sendLink(values.email, undefined);
-  }
-
-  async function onSendWithKey() {
-    if (status.kind === "busy") return;
-    const values = readValid("link");
-    if (!values) return;
-    const key = (new FormData(formRef.current ?? undefined).get("resendApiKey") ?? "")
-      .toString()
-      .trim();
-    if (key && !RESEND_KEY_PATTERN.test(key)) {
-      setFieldErrors({ resendApiKey: "A Resend API key starts with re_. Paste the whole key." });
-      formRef.current?.querySelector<HTMLInputElement>('[name="resendApiKey"]')?.focus();
-      return;
-    }
-    await sendLink(values.email, key || undefined);
-  }
-
-  async function sendLink(address: string, resendApiKey: string | undefined) {
-    setStatus({ kind: "busy", action: "link" });
-    const error = await settle(() =>
-      authClient.signIn.magicLink({
-        email: address,
-        callbackURL: "/",
-        // A failed or reused link lands on the sign-in page, where the error is explained.
-        errorCallbackURL: "/sign-in",
-        // Used once by the server to send this message; never stored (see `userResendKey`).
-        ...(resendApiKey ? { metadata: { resendApiKey } } : {}),
-      }),
-    );
-    if (error) {
-      const problem = linkError(error, linkDelivery);
-      if (problem.field) {
-        setStatus({ kind: "idle" });
-        setFieldErrors({ [problem.field]: problem.message });
-        formRef.current?.querySelector<HTMLInputElement>(`[name="${problem.field}"]`)?.focus();
-      } else {
-        setStatus({ kind: "error", message: problem.message });
-      }
-      return;
-    }
-    setStatus({
-      kind: "sent",
-      email: address,
-      via:
-        resendApiKey || linkDelivery === "resend-test"
-          ? "test-sender"
-          : linkDelivery === "log"
-            ? "log"
-            : "email",
-    });
-  }
-
   async function onGoogle() {
     setStatus({ kind: "busy", action: "google" });
     const error = await settle(() =>
@@ -305,46 +188,6 @@ export function SignInForm({
           transportError(error) ?? "Google sign-in didn’t complete. Try again, or use your email.",
       });
     }
-  }
-
-  if (status.kind === "sent") {
-    const toLog = status.via === "log";
-    return (
-      <div role="status" className="space-y-3">
-        <h2 className="text-xl font-semibold">
-          {toLog ? "Check the server terminal" : "Check your inbox"}
-        </h2>
-        <p>
-          {toLog ? (
-            <>
-              Testing mode: no email was sent. The sign-in link for{" "}
-              <strong className="font-semibold">{status.email}</strong> is printed in the terminal
-              running the web app.
-            </>
-          ) : (
-            <>
-              We sent a sign-in link to <strong className="font-semibold">{status.email}</strong>.
-            </>
-          )}{" "}
-          It expires in {expiresInMinutes}&nbsp;minutes and works once.
-        </p>
-        {status.via === "test-sender" ? (
-          <p className="text-sm text-muted">
-            Sent from Resend’s test sender: it only arrives if this address owns the Resend account.
-            If nothing comes within a minute, check spam.
-          </p>
-        ) : null}
-        <Button
-          variant="secondary"
-          onClick={() => {
-            setAskingForKey(false);
-            setStatus({ kind: "idle" });
-          }}
-        >
-          Use a different email
-        </Button>
-      </div>
-    );
   }
 
   const busy = status.kind === "busy" ? status.action : null;
@@ -416,43 +259,22 @@ export function SignInForm({
 
         {/* The other ways in, after "or": Google, then the sign-in link. They stay inside the
             form (as plain buttons) because the link reads the email field above. */}
-        {google !== "off" || !registering ? (
-          <div className="space-y-4 pt-1">
-            <div className="flex items-center gap-3 text-xs text-muted" aria-hidden="true">
-              <span className="h-px flex-1 bg-border" />
-              or
-              <span className="h-px flex-1 bg-border" />
-            </div>
-            {google !== "off" ? (
-              <GoogleButton
-                setupNeeded={google === "setup-needed"}
-                busy={busy === "google"}
-                disabled={busy !== null && busy !== "google"}
-                onClick={onGoogle}
-              />
-            ) : null}
-            {registering ? null : askingForKey ? (
-              <ResendKeyStep
-                delivery={linkDelivery}
-                error={fieldErrors.resendApiKey}
-                busy={busy === "link"}
-                disabled={busy !== null && busy !== "link"}
-                onSend={onSendWithKey}
-                onCancel={() => {
-                  setFieldErrors({});
-                  setAskingForKey(false);
-                }}
-              />
-            ) : (
-              <MagicLinkButton
-                busy={busy === "link"}
-                disabled={busy !== null && busy !== "link"}
-                delivery={linkDelivery}
-                onClick={onMagicLink}
-              />
-            )}
+        <div className="space-y-4 pt-1">
+          <div className="flex items-center gap-3 text-xs text-muted" aria-hidden="true">
+            <span className="h-px flex-1 bg-border" />
+            or
+            <span className="h-px flex-1 bg-border" />
           </div>
-        ) : null}
+          {google !== "off" ? (
+            <GoogleButton
+              setupNeeded={google === "setup-needed"}
+              busy={busy === "google"}
+              disabled={busy !== null && busy !== "google"}
+              onClick={onGoogle}
+            />
+          ) : null}
+          <MagicLinkButton delivery={linkDelivery} mode={mode} />
+        </div>
       </form>
 
       <p className="text-center text-sm text-muted">
@@ -518,29 +340,18 @@ function Field({
 }
 
 /**
- * "Email me a sign-in link". While links cannot reach everyone (printed to the server log, or sent
- * from Resend's test sender), a "Testing only" note says so. Shown only on hover of the button or its info icon; Escape dismisses it (WCAG 1.4.13); screen
- * readers read it through `aria-describedby`. Switched off, the button stays visible but inert
- * (`aria-disabled`), and the same note says links are not available yet.
+ * "Email me a sign-in link": opens the page that asks for the address (`/sign-in/email`). While
+ * links cannot reach everyone (printed to the server log, or sent from Resend's test sender), a
+ * "Testing only" note says so, shown on hover of the link or its info icon; Escape dismisses it
+ * (WCAG 1.4.13); screen readers read it through `aria-describedby`. Switched off, it is a button
+ * that stays visible but inert (`aria-disabled`), and the same note says links are not available.
  */
-function MagicLinkButton({
-  busy,
-  disabled,
-  delivery,
-  onClick,
-}: {
-  busy: boolean;
-  disabled: boolean;
-  delivery: LinkDelivery;
-  onClick: () => void;
-}) {
+function MagicLinkButton({ delivery, mode }: { delivery: LinkDelivery; mode: SignInMode }) {
   const noteId = useId();
   const testing = delivery !== "email";
   const off = delivery === "off";
   const [hovered, setHovered] = useState(false);
   const [dismissed, setDismissed] = useState(false);
-  // Shown only while the pointer is over the button or its info icon (screen readers get the
-  // same text through aria-describedby).
   const open = testing && !dismissed && hovered;
 
   // Escape closes the note while it is open (WCAG 1.4.13).
@@ -554,21 +365,20 @@ function MagicLinkButton({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
-  const button = (
-    <Button
-      variant="secondary"
-      className="w-full"
-      data-link-button=""
-      onClick={off ? undefined : onClick}
-      loading={busy}
-      disabled={off ? undefined : disabled}
-      aria-disabled={off ? true : undefined}
-      aria-describedby={testing ? noteId : undefined}
-    >
-      {busy ? "Sending…" : "Email me a sign-in link"}
+  const control = off ? (
+    <Button variant="secondary" className="w-full" aria-disabled={true} aria-describedby={noteId}>
+      Email me a sign-in link
     </Button>
+  ) : (
+    <Link
+      href={mode === "register" ? "/sign-in/email?mode=register" : "/sign-in/email"}
+      aria-describedby={testing ? noteId : undefined}
+      className="press inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-control border border-border bg-surface px-4 text-sm font-medium whitespace-nowrap text-text hover:bg-bg pointer-coarse:min-h-11"
+    >
+      Email me a sign-in link
+    </Link>
   );
-  if (!testing) return button;
+  if (!testing) return control;
 
   return (
     <div
@@ -580,7 +390,7 @@ function MagicLinkButton({
       onMouseLeave={() => setHovered(false)}
     >
       <div className="flex gap-2">
-        {button}
+        {control}
         <span
           aria-hidden="true"
           className="inline-flex size-9 shrink-0 cursor-help items-center justify-center rounded-control border border-border bg-surface text-muted hover:bg-bg hover:text-text pointer-coarse:size-11"
@@ -604,111 +414,18 @@ function MagicLinkButton({
             </p>
           ) : delivery === "log" ? (
             <p className="mt-1">
-              No email is sent yet: the link is printed in the terminal running the web app. To get
-              it by email, paste your own Resend API key in the next step.
+              No email is sent yet: the link is printed in the terminal running the web app.
             </p>
           ) : (
             <p className="mt-1">
-              Links are sent from Resend’s test sender, which only delivers to the email address of
-              the Resend account owner. You can use your own Resend API key in the next step. To
-              email anyone, verify a domain in Resend and set{" "}
-              <code className="font-mono text-xs">EMAIL_FROM</code> to an address on it.
+              Email sign-in is for testing this demo: it only works with the project owner’s email
+              until an organisation’s email domain is set up. Everyone else, please register with a
+              password.
             </p>
           )}
         </div>
       </div>
     </div>
-  );
-}
-
-/**
- * Testing mode only: asks for the tester's own Resend API key and states plainly that this is a
- * testing version. The key goes to our server once, to send this one message, and is not kept
- * (it is not saved in the browser either: `autocomplete="off"`, no storage).
- */
-function ResendKeyStep({
-  delivery,
-  error,
-  busy,
-  disabled,
-  onSend,
-  onCancel,
-}: {
-  delivery: LinkDelivery;
-  error?: string;
-  busy: boolean;
-  disabled: boolean;
-  onSend: () => void;
-  onCancel: () => void;
-}) {
-  const noticeId = useId();
-  return (
-    <fieldset
-      className="space-y-3 rounded-panel border border-warning/50 bg-raised p-4"
-      aria-describedby={noticeId}
-    >
-      <legend className="px-1 text-sm font-semibold">Email me a sign-in link</legend>
-      <div id={noticeId} className="text-sm">
-        <p className="font-semibold tracking-wide text-warning uppercase">
-          Notice: this is just for the testing version.
-        </p>
-        <p className="mt-1">
-          A registered domain is needed for sending email to any user. Until one is verified, links
-          go out with your own Resend API key from Resend’s test sender, which only delivers to the
-          email address that owns your Resend account. Create a key at{" "}
-          <a
-            href="https://resend.com/api-keys"
-            target="_blank"
-            rel="noreferrer"
-            className="font-medium text-accent underline underline-offset-2"
-          >
-            resend.com/api-keys
-          </a>
-          .
-        </p>
-      </div>
-      <Field
-        label="Your Resend API key"
-        error={error}
-        hint={
-          delivery === "log"
-            ? "Used once to send this link and never stored. Leave it empty to print the link in the web server’s terminal instead."
-            : "Used once to send this link and never stored. Leave it empty to use this server’s own key."
-        }
-      >
-        {(props) => (
-          <input
-            {...props}
-            name="resendApiKey"
-            type="password"
-            autoComplete="off"
-            autoCapitalize="none"
-            spellCheck={false}
-            placeholder="re_…"
-            maxLength={200}
-            onKeyDown={(event) => {
-              // Enter sends the link (the form's own submit is the password sign-in); Escape
-              // backs out of the step, like closing a dialog.
-              if (event.key === "Enter") {
-                event.preventDefault();
-                onSend();
-              } else if (event.key === "Escape") {
-                event.preventDefault();
-                onCancel();
-              }
-            }}
-          />
-        )}
-      </Field>
-      <div className="flex gap-2">
-        <Button className="flex-1" loading={busy} disabled={disabled} onClick={onSend}>
-          {busy ? "Sending…" : "Send sign-in link"}
-        </Button>
-        <Button variant="secondary" disabled={busy} onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-    </fieldset>
   );
 }
 

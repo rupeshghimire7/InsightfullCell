@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { SignInForm } from "@/components/auth/sign-in-form";
 import { ServiceUnavailable } from "@/components/ui/service-unavailable";
-import { MAGIC_LINK_TTL_SECONDS } from "@/lib/auth-constants";
 import { getEnv } from "@/lib/env";
 import { googleSignIn, linkDelivery } from "@/lib/sign-in-options";
 import { getSessionOrUnavailable } from "@/lib/session";
@@ -13,8 +12,9 @@ export const metadata: Metadata = { title: "Sign in" };
 const TAGLINE = "Your one stop solution for data analysis.";
 
 const LINK_ERRORS: Record<string, string> = {
-  EXPIRED_TOKEN: "That sign-in link has expired. Request a new one below.",
-  INVALID_TOKEN: "That sign-in link was already used or isn’t valid. Request a new one below.",
+  EXPIRED_TOKEN: "That sign-in link has expired. Request a new one with “Email me a sign-in link”.",
+  INVALID_TOKEN:
+    "That sign-in link was already used or isn’t valid. Request a new one with “Email me a sign-in link”.",
   access_denied: "Sign-in was cancelled. You can try again below.",
 };
 
@@ -61,10 +61,10 @@ export default async function SignInPage({
             linkDelivery={linkDelivery(env)}
             initialError={
               error
-                ? (LINK_ERRORS[error] ?? "We couldn’t sign you in. Request a new link below.")
+                ? (LINK_ERRORS[error] ??
+                  "We couldn’t sign you in. Try again, or request a new link.")
                 : undefined
             }
-            expiresInMinutes={MAGIC_LINK_TTL_SECONDS / 60}
           />
         </div>
       </div>
