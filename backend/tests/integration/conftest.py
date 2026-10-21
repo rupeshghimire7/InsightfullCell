@@ -46,6 +46,11 @@ BUCKET = "ic-test"
 PART_BYTES = 5 * MIB
 
 TENANT_TABLES = (
+    # Not tenant tables, but spend and activity from one test must not count in the next.
+    "app.llm_spend",
+    "app.llm_spend_holds",
+    "app.llm_spend_totals",
+    "app.user_activity",
     "app.usage_counters",
     "app.llm_calls",
     "app.dataset_preferences",

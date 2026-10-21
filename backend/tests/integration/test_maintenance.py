@@ -279,6 +279,8 @@ async def test_maintenance_functions_return_ids_only_and_are_not_public(
     )
     assert [(name, public, app) for name, public, app in rows] == [
         ("abandoned_uploads", False, True),
+        # Cross-tenant counts for the admin dashboard; the API guards it with the admin key.
+        ("admin_overview", False, True),
         ("delete_dataset", False, True),
         ("delete_run", False, True),
         ("ensure_llm_call_partitions", False, True),
@@ -287,8 +289,14 @@ async def test_maintenance_functions_return_ids_only_and_are_not_public(
         ("ensure_verification_partitions", False, True),
         # Internal: only the delete functions (running as the owner) may call it.
         ("erase_runs", False, False),
+        ("llm_spend_record", False, True),
+        ("llm_spend_reserve", False, True),
         ("purge_idempotency_keys", False, True),
         ("reviews_due", False, True),
         ("runs_without_live_job", False, True),
         ("storage_purges_due", False, True),
+        # Triggers on uploads and runs: nobody calls them directly.
+        ("track_run_started", False, False),
+        ("track_upload_completed", False, False),
+        ("track_upload_started", False, False),
     ]

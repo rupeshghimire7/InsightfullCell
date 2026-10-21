@@ -7,6 +7,7 @@ misconfigured deployment fails at start-up instead of running open.
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -15,6 +16,7 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 MIB = 1024 * 1024
+MIN_ADMIN_KEY_LENGTH = 32
 
 
 class Settings(BaseSettings):
@@ -114,12 +116,44 @@ class Settings(BaseSettings):
     # summarised in tiers to fit, never truncated silently.
     schema_card_token_budget: int = Field(default=9_000, ge=1_000, le=60_000)
 
+    # Backup model: when the main provider fails in any way (quota, rate limit, outage, bad key,
+    # unusable answers), the same request goes to this provider once. Never for a request the
+    # privacy check blocked, and never past the spend cap. One model serves both tiers.
+    llm_fallback_provider: Literal["gemini", "openai", "anthropic", "deepseek", "none"] = "none"
+    llm_fallback_model: str | None = None
+
+    # Spend cap (all users together, for the life of this database): a call is made only if its
+    # worst-case cost still fits, so the total can never pass it; past it, runs use the rules.
+    # Costs are kept in USD (provider prices) and converted with a fixed rate; set it at or
+    # above the real rate so the cap errs on the safe side. 0 makes no paid calls at all.
+    llm_spend_cap_aud: Decimal = Field(default=Decimal("4.00"), ge=0, le=Decimal(100_000))
+    llm_usd_to_aud: Decimal = Field(default=Decimal("1.60"), gt=0, le=Decimal(10))
+    # Optional cap per person (0: off), so one tester cannot use up everyone's budget.
+    llm_user_spend_cap_aud: Decimal = Field(default=Decimal(0), ge=0, le=Decimal(100_000))
+    # A reservation for a call that never reported back (a crashed worker) frees itself.
+    llm_spend_hold_seconds: int = Field(default=600, ge=60, le=86_400)
+    # Tag on every spend row, to tell test runs from the released demo (e.g. demo-test).
+    llm_usage_label: str = Field(default="local", pattern=r"^[a-z0-9._-]{1,40}$")
+
+    # --- admin dashboard (the web app's /dashboard). The web server sends this key to the
+    # admin endpoint over the private network; browsers never see it. Unset: no admin endpoint.
+    admin_dashboard_key: SecretStr | None = None
+    # Optional OpenAI *admin* key (sk-admin-…, read-only usage): the dashboard then shows the
+    # cost OpenAI itself reports next to ours. Never used for model calls.
+    openai_admin_key: SecretStr | None = None
+
     @field_validator("database_url")
     @classmethod
     def _async_driver(cls, value: str) -> str:
         if not value.startswith("postgresql+psycopg://"):
             raise ValueError("DATABASE_URL must use the 'postgresql+psycopg://' scheme")
         return value
+
+    @field_validator("admin_dashboard_key", "openai_admin_key", "llm_fallback_model", mode="before")
+    @classmethod
+    def _blank_is_unset(cls, value: object) -> object:
+        # Compose passes unset optional values as empty strings.
+        return None if isinstance(value, str) and not value.strip() else value
 
     @field_validator("llm_prices_json")
     @classmethod
@@ -148,13 +182,23 @@ class Settings(BaseSettings):
     @property
     def llm_api_key(self) -> SecretStr | None:
         """The key of the configured provider, or ``None`` (the model is then off)."""
+        return self.provider_key(self.llm_provider)
+
+    def provider_key(self, provider: str) -> SecretStr | None:
         return {
             "gemini": self.gemini_api_key,
             "openai": self.openai_api_key,
             "anthropic": self.anthropic_api_key,
             "deepseek": self.deepseek_api_key,
-            "none": None,
-        }[self.llm_provider]
+        }.get(provider)
+
+    @property
+    def llm_spend_cap_usd(self) -> Decimal:
+        return (self.llm_spend_cap_aud / self.llm_usd_to_aud).quantize(Decimal("0.000001"))
+
+    @property
+    def llm_user_spend_cap_usd(self) -> Decimal:
+        return (self.llm_user_spend_cap_aud / self.llm_usd_to_aud).quantize(Decimal("0.000001"))
 
     @property
     def psycopg_conninfo(self) -> str:
@@ -171,6 +215,33 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"LLM_PROVIDER is {self.llm_provider!r} but {name} is not set: add the key, "
                 "or set LLM_PROVIDER=none to plan and write with rules only"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _fallback_is_usable(self) -> Settings:
+        fallback = self.llm_fallback_provider
+        if fallback == "none":
+            return self
+        if fallback == self.llm_provider:
+            raise ValueError("LLM_FALLBACK_PROVIDER must differ from LLM_PROVIDER")
+        key = self.provider_key(fallback)
+        if key is None or not key.get_secret_value().strip():
+            raise ValueError(
+                f"LLM_FALLBACK_PROVIDER is {fallback!r} but {fallback.upper()}_API_KEY is not "
+                "set: add the key, or set LLM_FALLBACK_PROVIDER=none"
+            )
+        if not (self.llm_fallback_model or "").strip():
+            raise ValueError("LLM_FALLBACK_MODEL is required with LLM_FALLBACK_PROVIDER")
+        return self
+
+    @model_validator(mode="after")
+    def _admin_key_is_strong(self) -> Settings:
+        key = self.admin_dashboard_key
+        if key is not None and len(key.get_secret_value()) < MIN_ADMIN_KEY_LENGTH:
+            raise ValueError(
+                f"ADMIN_DASHBOARD_KEY must be at least {MIN_ADMIN_KEY_LENGTH} characters "
+                "(openssl rand -hex 32), or unset to switch the dashboard off"
             )
         return self
 

@@ -72,6 +72,15 @@ class Forbidden(DomainError):
     title = "You do not have permission to do this"
 
 
+class AdminNotFound(DomainError):
+    """The admin endpoint is off (no key configured) or the key is wrong: one answer for both,
+    so a caller learns nothing about which."""
+
+    kind = ErrorKind.NOT_FOUND
+    code = "not-found"
+    title = "Not found"
+
+
 # --------------------------------------------------------------------------- uploads
 
 

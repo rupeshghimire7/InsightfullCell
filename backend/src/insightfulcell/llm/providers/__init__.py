@@ -37,15 +37,32 @@ def models_for(settings: Settings) -> dict[str, str]:
 def build_transport(settings: Settings) -> Transport | None:
     """The configured provider's adapter, or ``None`` when the model is off (no provider or
     no API key): every run then plans with rules."""
-    key = settings.llm_api_key
-    if settings.llm_provider == "none" or key is None or not key.get_secret_value():
+    return transport_for(settings.llm_provider, settings)
+
+
+def fallback_models(settings: Settings) -> dict[str, str]:
+    """The backup model serves both tiers."""
+    model = settings.llm_fallback_model or ""
+    return {"strong": model, "fast": model}
+
+
+def build_fallback_transport(settings: Settings) -> Transport | None:
+    """The backup provider's adapter (``LLM_FALLBACK_PROVIDER``), or ``None`` when unset."""
+    if not settings.llm_fallback_model:
+        return None
+    return transport_for(settings.llm_fallback_provider, settings)
+
+
+def transport_for(provider: str, settings: Settings) -> Transport | None:
+    key = settings.provider_key(provider)
+    if provider == "none" or key is None or not key.get_secret_value():
         return None
     secret, timeout = key.get_secret_value(), settings.llm_timeout_seconds
-    if settings.llm_provider == "gemini":
+    if provider == "gemini":
         from insightfulcell.llm.providers.gemini import GeminiTransport  # noqa: PLC0415
 
         return GeminiTransport(secret, timeout_seconds=timeout)
-    if settings.llm_provider == "anthropic":
+    if provider == "anthropic":
         from insightfulcell.llm.providers.anthropic import AnthropicTransport  # noqa: PLC0415
 
         return AnthropicTransport(secret, timeout_seconds=timeout)
@@ -53,7 +70,7 @@ def build_transport(settings: Settings) -> Transport | None:
         OpenAICompatibleTransport,
     )
 
-    if settings.llm_provider == "deepseek":
+    if provider == "deepseek":
         return OpenAICompatibleTransport(
             provider="deepseek",
             api_key=secret,

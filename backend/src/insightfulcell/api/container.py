@@ -11,14 +11,17 @@ from insightfulcell.config import Settings
 from insightfulcell.db.engine import create_engine
 from insightfulcell.db.notifications import EventBroker
 from insightfulcell.db.tenant import TenantDatabase
+from insightfulcell.llm.providers import models_for
 from insightfulcell.pipeline.definition import Pipeline, default_pipeline
 from insightfulcell.queue.port import JobQueue
 from insightfulcell.queue.procrastinate_queue import ProcrastinateQueue, create_procrastinate_app
+from insightfulcell.services.admin import AdminService
 from insightfulcell.services.data_rows import DataRowsService, LocalArtifactCache
 from insightfulcell.services.datasets import DatasetService
 from insightfulcell.services.deletion import DeletionService
 from insightfulcell.services.drilldowns import DrilldownService
 from insightfulcell.services.plans import PlanService
+from insightfulcell.services.provider_usage import OpenAIUsage
 from insightfulcell.services.reports import ReportService
 from insightfulcell.services.runs import RunService
 from insightfulcell.services.uploads import UploadService
@@ -41,6 +44,7 @@ class Services:
     data_rows: DataRowsService
     drilldowns: DrilldownService
     deletion: DeletionService
+    admin: AdminService
     queue: JobQueue
     broker: EventBroker
     owns_engine: bool = True
@@ -106,6 +110,14 @@ def build_services(  # noqa: PLR0913  (keyword-only overrides for tests)
         data_rows=DataRowsService(db, LocalArtifactCache(store)),
         drilldowns=DrilldownService(db, queue, pipeline),
         deletion=DeletionService(db, store, queue, settings),
+        admin=AdminService(
+            db,
+            settings,
+            OpenAIUsage(
+                settings.openai_admin_key.get_secret_value() if settings.openai_admin_key else None
+            ),
+            models_for(settings) if settings.llm_api_key else {},
+        ),
         queue=queue,
         broker=broker,
         owns_engine=owns_engine,

@@ -67,6 +67,10 @@ _FALLBACKS: Final = {
     "invalid_output": "the model's answer did not fit what was asked",
     "refused": "the model declined the request",
     "no_facts": "there were no facts to write about",
+    "spend_cap": "this demo's model budget is spent",
+    "spend_cap_user": "your share of this demo's model budget is spent",
+    "spend_unavailable": "the model budget could not be checked",
+    "price_unknown": "the configured model has no known price, so its cost cannot be capped",
 }
 
 

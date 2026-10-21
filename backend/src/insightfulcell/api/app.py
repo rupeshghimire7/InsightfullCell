@@ -12,7 +12,7 @@ from insightfulcell.api.container import Services, build_services
 from insightfulcell.api.cors import EventStreamCorsMiddleware
 from insightfulcell.api.middleware import RequestContextMiddleware
 from insightfulcell.api.problems import register_problem_handlers
-from insightfulcell.api.routers import datasets, health, me, runs, uploads
+from insightfulcell.api.routers import admin, datasets, health, me, runs, uploads
 from insightfulcell.config import Settings, get_settings
 from insightfulcell.logging_config import configure_logging
 
@@ -53,4 +53,5 @@ def create_app(settings: Settings | None = None, *, services: Services | None = 
     app.include_router(datasets.router)
     app.include_router(runs.router)
     app.include_router(runs.events_router)
+    app.include_router(admin.router)
     return app

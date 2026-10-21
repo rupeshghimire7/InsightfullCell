@@ -8,7 +8,10 @@ Per call:
 3. **Payload check.** A value from a personal-data column, an email address, a US social
    security number or a payment card number anywhere in the prompt blocks the call and logs a
    security event (never the value).
-4. **Budgets.** Per run (input tokens) and per organisation per month (all tokens).
+4. **Budgets.** Per run (input tokens) and per organisation per month (all tokens). With a
+   ``SpendGuard``, every attempt first reserves its worst-case cost (estimated input plus the
+   full output limit, at the model's price) against the spend cap; a model without a price is
+   never called. The reservation is settled with the real cost when the attempt ends.
 5. **Call** with the provider's structured output, a timeout, and up to ``max_attempts``
    attempts with exponential backoff for transient errors. Calls are spaced to
    ``requests_per_minute`` when set (free tiers). A rate limit is waited out for as long as the
@@ -34,7 +37,7 @@ import re
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
 from typing import Final, Protocol
 from uuid import UUID
 
@@ -42,7 +45,7 @@ from pydantic import BaseModel, ValidationError
 
 from insightfulcell.engine.ports import ModelReply, ModelRequest, ModelUnavailable, Purpose
 from insightfulcell.llm.breaker import CircuitBreaker
-from insightfulcell.llm.pricing import cost_usd
+from insightfulcell.llm.pricing import cost_usd, prices_for
 from insightfulcell.llm.transport import (
     PermanentProviderError,
     RawReply,
@@ -61,6 +64,12 @@ TIER: Final[dict[Purpose, str]] = {
     Purpose.JUDGE: "fast",
 }
 CHARS_PER_TOKEN: Final = 3.4
+#: The input estimate is rough (numbers and non-English text take more tokens), so the spend
+#: reservation counts half as much again, plus a little for the provider's own framing.
+RESERVE_INPUT_FACTOR: Final = Decimal("1.5")
+RESERVE_INPUT_EXTRA_TOKENS: Final = 200
+_MILLION: Final = Decimal(1_000_000)
+_MICRO: Final = Decimal("0.000001")
 MIN_SENSITIVE_CHARS: Final = 4
 _EMAIL: Final = re.compile(r"[^\s@\"'<>]+@[^\s@\"'<>]+\.[A-Za-z]{2,}")
 _SSN: Final = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
@@ -84,6 +93,31 @@ class CallRecord:
     cost_usd: Decimal | None
     latency_ms: int
     provider_request_id: str | None = None
+    fallback: bool = False  # made by the backup model after the main one failed
+
+
+@dataclass(frozen=True, slots=True)
+class SpendHold:
+    """A reservation against the spend cap for one attempt. ``refused`` (``spend_cap`` or
+    ``spend_cap_user``) when the cap has no room for it; then nothing is reserved."""
+
+    id: UUID | None
+    amount_usd: Decimal  # worst case: estimated input and the full output limit
+    input_usd: Decimal  # the estimated input alone
+    refused: str | None = None
+
+
+class SpendGuard(Protocol):
+    async def reserve(
+        self, org_id: UUID, run_id: UUID | None, amount_usd: Decimal, input_usd: Decimal
+    ) -> SpendHold: ...
+
+    async def settle(
+        self, hold: SpendHold, call: CallRecord, charged_usd: Decimal, *, estimated: bool
+    ) -> None:
+        """Release ``hold`` and record what the attempt cost (``estimated`` when the provider
+        reported no usage, e.g. a timeout that may still have been billed)."""
+        ...
 
 
 class UsageLedger(Protocol):
@@ -111,6 +145,8 @@ class GatewayConfig:
     max_retry_wait_seconds: float = 60.0
     #: How long calls stop after a quota is used up when the provider does not say.
     quota_pause_seconds: float = 3_600.0
+    #: ``backup``: this gateway serves requests the main model could not (``FallbackModel``).
+    role: str = "primary"
 
 
 def payload_blocked(text: str, sensitive: frozenset[str]) -> str | None:
@@ -153,6 +189,7 @@ class LLMGateway:
         config: GatewayConfig,
         breaker: CircuitBreaker,
         *,
+        spend: SpendGuard | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
@@ -160,6 +197,7 @@ class LLMGateway:
         self._ledger = ledger
         self._config = config
         self._breaker = breaker
+        self._spend = spend
         self._sleep = sleep
         self._clock = clock
         self._pace_lock = asyncio.Lock()
@@ -171,6 +209,10 @@ class LLMGateway:
         if self._transport is None:
             return None
         return self._transport.provider, self._config.models["strong"]
+
+    @property
+    def models(self) -> Mapping[str, str]:
+        return self._config.models
 
     async def complete(self, request: ModelRequest) -> ModelReply:  # noqa: PLR0912, PLR0915
         # The whole call policy (budgets, retries, waits) reads best in one place.
@@ -213,6 +255,7 @@ class LLMGateway:
         while failures < self._config.max_attempts:
             attempt += 1
             await self._pace()
+            hold = await self._reserve(request, transport.provider, model, estimate)
             started = self._clock()
             try:
                 raw = await transport.generate(
@@ -225,7 +268,7 @@ class LLMGateway:
             except TransientProviderError as exc:
                 reason = exc.reason
                 await self._record(
-                    request, transport.provider, model, attempt, reason, None, started
+                    request, transport.provider, model, attempt, reason, None, started, hold
                 )
                 if reason == "rate_limited":
                     too_long = self._config.max_retry_wait_seconds
@@ -250,7 +293,7 @@ class LLMGateway:
                 continue
             except PermanentProviderError as exc:
                 await self._record(
-                    request, transport.provider, model, attempt, exc.reason, None, started
+                    request, transport.provider, model, attempt, exc.reason, None, started, hold
                 )
                 if exc.reason == "quota_exhausted":
                     self._pause_for_quota(exc.retry_after, transport.provider, model)
@@ -278,11 +321,13 @@ class LLMGateway:
                     },
                 )
                 await self._record(
-                    request, transport.provider, model, attempt, "invalid", raw, started
+                    request, transport.provider, model, attempt, "invalid", raw, started, hold
                 )
                 continue
             self._breaker.success()
-            await self._record(request, transport.provider, model, attempt, "ok", raw, started)
+            await self._record(
+                request, transport.provider, model, attempt, "ok", raw, started, hold
+            )
             return ModelReply(
                 data=parsed,
                 provider=transport.provider,
@@ -301,6 +346,54 @@ class LLMGateway:
             return
         for model in sorted(set(self._config.models.values())):
             await self._transport.check(model)
+
+    async def _reserve(
+        self, request: ModelRequest, provider: str, model: str, estimate: int
+    ) -> SpendHold | None:
+        """Reserve this attempt's worst-case cost, or raise ``ModelUnavailable`` (fail closed:
+        no price, no room under the cap, or the cap cannot be checked)."""
+        if self._spend is None:
+            return None
+        prices = prices_for(model, self._config.prices)
+        if prices is None:
+            raise ModelUnavailable("price_unknown", "The model has no known price.")
+        per_input, per_output = prices
+        input_tokens = (
+            Decimal(estimate) * RESERVE_INPUT_FACTOR + RESERVE_INPUT_EXTRA_TOKENS
+        ).to_integral_value(rounding=ROUND_CEILING)
+        input_usd = _usd(per_input * input_tokens)
+        amount = _usd(per_input * input_tokens + per_output * self._config.max_output_tokens)
+        try:
+            hold = await self._spend.reserve(request.org_id, request.run_id, amount, input_usd)
+        except Exception as exc:
+            logger.exception("could not check the model spend cap: not calling the model")
+            raise ModelUnavailable(
+                "spend_unavailable", "The spend cap could not be checked."
+            ) from exc
+        if hold.refused is not None:
+            logger.warning(
+                "model call skipped: the spend cap has no room for it",
+                extra={
+                    "reason": hold.refused,
+                    "provider": provider,
+                    "model": model,
+                    "purpose": request.purpose.value,
+                    "worst_case_usd": str(amount),
+                },
+            )
+            raise ModelUnavailable(hold.refused, "The model spend cap is reached.")
+        return hold
+
+    @staticmethod
+    def _charge(outcome: str, cost: Decimal | None, hold: SpendHold) -> tuple[Decimal, bool]:
+        """What an attempt is counted as costing, and whether that is an estimate."""
+        if cost is not None:
+            return cost, False  # the provider reported its usage
+        if outcome == "timeout":
+            return hold.amount_usd, True  # it may have finished, and been billed, anyway
+        if outcome in {"provider_error", "refused"}:
+            return hold.input_usd, True  # the input may have been processed
+        return Decimal(0), False  # refused before any work: rate limit, bad key, quota
 
     async def _pace(self) -> None:
         """Space calls ``60 / requests_per_minute`` seconds apart across every caller."""
@@ -345,6 +438,7 @@ class LLMGateway:
         outcome: str,
         raw: RawReply | None,
         started: float,
+        hold: SpendHold | None = None,
     ) -> None:
         latency = round((self._clock() - started) * 1000) if started else 0
         input_tokens = raw.input_tokens if raw else 0
@@ -364,12 +458,25 @@ class LLMGateway:
             cost_usd=cost_usd(model, input_tokens, output_tokens, self._config.prices),
             latency_ms=max(0, latency),
             provider_request_id=raw.request_id if raw else None,
+            fallback=self._config.role == "backup",
         )
         try:
             await self._ledger.record(call)
         except Exception:
             # Accounting must not turn a good answer into a failed run; the log keeps the gap.
             logger.exception("could not record an llm call", extra={"outcome": outcome})
+        if hold is None or self._spend is None:
+            return
+        charged, estimated = self._charge(outcome, call.cost_usd if raw else None, hold)
+        try:
+            await self._spend.settle(hold, call, charged, estimated=estimated)
+        except Exception:
+            # The reservation stays (and counts) until it expires, so the cap still holds.
+            logger.exception("could not settle a model spend reservation")
+
+
+def _usd(value: Decimal) -> Decimal:
+    return (value / _MILLION).quantize(_MICRO, rounding=ROUND_CEILING)
 
 
 def _parse(raw: RawReply, request: ModelRequest) -> tuple[BaseModel | None, str, list[str]]:
