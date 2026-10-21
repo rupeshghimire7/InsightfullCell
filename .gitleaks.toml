@@ -1,0 +1,12 @@
+# gitleaks configuration (CI's gitleaks-action and scripts/check-secrets.sh read it).
+# The default rules apply; the allowlist below names the made-up values our tests use, and
+# nothing else, so a real key pasted anywhere (tests included) is still caught.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fake values used by the frontend tests"
+regexes = [
+  '''^key-12345678$''',              # Idempotency-Key in tests/lib/runs-api.test.ts
+  '''^re_test_0123456789abcdef$''',  # Resend key in the sign-in and auth-options tests
+]

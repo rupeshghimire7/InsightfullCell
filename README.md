@@ -519,7 +519,7 @@ frontend/                      Next.js 16 web app (Node 22, pnpm)
 scripts/                       Checks, e2e runner, bootstrap, DB and S3 helpers, git hooks
 sample_data/                   Synthetic test files, clean to messy, in every format
 docker-compose.yml             PostgreSQL 18 and RustFS for local development
-progress.md                    Phase tracker with evidence per task
+deploy/azure/                  Production stack for one Azure VM (Compose, Caddy, HTTPS) and its guide
 ```
 
 ---
@@ -592,14 +592,14 @@ Interactive documentation runs at <http://localhost:8000/docs> while the API is 
 
 **Target measures:** 99.5% API availability, 98% of runs succeed, half of reports ready within 3 minutes (locally the median is about 11 seconds on the sample data), and model cost of about $0.26 per run.
 
-Detailed progress, with evidence for each task, is in [progress.md](progress.md).
+Detailed progress, with evidence for each task, is tracked in a progress file kept locally alongside the repository.
 
 ---
 
 ## Known limitations
 
 - **Automatic cleaning can change data silently** in some cases (0–100 percentage columns, decimal commas, close-sounding category names). For sensitive work, use **Manual** review until these heuristics are fixed.
-- **No per-organisation rate limits** or request-body cap on the proxy yet; sign-in throttling relies on a header that can be spoofed behind some proxies.
+- **No per-organisation rate limits** yet. Sign-in throttling keys on `X-Forwarded-For`, so put the web app behind a proxy that overwrites it (the Azure stack's Caddy does); the proxy to the API refuses bodies over 2 MiB.
 - **One workspace per user:** organisation invitations are not exposed yet, and email addresses are not verified.
 - **Production operations** (staging, monitoring, backups, audit log) are Phase 8 and not built.
 - **Some files fail to read:** nested JSON values (objects or lists inside a column), a quoted header with a line break, and Excel sheets with title rows above the header.
@@ -610,7 +610,7 @@ Detailed progress, with evidence for each task, is in [progress.md](progress.md)
 
 ## Documentation and licence
 
-- **[progress.md](progress.md):** what is done, partial and next, phase by phase.
+- **[deploy/azure/README.md](deploy/azure/README.md):** deploying to Azure (one VM, free domain, HTTPS).
 - **`backend/openapi.json`** and **<http://localhost:8000/docs>:** the API contract.
 - The design baseline (system map and PRD), architecture decision records (ADR-025 onwards), changelog, setup manual and project and test reports are kept locally alongside the repository.
 
