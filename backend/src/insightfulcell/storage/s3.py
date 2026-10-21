@@ -6,7 +6,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 import boto3
 from botocore.client import Config
@@ -51,6 +51,16 @@ class S3ObjectStore:
     def _make_client(settings: Settings, endpoint_url: str | None) -> S3Client:
         key = settings.s3_access_key_id
         secret = settings.s3_secret_access_key
+        # On AWS (no endpoint), "auto" signs URLs for the global s3.amazonaws.com host, which
+        # redirects to the bucket's region for new buckets, and browsers cannot follow a redirect
+        # on a CORS upload. "virtual" signs <bucket>.s3.<region>.amazonaws.com directly.
+        style: Literal["auto", "virtual", "path"]
+        if settings.s3_force_path_style:
+            style = "path"
+        elif endpoint_url is None:
+            style = "virtual"
+        else:
+            style = "auto"
         return boto3.client(
             "s3",
             region_name=settings.s3_region,
@@ -59,7 +69,7 @@ class S3ObjectStore:
             aws_secret_access_key=secret.get_secret_value() if secret else None,
             config=Config(
                 signature_version="s3v4",
-                s3={"addressing_style": "path" if settings.s3_force_path_style else "auto"},
+                s3={"addressing_style": style},
                 retries={"max_attempts": 3, "mode": "standard"},
                 connect_timeout=3,
                 read_timeout=15,

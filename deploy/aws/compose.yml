@@ -34,6 +34,13 @@ services:
       DATABASE_URL: postgresql+psycopg://ic_app_prod:${IC_APP_DB_PASSWORD:?set it in deploy/aws/.env}@postgres:5432/insightfulcell
       # Only the proxy can reach this port, so trust its X-Forwarded-* headers.
       FORWARDED_ALLOW_IPS: "*"
+    # The image's check, with more time to start: on a 1 GB t3.micro, loading the analysis stack
+    # while the other containers start can take well over a minute.
+    healthcheck:
+      start_period: 180s
+      interval: 15s
+      timeout: 5s
+      retries: 5
     depends_on:
       postgres: { condition: service_healthy }
     networks: [default, edge]

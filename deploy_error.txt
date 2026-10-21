@@ -1,0 +1,61 @@
+docker compose logs --tail 60 api
+ic-api  |   File "/app/.venv/lib/python3.13/site-packages/pydantic/main.py", line 280, in __init__
+ic-api  |     validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+ic-api  | pydantic_core._pydantic_core.ValidationError: 1 validation error for Settings
+ic-api  |   Value error, LLM_PROVIDER is 'gemini' but GEMINI_API_KEY is not set: add the key, or set LLM_PROVIDER=none to plan and write with rules only [type=value_error, input_value={'environment': 'producti...10341a1cf0c5b3d3ad6936'}, input_type=dict]
+ic-api  |     For further information visit https://errors.pydantic.dev/2.14/v/value_error
+ic-api  | Traceback (most recent call last):
+ic-api  |   File "/app/.venv/bin/uvicorn", line 10, in <module>
+ic-api  |     sys.exit(main())
+ic-api  |              ~~~~^^
+ic-api  |   File "/app/.venv/lib/python3.13/site-packages/click/core.py", line 1631, in __call__
+ic-api  |     return self.main(*args, **kwargs)
+ic-api  |            ~~~~~~~~~^^^^^^^^^^^^^^^^^
+ic-api  |   File "/app/.venv/lib/python3.13/site-packages/click/core.py", line 1552, in main
+ic-api  |     rv = self.invoke(ctx)
+ic-api  |   File "/app/.venv/lib/python3.13/site-packages/click/core.py", line 1415, in invoke
+ic-api  |     return ctx.invoke(self.callback, **ctx.params)
+ic-api  |            ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ic-api  |   File "/app/.venv/lib/python3.13/site-packages/click/core.py", line 910, in invoke
+ic-api  |     return callback(*args, **kwargs)
+ic-api  |   File "/app/.venv/lib/python3.13/site-packages/uvicorn/main.py", line 448, in main
+ic-api  |     run(
+ic-api  |     ~~~^
+ic-api  |         app,
+ic-api  |         ^^^^
+ic-api  |     ...<49 lines>...
+ic-api  |         reset_contextvars=reset_contextvars,
+ic-api  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ic-api  |     )
+ic-api  |     ^
+ic-api  |   File "/app/.venv/lib/python3.13/site-packages/uvicorn/main.py", line 620, in run
+ic-api  |     config.load_app()
+ic-api  |     ~~~~~~~~~~~~~~~^^
+ic-api  |   File "/app/.venv/lib/python3.13/site-packages/uvicorn/config.py", line 434, in load_app
+ic-api  |     return import_from_string(self.app)
+ic-api  |   File "/app/.venv/lib/python3.13/site-packages/uvicorn/importer.py", line 19, in import_from_string
+ic-api  |     module = importlib.import_module(module_str)
+ic-api  |   File "/usr/local/lib/python3.13/importlib/__init__.py", line 88, in import_module
+ic-api  |     return _bootstrap._gcd_import(name[level:], package, level)
+ic-api  |            ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ic-api  |   File "<frozen importlib._bootstrap>", line 1404, in _gcd_import
+ic-api  |   File "<frozen importlib._bootstrap>", line 1369, in _find_and_load
+ic-api  |   File "<frozen importlib._bootstrap>", line 1340, in _find_and_load_unlocked
+ic-api  |   File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+ic-api  |   File "<frozen importlib._bootstrap_external>", line 1027, in exec_module
+ic-api  |   File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+ic-api  |   File "/app/.venv/lib/python3.13/site-packages/insightfulcell/api/main.py", line 7, in <module>
+ic-api  |     app = create_app()
+ic-api  |   File "/app/.venv/lib/python3.13/site-packages/insightfulcell/api/app.py", line 23, in create_app
+ic-api  |     settings = settings or get_settings()
+ic-api  |                            ~~~~~~~~~~~~^^
+ic-api  |   File "/app/.venv/lib/python3.13/site-packages/insightfulcell/config.py", line 318, in get_settings
+ic-api  |     return Settings()  # values come from the environment
+ic-api  |   File "/app/.venv/lib/python3.13/site-packages/pydantic_settings/main.py", line 262, in __init__
+ic-api  |     super().__init__(**__pydantic_self__.__class__._settings_build_values(sources, init_kwargs))
+ic-api  |     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ic-api  |   File "/app/.venv/lib/python3.13/site-packages/pydantic/main.py", line 280, in __init__
+ic-api  |     validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+ic-api  | pydantic_core._pydantic_core.ValidationError: 1 validation error for Settings
+ic-api  |   Value error, LLM_PROVIDER is 'gemini' but GEMINI_API_KEY is not set: add the key, or set LLM_PROVIDER=none to plan and write with rules only [type=value_error, input_value={'environment': 'producti...10341a1cf0c5b3d3ad6936'}, input_type=dict]
+ic-api  |     For further information visit https://errors.pydantic.dev/2.14/v/value_error
