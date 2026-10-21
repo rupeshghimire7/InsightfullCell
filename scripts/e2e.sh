@@ -29,6 +29,8 @@ if [ -z "${E2E_S3_ENDPOINT:-}" ] && curl -fsS -o /dev/null "http://127.0.0.1:$S3
   E2E_S3_ENDPOINT="http://127.0.0.1:$S3_PORT"
 fi
 DB="ic_e2e_$$"
+# The admin dashboard is on for the browser test, with a throwaway key for this run only.
+export ADMIN_DASHBOARD_KEY="e2e-admin-key-$(openssl rand -hex 24)"
 STATE="$ROOT/.e2e"; mkdir -p "$STATE"
 WEB_URL="http://localhost:$WEB_PORT"
 S3_URL="${E2E_S3_ENDPOINT:-http://127.0.0.1:$S3_PORT}"
