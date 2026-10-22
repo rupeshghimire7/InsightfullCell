@@ -584,26 +584,6 @@ Interactive documentation runs at <http://localhost:8000/docs> while the API is 
 | Tampering with results | Append-only tables enforced by triggers; content hashes on facts; versioned plans and decisions |
 | Leaks in errors and logs | Problem responses never include cell values; access logs record the path only |
 
----
-
-## Project status and roadmap
-
-| # | Phase | Status |
-|---|---|---|
-| 0 | Foundation and local environment | ✅ Done |
-| 1 | Sign-in, tenancy, API, upload, ingestion | ✅ Done |
-| 2 | Runs, queue, worker, live progress | ✅ Done |
-| 3 | Analysis Phase A (understand, plan, review) | ✅ Done |
-| 4 | Analysis Phase B (clean, test, rank, facts) | ✅ Done |
-| 5 | Narration and verification | ✅ Done |
-| 6 | Charts, dashboard, report, exports, drill-downs | ✅ Done |
-| 7 | Asking questions about the data (tiered Q&A with closed tools, quotas and an answer cache) | ⬜ Next |
-| 8 | Running it in production (staging, tracing, metrics, alerts, backups, retention, audit log, rate limits) | ⬜ Planned |
-| R2 | Embeddings and fused search | ⬜ Planned |
-
-**Planned milestones:** Release 1 alpha (11 Dec 2026), Release 2 beta (12 Mar 2027), general availability (9 Apr 2027).
-
-**Target measures:** 99.5% API availability, 98% of runs succeed, half of reports ready within 3 minutes (locally the median is about 11 seconds on the sample data), and model cost of about $0.26 per run.
 
 ---
 
@@ -621,14 +601,12 @@ Interactive documentation runs at <http://localhost:8000/docs> while the API is 
 
 ## Team and contributions
 
-InsightfulCell is a two-person project. The idea and the product belong to Rupesh Ghimire.
+InsightfulCell is a two-person project.
 
 | Member | Role | Contribution |
 |---|---|---|
 | **Rupesh Ghimire** | Project owner and lead developer | Conceived the product and owns its direction. Designed the architecture and built the application end to end: the web app, the API, the background worker, the analysis engine, the language-model gateway, security and tenancy, tests and documentation. |
 | **Sandesh Prasad Paudel** | Deployment | Responsible for taking the application from a local setup to a hosted environment: provisioning the infrastructure, configuring the production stack, domain and HTTPS, and keeping the deployed service running. |
-
-Questions about the code or the product go to Rupesh Ghimire; questions about the hosted deployment go to Sandesh Prasad Paudel.
 
 ---
 
