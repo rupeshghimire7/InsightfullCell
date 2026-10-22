@@ -14,7 +14,10 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 # No secrets are needed to build; configuration is read when the server starts.
-RUN pnpm build
+# Node's default heap is sized from the machine's memory and is too small for `next build` on a
+# 4 GB host; with swap on, 3 GB fits (lower it on smaller hosts, e.g. --build-arg ...=2048).
+ARG NODE_BUILD_HEAP_MB=3072
+RUN NODE_OPTIONS="--max-old-space-size=${NODE_BUILD_HEAP_MB}" pnpm build
 
 FROM node:22-alpine
 WORKDIR /app

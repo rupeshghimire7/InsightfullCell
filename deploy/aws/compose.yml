@@ -1,0 +1,107 @@
+# InsightfulCell on one EC2 host (deploy/aws/README.md). Run from this folder; ./deploy.sh
+# pulls the images, migrates and starts everything.
+# Public traffic arrives through the shared proxy (deploy/aws/proxy) on the `edge` network.
+# PostgreSQL and the worker sit on this project's private network only, with no published ports.
+# Passwords come from ./.env, settings from backend.env and web.env (copy the *.example files).
+# Images are built by GitHub Actions (.github/workflows/images.yml) and pulled; `IC_BUILD=1
+# ./deploy.sh` builds them here instead, which needs about 4 GB of memory.
+name: ic
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: ic_owner
+      # Read only when the volume is first created; change it later with ALTER ROLE.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set it in deploy/aws/.env}
+      POSTGRES_DB: insightfulcell
+    volumes:
+      # PostgreSQL 18 images keep data under /var/lib/postgresql/18/docker.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ic_owner -d insightfulcell"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    image: ${IC_IMAGE_PREFIX:-ghcr.io/rupeshghimire7/insightfullcell}-api:${IC_IMAGE_TAG:-latest}
+    build: ../../backend
+    container_name: ic-api
+    env_file: backend.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://ic_app_prod:${IC_APP_DB_PASSWORD:?set it in deploy/aws/.env}@postgres:5432/insightfulcell
+      # Only the proxy can reach this port, so trust its X-Forwarded-* headers.
+      FORWARDED_ALLOW_IPS: "*"
+    # The image's check, with more time to start: on a 1 GB t3.micro, loading the analysis stack
+    # while the other containers start can take well over a minute.
+    healthcheck:
+      start_period: 180s
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [default, edge]
+    restart: unless-stopped
+
+  worker:
+    image: ${IC_IMAGE_PREFIX:-ghcr.io/rupeshghimire7/insightfullcell}-api:${IC_IMAGE_TAG:-latest}
+    command: ["python", "-m", "insightfulcell.worker"]
+    env_file: backend.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://ic_app_prod:${IC_APP_DB_PASSWORD:?set it in deploy/aws/.env}@postgres:5432/insightfulcell
+    # The image's health check probes the API port, which the worker does not open.
+    healthcheck:
+      disable: true
+    depends_on:
+      postgres: { condition: service_healthy }
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+  web:
+    image: ${IC_IMAGE_PREFIX:-ghcr.io/rupeshghimire7/insightfullcell}-web:${IC_IMAGE_TAG:-latest}
+    build: ../../frontend
+    container_name: ic-web
+    env_file: web.env
+    environment:
+      AUTH_DATABASE_URL: postgresql://ic_auth:${IC_AUTH_DB_PASSWORD:?set it in deploy/aws/.env}@postgres:5432/insightfulcell
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [default, edge]
+    restart: unless-stopped
+
+  # --- one-off deploy steps (profile "tools"; deploy.sh runs them)
+
+  migrate:
+    image: ${IC_IMAGE_PREFIX:-ghcr.io/rupeshghimire7/insightfullcell}-api:${IC_IMAGE_TAG:-latest}
+    profiles: [tools]
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      MIGRATION_DATABASE_URL: postgresql+psycopg://ic_owner:${POSTGRES_PASSWORD}@postgres:5432/insightfulcell
+    healthcheck:
+      disable: true
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  auth-migrate:
+    # The web image is the standalone server only; the build stage still has the scripts.
+    image: ${IC_IMAGE_PREFIX:-ghcr.io/rupeshghimire7/insightfullcell}-web-tools:${IC_IMAGE_TAG:-latest}
+    build:
+      context: ../../frontend
+      target: build
+    profiles: [tools]
+    command: ["node_modules/.bin/tsx", "--conditions=react-server", "scripts/migrate-auth.ts"]
+    env_file: web.env
+    environment:
+      AUTH_DATABASE_URL: postgresql://ic_auth:${IC_AUTH_DB_PASSWORD}@postgres:5432/insightfulcell
+    depends_on:
+      postgres: { condition: service_healthy }
+
+volumes:
+  pgdata:
+
+networks:
+  edge:
+    external: true
