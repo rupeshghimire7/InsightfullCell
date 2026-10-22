@@ -1,10 +1,12 @@
 # InsightfulCell
 
-**Upload a table. Get a cleaned dataset, tested findings and a plain-language report in which every number shows its work.**
+**Your one stop solution for data analysis.**
+
+*Bring a spreadsheet. Leave with clear answers, charts and a report your team can check.*
+
+---
 
 InsightfulCell is a web platform for analysing your own data without a statistics background and without trusting a black box. You upload a spreadsheet (CSV, TSV, Excel, Parquet or JSON). It reviews and cleans the data with you, tests every question with proper statistics, and writes a report, a dashboard and checked charts and maps. Every figure links back to a stored, unchangeable fact, so you can always see where it came from. Your raw rows are never sent to an AI model.
-
-> **Status:** release 0.6.0. Phases 1–6 of 8 are built and tested: sign-in, uploads, the analysis pipeline, narration, and the report and dashboard. Phase 7 (asking questions about your data) and Phase 8 (production operations) are next. See [Project status and roadmap](#project-status-and-roadmap).
 
 ---
 
@@ -32,7 +34,9 @@ InsightfulCell is a web platform for analysing your own data without a statistic
 
 ## Overview
 
-### The idea
+***Concept IDEATION**: If we can have a model that can handle any text (LLMs) and even systems that can predict any tabular data without needing to retrain it again and again, why not have a system that can provide a detailed analysis while providing data privacy and without needing data analytics specialist.*
+
+### Product idea
 
 People with a spreadsheet want answers, not a statistics course. The tools available today make them choose between two bad options:
 
@@ -47,7 +51,9 @@ InsightfulCell started from one question: *can an analysis be as easy as asking 
 
 ### The product vision
 
-> Upload a CSV → reviewed cleaning → signal-gated features → statistically controlled insight mining → verified, narrated report → grounded Q&A. **Every number shown to a user must trace to an immutable fact.**
+> Upload a CSV → reviewed cleaning → signal-gated features → statistically controlled insight mining → verified, narrated report.
+
+**Every number shown to a user must trace to an immutable fact.**
 
 ### What it does
 
@@ -81,8 +87,8 @@ When two goals conflict, the higher one wins:
 ## Features
 
 **Sign-in and workspaces**
-- Email and password registration and sign-in, optional Google sign-in, and email sign-in links (built, off until a mail domain is verified).
-- Every user gets an organisation (workspace); data never crosses organisations.
+- Email and password registration and sign-in, optional- email sign-in links (built, off until a mail domain is verified).
+- Every user gets a workspace; data never goes out.
 
 **Uploads**
 - CSV, TSV, Excel (`.xlsx`), Parquet and JSON / JSON Lines, up to 250 MB.
@@ -235,7 +241,7 @@ domain  ←  ingestion, storage, auth  ←  db  ←  services  ←  api
 | `storage` | The object-store port and its S3 adapter (presigned URLs, multipart uploads). |
 | `auth` | Token verification against the web app's published public keys. |
 | `db` | SQLAlchemy models, engine, and the tenant transaction that sets the organisation. |
-| `services` | Use cases: uploads, datasets, runs, plans, reports, data rows, drill-downs, deletion, the run executor and maintenance. |
+| `services` | Use cases: uploads, datasets, runs, plans, reports, data rows, deletion, the run executor and maintenance. |
 | `api` | FastAPI app, routers, schemas, middleware and problem responses. |
 | `engine` | The pure analysis engine: semantics, profiling, schema card, planning, cleaning, analysis, geo. |
 | `pipeline` | Stage wrappers and checkpoints around the engine. |
