@@ -1,12 +1,12 @@
-# InsightfulCell: every number shows its work
+# InsightfulCell: your one stop solution for data analysis
 
-**CDU IT Code Fair 2026 · presentation contents, demo script and feature tour**
+CDU IT Code Fair 2026 · presentation contents, demo script and feature tour
 
 Rupesh Ghimire (project owner and lead developer) · Sandesh Prasad Paudel (deployment)
 
-Live at **<https://app.ic.rgproject.me>** (AWS) · Slides: [`InsightfulCell_CodeFair_2026.pptx`](InsightfulCell_CodeFair_2026.pptx) (25 slides, speaker notes on every slide)
+Live at <https://app.ic.rgproject.me> (AWS) · Slides: [`InsightfulCell_CodeFair_2026.pptx`](InsightfulCell_CodeFair_2026.pptx) (25 slides, speaker notes on every slide)
 
-> Every screenshot below was captured with Playwright on the **live AWS deployment on 22 October 2026**, using a fresh account and two files from `sample_data/`: `4_analysis/01_ecommerce_orders.csv` (5,000 rows × 19 columns) and `3_complex/field_service_jobs.csv` (25 rows × 50 deliberately messy columns, with personal data). On that date the live site had **no language model configured**, so plans come from the rules planner and sentences from templates. Everything shown works without AI.
+> Every screenshot below was captured with Playwright on the live AWS deployment on 22 October 2026, using a fresh account and two files from `sample_data/`: `4_analysis/01_ecommerce_orders.csv` (5,000 rows × 19 columns) and `3_complex/field_service_jobs.csv` (25 rows × 50 deliberately messy columns, with personal data). On that date the live site had no language model configured, so plans come from the rules planner and sentences from templates. Everything shown works without AI.
 
 ---
 
@@ -25,31 +25,33 @@ Live at **<https://app.ic.rgproject.me>** (AWS) · Slides: [`InsightfulCell_Code
 
 | Part | Slides | Time | Who |
 |---|---|---|---|
-| Opening: problem, research question, approach | 1–3 | 3 min | Rupesh |
-| **Live demo** (share screen to app.ic.rgproject.me) | 4, then back to 5–11 if the network fails | 5 min | Rupesh |
-| How it works: architecture, pipeline, statistics, security | 12–17 | 4 min | Rupesh |
+| Opening: problem, research question, approach | 1 to 3 | 3 min | Rupesh |
+| Live demo (share screen to app.ic.rgproject.me) | 4, then back to 5 to 11 if the network fails | 5 min | Rupesh |
+| How it works: architecture, pipeline, statistics, security | 12 to 17 | 4 min | Rupesh |
 | Deployment on AWS | 18 | 1 min | Sandesh |
-| Quality, business prospect, limitations, roadmap | 19–24 | 4 min | Both |
+| Quality, business prospect, limitations, roadmap | 19 to 24 | 4 min | Both |
 | Close and questions | 25 | 3+ min | Both |
 
-**Before you start:** sign in to the live site in a browser tab, keep `sample_data/4_analysis/01_ecommerce_orders.csv` and `sample_data/3_complex/field_service_jobs.csv` at hand, and have the deck open in presenter view (speaker notes). Slides 5–11 repeat the demo with screenshots, so the talk still works offline.
+Before you start: sign in to the live site in a browser tab, keep `sample_data/4_analysis/01_ecommerce_orders.csv` and `sample_data/3_complex/field_service_jobs.csv` at hand, and have the deck open in presenter view (speaker notes). Slides 5 to 11 repeat the demo with screenshots, so the talk still works offline.
 
-**Demo script (slide 4):**
+Demo script (slide 4):
 
-1. Upload `01_ecommerce_orders.csv`. Keep **Automatic** and click **Analyse newest version**. The steps stream live; the report is ready in about 15 seconds.
-2. Upload `field_service_jobs.csv`, choose **Manual**, analyse. Show the 5 masked personal-data columns, then **Review changes**: rows affected, before and after, **Apply all**, **Approve and continue**.
-3. Open the **Report** of the orders file. Click the **F13** chip: test, interval, p and q values, rows, content hash.
-4. Open the **Dashboard**: tiles with evidence badges, checked charts, the Australia map. Click **Show the numbers and explore a region**, then **Explore** Queensland.
-5. Open **See the data** and the **Download** menu (PDF, Word, Markdown, HTML).
-6. Optional: **Show recipe** → *What the planning model was shown*.
+1. Upload `01_ecommerce_orders.csv`. Keep Automatic and click Analyse newest version. The steps stream live; the report is ready in about 15 seconds.
+2. Upload `field_service_jobs.csv`, choose Manual, analyse. Show the 5 masked personal-data columns, then Review changes: rows affected, before and after, Apply all, Approve and continue.
+3. Open the Report of the orders file. Click the F13 chip: test, interval, p and q values, rows, content hash.
+4. Open the Dashboard: tiles with evidence badges, checked charts, the Australia map. Click Show the numbers and explore a region, then Explore Queensland.
+5. Open See the data and the Download menu (PDF, Word, Markdown, HTML).
+6. Optional: Show recipe → *What the planning model was shown*.
 
 ---
 
 ## 2. The pitch, slide by slide
 
-### Slide 1 · Every number shows its work
+### Slide 1 · Your one stop solution for data analysis
 
-A verified, privacy-first platform that turns a spreadsheet into tested findings, checked charts and maps, and a plain-language report. Every figure links to a stored, unchangeable fact you can inspect. Live on AWS today.
+Bring a spreadsheet. Leave with clear answers, charts and a report your team can check.
+
+InsightfulCell turns a spreadsheet into tested findings, checked charts and maps, and a plain-language report. You need no statistics background and no data analytics specialist. Every figure links to a stored fact that cannot change, and you can open it to see where the number came from. We respect your data privacy: raw rows never reach an AI model. Live on AWS today.
 
 ### Slide 2 · Spreadsheet owners face a trust gap
 
@@ -58,21 +60,23 @@ A verified, privacy-first platform that turns a spreadsheet into tested findings
 | Strength | Fluent, fast, no expertise needed | Accurate and reproducible |
 | Weakness | Numbers can be invented with no way to check; cleaning is invisible; raw rows go to a third-party model | Need an analyst to prepare the data and to know which questions to ask; slow to set up |
 
-**Research question:** *Can analysing your own data be as easy as asking an assistant, and as trustworthy as the work of a careful analyst?*
+Research question: *Can analysing your own data be as easy as asking an assistant, and as trustworthy as the work of a careful analyst?*
+
+The idea behind it: language models can handle almost any text, and newer systems can predict on tabular data without being retrained each time. So why not a system that gives a detailed analysis, keeps the data private and needs no data analytics specialist?
 
 ### Slide 3 · Our answer: a strict division of labour
 
-- **Code computes.** Every statistic, test, chart value and map value comes from deterministic code (DuckDB, NumPy, SciPy).
-- **The model only plans and writes.** A language model may suggest questions and phrase sentences. It never writes a number: it writes slots that the engine fills.
-- **Everything is checked.** Plans are validated, charts recomputed, and every sentence verified against its facts.
+- Code computes. Every statistic, test, chart value and map value comes from deterministic code (DuckDB, NumPy, SciPy).
+- The model only plans and writes. A language model may suggest questions and phrase sentences. It never writes a number: it writes slots that the engine fills.
+- Everything is checked. Plans are validated, charts recomputed, and every sentence verified against its facts.
 
-Tenets in priority order (the higher wins on conflict): **1 Correctness over fluency › 2 Traceability › 3 Privacy: raw rows never reach a model › 4 Simplicity of operation.**
+Tenets in priority order (the higher wins on conflict): 1 Correctness over fluency › 2 Traceability › 3 Privacy: raw rows never reach a model › 4 Simplicity of operation.
 
 ### Slide 4 · Live demo
 
 Switch to the live site and follow the demo script above.
 
-### Slides 5–11 · The product (demo backup)
+### Slides 5 to 11 · The product (demo backup)
 
 Slide 12 is the "How it works" divider; slide 20 is the "Business prospect" divider.
 
@@ -121,13 +125,13 @@ flowchart LR
 
 ### Slide 15 · Numbers come from facts, never from the model
 
-1. **Fact stored**: numbers, test, interval, p and q values, provenance, content hash. Append-only.
-2. **Slots, not numbers**: the writer (model or template) writes `{F13.r}`, not `0.88`.
-3. **Engine fills**: the number is copied from the fact.
-4. **Verifier checks**: citations, stray numbers, direction, strength words against effect size, causal language, missing conditions. A failing sentence is rewritten once, then replaced by the fact's own statement.
+1. Fact stored: numbers, test, interval, p and q values, provenance, content hash. Append-only.
+2. Slots, not numbers: the writer (model or template) writes `{F13.r}`, not `0.88`.
+3. Engine fills: the number is copied from the fact.
+4. Verifier checks: citations, stray numbers, direction, strength words against effect size, causal language, missing conditions. A failing sentence is rewritten once, then replaced by the fact's own statement.
 
 > Model writes: *Unit price and Revenue rise together: the link is strong (rank correlation* `{F13.r}`*).*
-> Reader sees: *Unit price and Revenue rise together: the link is strong (rank correlation **0.88**; 95% interval 0.87 to 0.89).* `F13`
+> Reader sees: *Unit price and Revenue rise together: the link is strong (rank correlation 0.88; 95% interval 0.87 to 0.89).* `F13`
 
 Evaluation: the corrupted-narrator suite plants 31 errors; all 31 are rejected and 11 clean sentences kept.
 
@@ -135,10 +139,10 @@ Evaluation: the corrupted-narrator suite plants 31 errors; all 31 are rejected a
 
 | Number | Meaning |
 |---|---|
-| **5%** | False-discovery rate controlled across the whole run (Benjamini–Hochberg), not per test |
-| **19** | Random shuffles a derived feature must beat before it is kept (signal gate) |
-| **10** | Strongest findings re-tested on lossless-only data, so cleaning cannot create them |
-| **9** | Miners (differences, relationships, trends, drivers, outliers…); every test is logged |
+| 5% | False-discovery rate controlled across the whole run (Benjamini-Hochberg), not per test |
+| 19 | Random shuffles a derived feature must beat before it is kept (signal gate) |
+| 10 | Strongest findings re-tested on lossless-only data, so cleaning cannot create them |
+| 9 | Miners (differences, relationships, trends, drivers, outliers…); every test is logged |
 
 Findings are tiered honestly (Strong evidence, Supported, Not reliable, Descriptive), intervals accompany every estimate, and causal wording is rejected.
 
@@ -179,10 +183,10 @@ flowchart LR
 
 | Measure | Value |
 |---|---|
-| Backend tests (unit + integration on real PostgreSQL and S3) | **719** collected; 530 unit tests re-run on 22 Oct 2026 and pass |
-| Backend line coverage | **93.02%** (full gate, 21 Oct 2026) |
-| Frontend tests (each component with an axe accessibility check) | **422** (21 Oct 2026) |
-| Architecture contracts (`import-linter`) | **6** |
+| Backend tests (unit + integration on real PostgreSQL and S3) | 719 collected; 530 unit tests re-run on 22 Oct 2026 and pass |
+| Backend line coverage | 93.02% (full gate, 21 Oct 2026) |
+| Frontend tests (each component with an axe accessibility check) | 422 (21 Oct 2026) |
+| Architecture contracts (`import-linter`) | 6 |
 | Other gates | ruff, prettier, eslint (jsx-a11y), mypy strict, TypeScript strict, migrations up/down/up, OpenAPI → TypeScript drift, Playwright journeys, pip-audit, pnpm audit, secret scan |
 
 ### Slide 21 · Positioned where trust matters more than flair
@@ -198,7 +202,7 @@ flowchart LR
 
 *Our qualitative assessment, not a measured benchmark.*
 
-**Who it is for:** small and medium businesses without an analyst; NGOs and the public sector with sensitive records; students and researchers who need auditable statistics; consultants who need evidence for a client.
+Who it is for: small and medium businesses without an analyst; NGOs and the public sector with sensitive records; students and researchers who need auditable statistics; consultants who need evidence for a client.
 
 ### Slide 22 · A proposed model: AI cost stays optional
 
@@ -208,24 +212,24 @@ flowchart LR
 | Pro | Per seat | Model-planned questions and narration; per-person hard spend cap; priority processing |
 | Team / private | Per organisation | Workspaces and roles; self-hosted in the customer's cloud; audit log and SSO (roadmap) |
 
-Unit economics: the baseline design targets about **US$0.26** of model cost per run; rules-only runs (the live site today) cost **$0** in model fees; one host runs the whole stack. *Proposed; pricing not yet validated.*
+Unit economics: the baseline design targets about US$0.26 of model cost per run; rules-only runs (the live site today) cost $0 in model fees; one host runs the whole stack. *Proposed; pricing not yet validated.*
 
 ### Slide 23 · Honest limitations, and what we learned
 
 | Limitation | Status |
 |---|---|
-| Automatic cleaning can still change data silently in a few cases (0–100 percentage columns, decimal commas, close-sounding names) | Open (system test findings F-02, F-03, F-05). Use **Manual** review for sensitive work |
+| Automatic cleaning can still change data silently in a few cases (0 to 100 percentage columns, decimal commas, close-sounding names) | Open (system test findings F-02, F-03, F-05). Use Manual review for sensitive work |
 | Asking questions in plain language | Phase 7, not built |
 | Production is one small server | No staging, monitoring, alerts or point-in-time recovery; one analysis at a time |
 | Accounts are basic | One workspace per person; email not verified; no invitations in the UI |
 
-**What we learned:** trust is won or lost in data preparation, not in the statistics; a product that works without AI is cheaper, faster and easier to trust; rules enforced in the database and in CI beat conventions; testing on a real deployment found what local tests could not (the S3 regional host).
+What we learned: trust depends on data preparation more than on the statistics; a product that works without AI is cheaper, faster and easier to trust; rules enforced in the database and in CI beat conventions; testing on a real deployment found what local tests could not (the S3 regional host).
 
 ### Slide 24 · Roadmap
 
 | When | Milestone |
 |---|---|
-| Done | Phases 0–6: sign-in, uploads, queue, pipeline, narration, report, dashboard, exports |
+| Done | Phases 0 to 6: sign-in, uploads, queue, pipeline, narration, report, dashboard, exports |
 | 22 Oct 2026 | Live on AWS: one host, HTTPS, S3, nightly backups, CI-built images |
 | Next | Phase 7: questions about the data, with closed and verified tools |
 | Next | Phase 8: staging, monitoring, audit log, rate limits, retention |
@@ -235,7 +239,9 @@ Unit economics: the baseline design targets about **US$0.26** of model cost per 
 
 ### Slide 25 · Thank you. Questions?
 
-*Code computes, the model only writes, and every number shows its work.* Try it at **app.ic.rgproject.me**.
+*Your one stop solution for data analysis.* Try it at app.ic.rgproject.me.
+
+Why it matters: every number traces to a hashed fact that cannot change; your data stays private, because raw rows never reach an AI model; no analyst or statistics background is needed; and the product works fully without AI and is live on AWS today.
 
 ---
 
@@ -243,13 +249,11 @@ Unit economics: the baseline design targets about **US$0.26** of model cost per 
 
 ### 3.1 Sign in and register
 
-The sign-in page carries the product's promise. Password registration and Google sign-in are supported; email sign-in links are built but switched off until a mail domain is verified, and the button says so.
+The sign-in page carries the product's three lines: "Your one stop solution for data analysis.", "Bring a spreadsheet. Leave with clear answers, charts and a report your team can check." and "We respect your data privacy. Raw rows never reach an AI model." People register with an email and a password, typed twice.
 
 ![Sign-in page: "Your one stop solution for data analysis."](screenshots/01-sign-in.png)
 
-| Sign-in link explained | Registration with confirm password |
-|---|---|
-| ![Disabled email-link button with its "Not available yet" note](screenshots/01b-sign-in-link-tooltip.png) | ![Create an account form](screenshots/02-register.png) |
+![Create an account form with confirm password](screenshots/02-register.png)
 
 ### 3.2 Home: upload a file
 
@@ -265,7 +269,7 @@ Every person gets a workspace. CSV, TSV, Excel, Parquet and JSON up to 250 MB. T
 
 ### 3.3 Start an analysis: automatic or manual
 
-**Automatic** (default) applies the suggested cleaning and goes straight to the report. **Manual** stops so you can check every change first.
+Automatic (default) applies the suggested cleaning and goes straight to the report. Manual stops so you can check every change first.
 
 | Automatic (default) | Manual |
 |---|---|
@@ -277,7 +281,7 @@ Twelve stages stream to the browser over Server-Sent Events, each with its own s
 
 ![Run in progress: Running, Live](screenshots/09-live-progress.png)
 
-The finished automatic run on the live site: **5,000 rows × 19 columns in 14 seconds**, 26 questions answered, 28 facts, 13 tests, 2 reliable findings, 24 charts and 2 maps with **1,444 values recomputed and none withheld**.
+The finished automatic run on the live site: 5,000 rows × 19 columns in 14 seconds, 26 questions answered, 28 facts, 13 tests, 2 reliable findings, 24 charts and 2 maps with 1,444 values recomputed and none withheld.
 
 ![Finished run with every step's summary](screenshots/10-run-complete.png)
 
@@ -287,7 +291,7 @@ Every column gets a meaning, not just a type:
 
 ### 3.5 Personal data is found first
 
-On the messy field-service file, five columns (customer name, email, phone, licence number, street address) are detected as personal data and **masked** before anything else happens.
+On the messy field-service file, five columns (customer name, email, phone, licence number, street address) are detected as personal data and masked before anything else happens.
 
 ![Columns marked Masked · Identifier](screenshots/22-columns-personal-data.png)
 
@@ -297,7 +301,7 @@ The manual run stops: *13 cleaning changes could remove or replace values. Nothi
 
 ![Your review is needed](screenshots/21-review-needed.png)
 
-Each change shows the column, the rows it affects, how many values would become empty, and real before/after values. Decide one by one, or **Apply all** / **Keep all as is**. Undecided changes are kept as they are, and the uploaded file is never modified.
+Each change shows the column, the rows it affects, how many values would become empty, and real before/after values. Decide one by one, or Apply all / Keep all as is. Undecided changes are kept as they are, and the uploaded file is never modified.
 
 ![Review changes to field_service_jobs](screenshots/25-review-decisions.png)
 
@@ -315,7 +319,7 @@ The plan lists what the table is, the questions the analysis will answer, the cl
 |---|---|
 | ![Plan for 01_ecommerce_orders](screenshots/18-plan.png) | ![Plan for field_service_jobs](screenshots/23-plan-manual.png) |
 
-The **recipe** is a Python script that rebuilds the cleaned table and charts from the original file, generated from the stored plan. Nothing in it is written by a language model.
+The recipe is a Python script that rebuilds the cleaned table and charts from the original file, generated from the stored plan. Nothing in it is written by a language model.
 
 ![Recipe for 01_ecommerce_orders](screenshots/19-recipe.png)
 
@@ -333,7 +337,7 @@ The **recipe** is a Python script that rebuilds the cleaned table and charts fro
 
 ![Report on 01_ecommerce_orders](screenshots/12-report-top.png)
 
-Click any source chip to open the **fact inspector**: the statement, an evidence badge, the columns and rows used, the method, the 95% interval, the p-value before and after false-discovery control, and the content hash.
+Click any source chip to open the fact inspector: the statement, an evidence badge, the columns and rows used, the method, the 95% interval, the p-value before and after false-discovery control, and the content hash.
 
 ![Fact F13 in the inspector](screenshots/13-fact-inspector.png)
 
@@ -361,7 +365,7 @@ A resizable side panel shows the rows as read from the file, 100 at a time, next
 
 ### 3.12 Drill down into one group
 
-From a map or chart, **Show the numbers and explore a region**, then **Explore** one group. It runs as a new analysis of only those rows, reusing the approved plan and cleaning, and is marked *exploratory* because the group was chosen after seeing the results.
+From a map or chart, Show the numbers and explore a region, then Explore one group. It runs as a new analysis of only those rows, reusing the approved plan and cleaning, and is marked *exploratory* because the group was chosen after seeing the results.
 
 | The numbers behind the map | Confirm the exploration |
 |---|---|
@@ -373,7 +377,7 @@ From a map or chart, **Show the numbers and explore a region**, then **Explore**
 
 ### 3.13 Download and share
 
-The report downloads as **PDF**, **Word**, **Markdown** or a self-contained **HTML** file that runs no scripts. All four were downloaded from the live site.
+The report downloads as PDF, Word, Markdown or a self-contained HTML file that runs no scripts. All four were downloaded from the live site.
 
 ![Download menu](screenshots/15-download-menu.png)
 
@@ -403,32 +407,33 @@ Keyboard access, visible focus, labels, 44 px touch targets, reduced motion and 
 
 ## 4. What makes it different (USPs)
 
-1. **Numbers that cannot be hallucinated.** The writer fills slots; the engine supplies every number from a stored fact; a verifier rejects anything that does not match.
-2. **Every number shows its work.** One click from any figure to its test, interval, p and q values, rows, method and content hash. Facts are append-only and tamper-evident.
-3. **Raw rows never reach an AI.** Personal data is found first, the model sees only a masked description, and a gateway blocks any payload that still contains personal data.
-4. **Statistics done properly, automatically.** False discoveries controlled across the whole run, signal-gated features, sensitivity re-tests, honest evidence tiers, and no causal language.
-5. **The person stays in control of the data.** Measured, reversible cleaning with a review gate and a reproducible Python recipe; the upload is never modified.
-6. **AI is optional, so cost is optional.** The full product runs on deterministic code alone (as the live site does today); a model adds polish, under a hard spend cap.
-7. **Secure by construction.** Tenant isolation in the database itself (forced row-level security), short-lived tokens that never reach the browser, hardened uploads.
-8. **Cheap to run, simple to operate.** One codebase, PostgreSQL as database, queue and event bus, and a whole production stack on one free-tier AWS instance.
+1. One stop, no specialist needed. Upload a spreadsheet and get cleaning, tested findings, charts, maps and a plain-language report in one place, without a statistics background.
+2. Numbers that cannot be hallucinated. The writer fills slots; the engine supplies every number from a stored fact; a verifier rejects anything that does not match.
+3. Every number shows its work. One click from any figure to its test, interval, p and q values, rows, method and content hash. Facts are append-only and tamper-evident.
+4. Raw rows never reach an AI. Personal data is found first, the model sees only a masked description, and a gateway blocks any payload that still contains personal data.
+5. Statistics done properly, automatically. False discoveries controlled across the whole run, signal-gated features, sensitivity re-tests, honest evidence tiers, and no causal language.
+6. The person stays in control of the data. Measured, reversible cleaning with a review gate and a reproducible Python recipe; the upload is never modified.
+7. AI is optional, so cost is optional. The full product runs on deterministic code alone (as the live site does today); a model adds polish, under a hard spend cap.
+8. Secure by construction. Tenant isolation in the database itself (forced row-level security), short-lived tokens that never reach the browser, hardened uploads.
+9. Cheap to run, simple to operate. One codebase, PostgreSQL as database, queue and event bus, and a whole production stack on one free-tier AWS instance.
 
 ---
 
 ## 5. Questions to prepare for
 
-**Is this just a ChatGPT wrapper?** No. The analysis is done by our own engine (DuckDB, SciPy, scikit-learn). The live site has no model configured at all and everything works. A model, when enabled, only proposes questions and phrases sentences, and it never sees rows.
+Is this just a ChatGPT wrapper? No. The analysis is done by our own engine (DuckDB, SciPy, scikit-learn). The live site has no model configured at all and everything works. A model, when enabled, only proposes questions and phrases sentences, and it never sees rows.
 
-**How do you know the findings are real?** Each question is one statistical test, logged; the false-discovery rate is controlled at 5% across the run; the strongest findings are re-tested without lossy cleaning; and each finding gets an honest evidence tier.
+How do you know the findings are real? Each question is one statistical test, logged; the false-discovery rate is controlled at 5% across the run; the strongest findings are re-tested without lossy cleaning; and each finding gets an honest evidence tier.
 
-**What stops a wrong number reaching the report?** The writer cannot write numbers, only slots. The engine fills them from facts, and a verifier checks every sentence (31 of 31 planted errors rejected in our evaluation suite). Charts are recomputed point by point and withheld on any mismatch.
+What stops a wrong number reaching the report? The writer cannot write numbers, only slots. The engine fills them from facts, and a verifier checks every sentence (31 of 31 planted errors rejected in our evaluation suite). Charts are recomputed point by point and withheld on any mismatch.
 
-**What about personal data?** It is detected at ingest, masked in the model's description, never read by "See the data", and blocked at the model gateway. Tenants are isolated by row-level security in PostgreSQL.
+What about personal data? It is detected at ingest, masked in the model's description, never read by "See the data", and blocked at the model gateway. Tenants are isolated by row-level security in PostgreSQL.
 
-**Can it scale?** The worker scales by instance size today (one analysis at a time on the free-tier host) and by adding workers on the PostgreSQL queue later. The baseline target is managed containers and a managed database (Phase 8).
+Can it scale? The worker scales by instance size today (one analysis at a time on the free-tier host) and by adding workers on the PostgreSQL queue later. The baseline target is managed containers and a managed database (Phase 8).
 
-**What are the weaknesses?** Automatic cleaning heuristics can still change data in a few cases (use Manual mode); natural-language Q&A is not built; production is one server without monitoring. We list these openly in the project and test reports.
+What are the weaknesses? Automatic cleaning heuristics can still change data in a few cases (use Manual mode); natural-language Q&A is not built; production is one server without monitoring. We list these openly in the project and test reports.
 
-**What does it cost?** The live stack runs on a free-tier EC2 instance plus about US$3.6 a month for its public IP and cents for S3. Model cost is zero in rules-only mode; the design target with a model is about US$0.26 per run.
+What does it cost? The live stack runs on a free-tier EC2 instance plus about US$3.6 a month for its public IP and cents for S3. Model cost is zero in rules-only mode; the design target with a model is about US$0.26 per run.
 
 ---
 
