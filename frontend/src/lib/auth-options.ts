@@ -44,7 +44,7 @@ export function buildAuthOptions(pool: Pool, getApi: () => OrganizationApi = unb
       maxPasswordLength: PASSWORD_MAX_LENGTH,
     },
     socialProviders:
-      env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+      env.GOOGLE_SIGN_IN === "on" && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
         ? { google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET } }
         : {},
     session: {

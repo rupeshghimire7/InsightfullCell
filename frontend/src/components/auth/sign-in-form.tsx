@@ -46,8 +46,11 @@ const ORIGIN_REFUSED =
  * switched off (the button is shown disabled, with a note saying so).
  */
 export type LinkDelivery = "log" | "resend-test" | "email" | "off";
-/** `setup-needed`: shown disabled with setup steps (development only). */
-export type GoogleSignIn = "on" | "setup-needed" | "off";
+/**
+ * `setup-needed`: shown disabled with setup steps (development only). `disabled`: switched off
+ * (`GOOGLE_SIGN_IN=off`), shown disabled with a note saying so. `off`: not shown.
+ */
+export type GoogleSignIn = "on" | "setup-needed" | "disabled" | "off";
 
 export interface SignInFormProps {
   mode?: SignInMode;
@@ -284,13 +287,13 @@ export function SignInForm({
           </div>
           {google !== "off" ? (
             <GoogleButton
-              setupNeeded={google === "setup-needed"}
+              state={google}
               busy={busy === "google"}
               disabled={busy !== null && busy !== "google"}
               onClick={onGoogle}
             />
           ) : null}
-          <MagicLinkButton delivery={linkDelivery} mode={mode} />
+          <MagicLinkButton delivery={linkDelivery} mode={mode} googleOn={google === "on"} />
         </div>
       </form>
 
@@ -398,7 +401,15 @@ function Field({
  * (WCAG 1.4.13); screen readers read it through `aria-describedby`. Switched off, it is a button
  * that stays visible but inert (`aria-disabled`), and the same note says links are not available.
  */
-function MagicLinkButton({ delivery, mode }: { delivery: LinkDelivery; mode: SignInMode }) {
+function MagicLinkButton({
+  delivery,
+  mode,
+  googleOn,
+}: {
+  delivery: LinkDelivery;
+  mode: SignInMode;
+  googleOn: boolean;
+}) {
   const noteId = useId();
   const testing = delivery !== "email";
   const off = delivery === "off";
@@ -462,7 +473,7 @@ function MagicLinkButton({ delivery, mode }: { delivery: LinkDelivery; mode: Sig
           {off ? (
             <p className="mt-1">
               Sign-in links arrive once email delivery is set up. For now, sign in with your
-              password or Google.
+              {googleOn ? " password or Google." : " password."}
             </p>
           ) : delivery === "log" ? (
             <p className="mt-1">
@@ -481,20 +492,21 @@ function MagicLinkButton({ delivery, mode }: { delivery: LinkDelivery; mode: Sig
   );
 }
 
-/** Google sign-in. Before it is configured (development only) it is shown disabled, with the
- * steps to set it up, so the option is not silently missing. */
+/** Google sign-in. Switched off, or before it is configured (development only), it is shown
+ * disabled with a note (or the steps to set it up), so the option is not silently missing. */
 function GoogleButton({
-  setupNeeded,
+  state,
   busy,
   disabled,
   onClick,
 }: {
-  setupNeeded: boolean;
+  state: Exclude<GoogleSignIn, "off">;
   busy: boolean;
   disabled: boolean;
   onClick: () => void;
 }) {
   const noteId = useId();
+  const unavailable = state !== "on";
   return (
     <div>
       <Button
@@ -502,12 +514,16 @@ function GoogleButton({
         className="w-full"
         onClick={onClick}
         loading={busy}
-        disabled={setupNeeded || disabled}
-        aria-describedby={setupNeeded ? noteId : undefined}
+        disabled={unavailable || disabled}
+        aria-describedby={unavailable ? noteId : undefined}
       >
         Continue with Google
       </Button>
-      {setupNeeded ? (
+      {state === "disabled" ? (
+        <p id={noteId} className="mt-1 text-center text-xs text-muted">
+          Google sign-in isn’t available yet. Sign in with your password.
+        </p>
+      ) : state === "setup-needed" ? (
         <p id={noteId} className="mt-1 text-center text-xs text-muted">
           Not set up yet: add <code className="font-mono">GOOGLE_CLIENT_ID</code> and{" "}
           <code className="font-mono">GOOGLE_CLIENT_SECRET</code> to{" "}

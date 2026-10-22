@@ -3,6 +3,7 @@ import type { Env } from "@/lib/env";
 
 /** Which sign-in options the page offers, from configuration. Pure, so it is unit-tested. */
 export function googleSignIn(env: Env): GoogleSignIn {
+  if (env.GOOGLE_SIGN_IN !== "on") return "disabled";
   if (env.GOOGLE_CLIENT_ID) return "on";
   return env.APP_ENV === "production" ? "off" : "setup-needed";
 }

@@ -268,6 +268,13 @@ describe("SignInForm: sign-in links switched off", () => {
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
     expect(offButton()).toHaveAccessibleDescription(/Not available yet/);
   });
+  it("points only to the password while Google is switched off too", async () => {
+    const user = userEvent.setup();
+    form({ linkDelivery: "off", google: "disabled" });
+    await user.hover(offButton());
+    expect(screen.getByRole("tooltip")).toHaveTextContent("sign in with your password.");
+    expect(screen.getByRole("tooltip")).not.toHaveTextContent("Google");
+  });
 });
 
 describe("SignInForm: Google and link errors", () => {
@@ -284,6 +291,14 @@ describe("SignInForm: Google and link errors", () => {
     const google = screen.getByRole("button", { name: "Continue with Google" });
     expect(google).toBeDisabled();
     expect(google).toHaveAccessibleDescription(/GOOGLE_CLIENT_ID.*GOOGLE_CLIENT_SECRET/);
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("shows Google disabled, with a note, while it is switched off", async () => {
+    const { container } = form({ google: "disabled" });
+    const google = screen.getByRole("button", { name: "Continue with Google" });
+    expect(google).toBeDisabled();
+    expect(google).toHaveAccessibleDescription(/isn’t available yet/);
     expect(await axe(container)).toHaveNoViolations();
   });
 

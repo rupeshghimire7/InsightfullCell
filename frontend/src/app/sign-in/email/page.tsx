@@ -43,7 +43,7 @@ export default async function EmailLinkPage({
             : "We’ll send a link that signs you in, with no password. New here? It creates your account too."}
         </p>
         {delivery === "off" ? (
-          <p>Sign in with your password or Google for now.</p>
+          <p>Sign in with your password for now.</p>
         ) : (
           <EmailLinkForm delivery={delivery} expiresInMinutes={MAGIC_LINK_TTL_SECONDS / 60} />
         )}

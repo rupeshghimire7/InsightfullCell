@@ -223,12 +223,23 @@ describe("sign-in options", () => {
     );
   });
 
-  it("offers Google when configured, explains setup in development, hides it in production", () => {
-    expect(googleSignIn(env({ GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "s" }))).toBe("on");
-    expect(googleSignIn(env())).toBe("setup-needed");
+  it("shows Google disabled until switched on, even when configured", () => {
+    expect(googleSignIn(env())).toBe("disabled");
+    expect(googleSignIn(env({ GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "s" }))).toBe(
+      "disabled",
+    );
+  });
+
+  it("once on: offers Google when configured, explains setup in development, hides it in production", () => {
+    const google = { GOOGLE_SIGN_IN: "on" };
+    expect(
+      googleSignIn(env({ ...google, GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "s" })),
+    ).toBe("on");
+    expect(googleSignIn(env(google))).toBe("setup-needed");
     expect(
       googleSignIn(
         env({
+          ...google,
           ...resend,
           APP_ENV: "production",
           BETTER_AUTH_URL: "https://cell.example",

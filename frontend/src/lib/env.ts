@@ -49,6 +49,11 @@ const schema = z
     /** Browser-facing origin of object storage; allowed by the CSP `connect-src`. */
     S3_PUBLIC_ORIGIN: z.url(),
 
+    /**
+     * "Continue with Google". Off: the button is shown disabled with a note, and the server does
+     * not offer Google at all, even when the credentials below are set.
+     */
+    GOOGLE_SIGN_IN: z.enum(["on", "off"]).default("off"),
     GOOGLE_CLIENT_ID: optional(z.string().min(1)),
     GOOGLE_CLIENT_SECRET: optional(z.string().min(1)),
 

@@ -33,6 +33,14 @@ describe("buildAuthOptions", () => {
     vi.resetModules();
   });
 
+  it("offers Google only when switched on and configured", async () => {
+    const google = { GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "s" };
+    expect((await options(google)).socialProviders).toEqual({});
+    expect((await options({ ...google, GOOGLE_SIGN_IN: "on" })).socialProviders).toHaveProperty(
+      "google",
+    );
+  });
+
   it("offers no sign-in link endpoint while links are off (the default)", async () => {
     expect(await pluginIds({})).not.toContain("magic-link");
   });
