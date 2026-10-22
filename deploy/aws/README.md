@@ -294,7 +294,7 @@ same passwords, with your backups.
 | `api` exits: "must be https in production" | A URL in `backend.env` is still `http://` |
 | `api` exits: "S3_ENDPOINT_URL needs S3_PUBLIC_ENDPOINT_URL" | `S3_ENDPOINT_URL=` is in `backend.env`. Remove the whole line |
 | Upload fails, browser console says CORS | Bucket CORS missing, or `AllowedOrigins` doesn't match `https://app.ic.rgproject.me` exactly |
-| Upload blocked by Content-Security-Policy | `S3_PUBLIC_ORIGIN` doesn't match the host in the presigned URL (compare it in the Network tab) |
+| Upload blocked by Content-Security-Policy | `S3_PUBLIC_ORIGIN` doesn't match the host the API signs. A us-east-1 bucket is `https://<bucket>.s3.amazonaws.com`, with no region in the host. Compare it with `curl -sI https://app.ic.rgproject.me/sign-in \| grep -io "connect-src[^;]*"` |
 | Worker log: `NoCredentialsError` / storage unavailable | Instance role not attached, or metadata hop limit still 1 (EC2 → Actions → Instance settings → Modify instance metadata options) |
 | Analyses stay "queued" | The worker isn't running: `docker compose ps worker`, `docker compose logs worker` |
 | Sign-in: "403 Invalid origin" | The site was opened at an address other than `BETTER_AUTH_URL` |

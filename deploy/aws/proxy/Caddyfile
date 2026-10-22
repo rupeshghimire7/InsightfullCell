@@ -1,7 +1,7 @@
 # One block per public hostname. After editing: docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
 {
 	# Let's Encrypt sends certificate expiry warnings here.
-	email sandeshpaudel81@gmail.com
+	email you@example.com
 }
 
 # --- InsightfulCell (deploy/aws in the InsightfullCell repo)
