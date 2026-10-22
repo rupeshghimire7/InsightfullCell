@@ -2,6 +2,7 @@
   "name": "insightfulcell-frontend",
   "version": "0.6.0",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "engines": {
     "node": ">=22"

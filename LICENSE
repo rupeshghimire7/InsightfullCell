@@ -1,0 +1,57 @@
+InsightfulCell Proprietary Licence
+
+Copyright (c) 2026 Rupesh Ghimire. All rights reserved.
+
+InsightfulCell, including its source code, documentation, designs, sample data and
+any other material in this repository (together, the "Software"), is the property
+of Rupesh Ghimire (the "Owner"). The Software is not open source. It is licensed,
+not sold, and only on the terms below.
+
+1. Permitted without asking
+
+   You may view and read the Software, and run it locally, solely to evaluate it
+   or to review it in an academic or competition setting.
+
+2. Requires the Owner's prior written permission
+
+   Any other use requires the Owner's prior written permission, including to:
+
+   a. copy, modify, adapt, translate or create derivative works of the Software;
+   b. distribute, publish, sublicense, sell, rent or lend the Software or any copy;
+   c. deploy, host or offer the Software, or any part of it, as a service to
+      others; or
+   d. use the Software, or any part of it, in another project or product.
+
+3. No commercial use
+
+   The Software must not be used for any commercial purpose, directly or
+   indirectly, including in a product or service that is sold or generates
+   revenue, or in work done for a paying client. Commercial use is possible only
+   under a separate written agreement signed by the Owner.
+
+4. Contributions
+
+   Contributors keep credit for their work, as recorded in the README. Unless
+   agreed otherwise in writing, contributions to this repository are made under
+   this licence, and the Owner may use them as part of the Software.
+
+5. Third-party components
+
+   The Software uses third-party open-source libraries and data (for example
+   Natural Earth boundaries). Each is governed by its own licence, and nothing in
+   this licence restricts rights those licences grant.
+
+6. No warranty and no liability
+
+   The Software is provided "as is", without warranty of any kind, express or
+   implied, including fitness for a particular purpose and non-infringement. To
+   the fullest extent permitted by law, the Owner is not liable for any claim,
+   damages or other liability arising from the Software or its use.
+
+7. Termination
+
+   Any use outside these terms ends your permission to use the Software
+   automatically. You must then stop using it and delete every copy you hold.
+
+To ask for permission or a commercial licence, contact the Owner, Rupesh Ghimire,
+through this repository's owner profile.
