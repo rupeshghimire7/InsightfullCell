@@ -35,9 +35,9 @@ Conventions: ✅ built and tested · 🟠 built, not yet through a full recorded
 - **R4 Security lens:** trust boundary, identity, tenant isolation, data exposure, abuse limits.
 - **R5 Business value:** what the component buys a user or an operator.
 
-### 0.4 Status (21 Oct 2026)
+### 0.4 Status (22 Oct 2026)
 
-Phases 0–6 are done (✅, v0.6.0), plus iteration 12 (malformed-CSV check, review modes, Markdown/Word/PDF exports, model quota handling, token exposure fixes; ADR-036) and iteration 13 (deleting runs and datasets, "waiting for a worker"; ADR-037). The Gemini default models changed on 17 Oct 2026 to `gemini-3.5-flash-lite` / `gemini-3.1-flash-lite` (✅: a live run reached the report on 19 Oct 2026, after the F-01 fix). Since then: a deep system test with a test report (iteration 16; its F-01, every model-planned run failing, is fixed), sharing the local stack through one tunnel (iterations 17–18, ADR-038, ADR-039: §4) and "See the data" (iteration 19, ADR-040: §31.1). Iteration 24 (20–21 Oct) added a 2 MiB body cap on the web proxy, self-hosted S3 in production behind an https public URL, and an Azure deployment prepared and validated locally only. The commits of 21 Oct 2026 added (✅ unit and integration tests, no live paid call recorded) a **backup model** and a **hard spend cap** with a spend ledger (§17.7, migrations `0011`–`0012`), an **admin dashboard** behind a key (§4.1), and sign-in changes: the email link on its own page for listed addresses only, confirm password and show password (§3). No ADR has been written for these yet. Not built (⬜): questions about the data (tiered Q&A, Phase 7), hosted operations and observability (Phase 8), embeddings and fused search (Release 2). Part 11 lists every gap.
+Phases 0–6 are done (✅, v0.6.0), plus iteration 12 (malformed-CSV check, review modes, Markdown/Word/PDF exports, model quota handling, token exposure fixes; ADR-036) and iteration 13 (deleting runs and datasets, "waiting for a worker"; ADR-037). The Gemini default models changed on 17 Oct 2026 to `gemini-3.5-flash-lite` / `gemini-3.1-flash-lite` (✅: a live run reached the report on 19 Oct 2026, after the F-01 fix). Since then: a deep system test with a test report (iteration 16; its F-01, every model-planned run failing, is fixed), sharing the local stack through one tunnel (iterations 17–18, ADR-038, ADR-039: §4) and "See the data" (iteration 19, ADR-040: §31.1). Iteration 24 (20–21 Oct) added a 2 MiB body cap on the web proxy, self-hosted S3 in production behind an https public URL, and an Azure deployment recipe, validated locally and since superseded. The commits of 21 Oct 2026 added (✅ unit and integration tests, no live paid call recorded) a **backup model** and a **hard spend cap** with a spend ledger (§17.7, migrations `0011`–`0012`), an **admin dashboard** behind a key (§4.1), and sign-in changes: the email link on its own page for listed addresses only, confirm password and show password (§3). No ADR has been written for these yet. **On 22 Oct 2026 the application went live on AWS** (`deploy/aws`, §33.1): one EC2 instance running PostgreSQL, the API, the worker and the web app under Docker Compose behind a Caddy HTTPS proxy, uploads in Amazon S3 through the instance role, images built by GitHub Actions; the only code change it needed was signing upload URLs for the bucket's regional host (`storage/s3.py`). A Playwright journey on the live site the same day passed end to end with no language model configured there (rules planner and template sentences). Not built (⬜): questions about the data (tiered Q&A, Phase 7), hosted operations and observability (Phase 8), embeddings and fused search (Release 2). Part 11 lists every gap.
 
 ---
 
@@ -108,7 +108,7 @@ flowchart TB
 |---|---|
 | Browser → storage directly for file bytes | The API never carries 250 MB uploads: cheaper and faster, and it scales with storage, not API workers |
 | BFF between browser and API | A leaked browser cannot leak an API credential; one place enforces allow-lists and origins |
-| Relays only for a `localhost` target seen from another address | Testers can use one tunnel; a real deployment keeps direct uploads and streams |
+| Relays only for a `localhost` target seen from another address | Testers can use one tunnel; a real deployment (the AWS host) keeps direct uploads and streams |
 | Worker separate from API, same image | Heavy parsing and model calls cannot starve request handling; one build to ship |
 | PostgreSQL as queue and event bus | One system to back up, monitor and secure; run state and job state commit atomically |
 | Engine independent of frameworks | Analysis logic is unit-testable, runnable from a CLI, and reviewable without infrastructure knowledge |
@@ -1495,8 +1495,43 @@ flowchart LR
 - **Verification results** give the rejection rate per check and prompt version.
 - **Test log** holds every statistical test with its q-value.
 - **Health** `/healthz` and `/readyz` (schema revision check).
-- **Delivery gates:** `make check` mirrors CI; `make e2e` runs five browser journeys with `LLM_PROVIDER=none`. Git hooks only format staged files and scan for secrets on commit; push runs nothing (iteration 17). Last full gate (iteration 16, 18 Oct): 668 backend tests (92.88 %), 369 frontend tests, 5/5 journeys. Latest run (19 Oct, iterations 18–21): 496 backend unit and 179 integration tests, 391 frontend tests, lint, types, import contracts and build pass; a live Gemini run through an ngrok tunnel reached the report; `make check` as a whole and `make e2e` not re-run. Latest full gate (21 Oct 2026): 715 backend tests (93.02 %), 422 frontend tests, lint, types, contracts, migrations to `0012`, build, pnpm audit and secret scan pass; **`pip-audit` failed** on 9 new advisories in `certifi 2026.7.22` and `pillow 12.3.0` in the committed lock (the uncommitted `uv.lock` update to `certifi 2026.10.19` / `pillow 13.0.0` passes `pip-audit`; tests not re-run on it); `make e2e` (now 5 journeys + 2 admin tests) and live model calls not run.
+- **Delivery gates:** `make check` mirrors CI; `make e2e` runs five browser journeys with `LLM_PROVIDER=none`. Git hooks only format staged files and scan for secrets on commit; push runs nothing (iteration 17). Last full gate (iteration 16, 18 Oct): 668 backend tests (92.88 %), 369 frontend tests, 5/5 journeys. Latest run (19 Oct, iterations 18–21): 496 backend unit and 179 integration tests, 391 frontend tests, lint, types, import contracts and build pass; a live Gemini run through an ngrok tunnel reached the report; `make check` as a whole and `make e2e` not re-run. Latest full gate (21 Oct 2026): 715 backend tests (93.02 %), 422 frontend tests, lint, types, contracts, migrations to `0012`, build, pnpm audit and secret scan pass; **`pip-audit` failed** on 9 new advisories in `certifi 2026.7.22` and `pillow 12.3.0` in the committed lock (a trial `uv.lock` update to `certifi 2026.10.19` / `pillow 13.0.0` passed `pip-audit`, but it was not committed: the lock on `main` still pins the old versions on 22 Oct); `make e2e` (now 5 journeys + 2 admin tests) and live model calls not run. **22 Oct 2026 (AWS deployment commits):** 719 backend tests are collected (the 4 new ones check the regional S3 host for upload URLs); the 530 backend unit tests pass. The integration suite, the frontend suite, `make check` and `make e2e` were not re-run, because the only application change is in `storage/s3.py` and the Dockerfile's build heap. Instead, the deployed site was driven end to end with Playwright (register, upload, duplicate check, automatic and manual runs, review, report, inspector, "See the data", dashboard, maps, all four downloads) and every step passed.
 - **Users in the local database:** `scripts/db-users.sh`.
+
+#### 33.1 The production host (AWS, 22 Oct 2026)
+
+```mermaid
+flowchart TB
+    dev["git push to main"] --> gha["GitHub Actions: Images<br/>api · web · web-tools<br/>tags: latest + commit SHA"]
+    gha --> ghcr[("ghcr.io<br/>public packages")]
+    subgraph host["EC2 t3.micro · Ubuntu 24.04 · 4 GB swap"]
+        caddy["Caddy (proxy/)<br/>:80 :443 :443/udp<br/>auto-HTTPS"]
+        web["ic-web"]
+        api["ic-api"]
+        worker["worker (concurrency 1)"]
+        pg[("postgres:18<br/>volume pgdata")]
+        caddy -- "app.ic.rgproject.me" --> web
+        caddy -- "api.ic.rgproject.me<br/>flush_interval -1" --> api
+        web & api & worker --> pg
+    end
+    ghcr -- "deploy.sh: pull → roles → alembic → auth tables → up --wait" --> host
+    api & worker -- "instance role ic-ec2<br/>(IMDSv2, hop limit 2)" --> s3u[("S3 uploads bucket")]
+    pg -- "backup.sh, cron 03:15" --> s3b[("S3 backups bucket<br/>expire after 30 days")]
+    host -. "EBS snapshots, daily, keep 7" .-> snap[("Snapshots")]
+```
+
+| Step | What happens | Why |
+|---|---|---|
+| Build | Every push to `main` touching `backend/` or `frontend/` builds three `linux/amd64` images with layer caching and pushes them to `ghcr.io` | A 1 GB server cannot run `next build`; the server only pulls (`IC_BUILD=1` builds locally on a 4 GB host instead) |
+| First time | `init-env.sh` copies the `*.example` files with fresh random secrets (hex database passwords, `BETTER_AUTH_SECRET`, one `ADMIN_DASHBOARD_KEY` written to both files) | Secrets exist only on the server, mode 600, git-ignored |
+| Deploy | `deploy.sh`: pull images → start PostgreSQL → create `ic_auth` and its `auth` schema → `alembic upgrade head` as the owner → create `ic_app_prod` (`NOBYPASSRLS`, member of `ic_app`) → Better Auth migration from the `web-tools` image → `up --wait` for `api`, `worker`, `web` | The same role split as locally (`scripts/db_bootstrap.py`, which refuses non-local hosts): the API can never bypass row-level security |
+| Roll back | `IC_IMAGE_TAG=<previous sha> ./deploy.sh` | Images are immutable per commit; safe while no migration changed the schema since |
+| Storage | Browser PUTs part URLs to `https://<bucket>.s3.<region>.amazonaws.com` (regional host, 22 Oct fix); CORS allows only the app origin and exposes `ETag` | The global host redirects for new buckets, and a browser cannot follow a redirect on a CORS upload |
+| Proxy | The API trusts `X-Forwarded-*` (`FORWARDED_ALLOW_IPS=*`) because only Caddy can reach it; Caddy sets the client address | Gives the sign-in throttle a real client IP (finding F-07's precondition) |
+| Health | Compose health checks on `api` and `web` (180 s start period on the small host); `restart: unless-stopped` on all | A crash restarts; a deploy waits until the new containers are healthy |
+| Observe | `docker compose ps`, `docker compose logs`, the admin dashboard | No metrics or alerting yet (⬜ Phase 8) |
+
+**What this does not give yet.** No staging, one instance (a reboot or resize is downtime), no point-in-time recovery and no recorded restore drill, no metrics or alerts, and one analysis at a time. On 22 Oct 2026 `LLM_PROVIDER` was not set on the host, so the live site plans with the rules and narrates with templates.
 
 ### 34. Data lifecycle
 
@@ -1538,6 +1573,7 @@ flowchart LR
 | Multi-tenant isolation by construction | "Will another customer see our data?" | Token-derived org, forced RLS, composite FKs |
 | Deletion on request | "Remove our data" | Rows at once, files after N days |
 | Simple operations | "We cannot run five new systems" | PostgreSQL + object storage + one image |
+| One-command cloud deployment | "Can we actually host this cheaply?" | Images built in CI, one free-tier EC2 host, `./deploy.sh` to release or roll back, S3 through an instance role, nightly backups (§33.1) |
 
 ---
 
@@ -1545,4 +1581,4 @@ flowchart LR
 
 (From the project plan and the baseline design; listed so nobody mistakes plans for features.)
 
-⬜ Questions about the data (Phase 7): split view, tier 0 (suggestion, cache, single fact), tier 1 (one fast-model call → one strict tool call), tier 2 (strong-model agent, ≤ 3 calls, ≤ 4 tools), six closed tools (`search_facts`, `get_fact`, `describe_columns`, `aggregate`, `compare_groups`, `request_drilldown`), quotas (5 questions per report, 20 tests), answer cache · ⬜ embeddings (pgvector + HNSW) and fused word/meaning search (Release 2) · ⬜ suburbs/LGAs, US ZIP codes, rates per resident, smoothing, spatial clustering · ⬜ unattended PDFs (headless browser) · ⬜ the judge's spike (it stays off) · ⬜ Excel header-row detection; clearer message for a 0-byte file · ⬜ members and invitations, GitHub sign-in, password reset, email verification · ⬜ per-organisation rate limits, audit log, OpenTelemetry, Sentry, metrics (RED, queue, stage durations, model cost, rejection rate), age-based retention and partition dropping, hosted staging, release flow · ⬜ migration lint for dangerous operations · ⬜ sorting, filtering, search and the cleaned table in "See the data" · ⬜ fixes for the 18 Oct system test's open findings F-02 to F-22 (cleaning heuristics, nested JSON, invitation endpoints, throttling, rate limits and others; F-01 and F-08's body cap are fixed) · ⬜ admin accounts per person and an admin audit trail; monthly (rather than lifetime) spend caps; prices for the OpenAI and DeepSeek default models; spend-cap reasons treated as final for re-narration · ⬜ ADRs for the backup model, spend cap and admin dashboard · ⬜ a hosted Azure deployment (validated locally only).
+⬜ Questions about the data (Phase 7): split view, tier 0 (suggestion, cache, single fact), tier 1 (one fast-model call → one strict tool call), tier 2 (strong-model agent, ≤ 3 calls, ≤ 4 tools), six closed tools (`search_facts`, `get_fact`, `describe_columns`, `aggregate`, `compare_groups`, `request_drilldown`), quotas (5 questions per report, 20 tests), answer cache · ⬜ embeddings (pgvector + HNSW) and fused word/meaning search (Release 2) · ⬜ suburbs/LGAs, US ZIP codes, rates per resident, smoothing, spatial clustering · ⬜ unattended PDFs (headless browser) · ⬜ the judge's spike (it stays off) · ⬜ Excel header-row detection; clearer message for a 0-byte file · ⬜ members and invitations, GitHub sign-in, password reset, email verification · ⬜ per-organisation rate limits, audit log, OpenTelemetry, Sentry, metrics (RED, queue, stage durations, model cost, rejection rate), age-based retention and partition dropping, hosted staging, release flow · ⬜ migration lint for dangerous operations · ⬜ sorting, filtering, search and the cleaned table in "See the data" · ⬜ fixes for the 18 Oct system test's open findings F-02 to F-22 (cleaning heuristics, nested JSON, invitation endpoints, throttling, rate limits and others; F-01 and F-08's body cap are fixed) · ⬜ admin accounts per person and an admin audit trail; monthly (rather than lifetime) spend caps; prices for the OpenAI and DeepSeek default models; spend-cap reasons treated as final for re-narration · ⬜ ADRs for the backup model, spend cap and admin dashboard · ⬜ staging, high availability, point-in-time recovery and a restore drill for the AWS host (live since 22 Oct 2026 on one instance) · ⬜ a committed `uv.lock` with `certifi 2026.10.19` and `pillow 13.0.0` (the deployed image still carries the 9 advisories found on 21 Oct).

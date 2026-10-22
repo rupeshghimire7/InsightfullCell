@@ -37,7 +37,7 @@ Every statement below was checked against the code in this repository (paths are
 | **R4 Security lens** | Each flow is read for trust boundary, identity, tenant isolation, data exposure and abuse limits. |
 | **R5 Business value** | Each component states what it buys the user or the operator, not just how it works. |
 
-### 0.4 Status at the time of writing (21 Oct 2026, v0.6.0 + iterations 12–24 + the 21 Oct commits)
+### 0.4 Status at the time of writing (22 Oct 2026, v0.6.0 + iterations 12–24 + the 21–22 Oct commits, deployed on AWS)
 
 | Area | Status |
 |---|---|
@@ -56,10 +56,12 @@ Every statement below was checked against the code in this repository (paths are
 | Admin dashboard at `/dashboard` behind `ADMIN_DASHBOARD_KEY`: people, usage, spend per provider against its cap (21 Oct 2026) | ✅ unit, component and integration tests, plus a browser journey (`e2e/admin.spec.ts`, not run in this check) |
 | Email sign-in link on its own page (`/sign-in/email`), limited to `EMAIL_LINK_ALLOWED_EMAILS`; confirm-password and show-password on registration (21 Oct 2026) | ✅ unit and component tests |
 | Web proxy refuses request bodies over 2 MiB (part of F-08); self-hosted S3 allowed in production behind an https public URL (iteration 24) | ✅ unit tests |
-| Azure deployment (one VM, Compose, Caddy, HTTPS; iteration 24) | 🟠 prepared and validated locally only; no hosted environment yet |
+| **AWS deployment** (`deploy/aws`, 22 Oct 2026): one EC2 instance with Docker Compose (PostgreSQL 18, API, worker, web), a shared Caddy proxy with automatic HTTPS, uploads in Amazon S3 through the instance role, nightly `pg_dump` to a backups bucket; images built by GitHub Actions (`.github/workflows/images.yml`) and pulled from `ghcr.io` | ✅ live at `https://app.ic.rgproject.me` (API `https://api.ic.rgproject.me`); a full journey (register, upload, duplicate detection, automatic and manual analyses, review gate, report, fact inspector, "See the data", dashboard and maps, downloads) was driven against it with Playwright on 22 Oct 2026. **On that date no language model was configured in production** (`LLM_PROVIDER` unset in `backend.env`): plans came from the rules planner and sentences from templates, so the live site spends nothing on models; a 5,000-row, 19-column file went from upload to report in 14 s |
+| Presigned part URLs use the bucket's **regional** S3 host on AWS (`storage/s3.py`, 22 Oct 2026), so browser uploads are never redirected | ✅ unit tests (`tests/unit/test_s3_presign.py`); checked by uploads on the live site |
+| Azure deployment recipe (one VM, iteration 24) | Superseded by AWS; kept outside git |
 | Test-report findings F-02 to F-22 (18 Oct 2026 system test; F-01 fixed) | 🟠 open: see §6.5 (F-08's body cap is fixed; its rate limit is not) |
 | Questions about the data (tiered Q&A, Phase 7) | ⬜ The dashboard's suggested questions are pre-answered from the report, but there is no live Q&A |
-| Hosted staging, OpenTelemetry, metrics, per-organisation rate limits, audit log, retention by age (Phase 8) | ⬜ |
+| Hosted **staging**, OpenTelemetry, metrics and alerts, per-organisation rate limits, audit log, retention by age (rest of Phase 8) | ⬜ (one production host and nightly backups exist; see §2.1) |
 | Embeddings and fused search (Release 2) | ⬜ |
 
 ---
@@ -140,11 +142,56 @@ flowchart LR
 **Reading the picture**
 
 - The **browser talks to three things**: the Next.js server (everything, through the BFF), object storage (file parts, via presigned URLs), and the API (exactly one path: the event stream).
-- **Opened from another address** (a tunnel or LAN address) while storage or the API is on `localhost`, the browser cannot reach `localhost` on the host machine, so the web app relays part uploads and the event stream from its own origin. A deployment with public addresses never uses the relays (ADR-039).
+- **Opened from another address** (a tunnel or LAN address) while storage or the API is on `localhost`, the browser cannot reach `localhost` on the host machine, so the web app relays part uploads and the event stream from its own origin. A deployment with public addresses never uses the relays (ADR-039); the AWS deployment uploads straight to S3 and streams straight from `api.ic.rgproject.me`.
 - The **API never sees file bytes** and never sees passwords or cookies. It sees only a short-lived signed token.
 - The **worker is the same Python package and image as the API**, started with a different command. It is the only place where heavy work and model calls happen. **Without a running worker, runs stay queued**, and the run page says "Waiting for a worker".
 - **PostgreSQL does four jobs**: business data, the job queue (Procrastinate), the event log with `LISTEN/NOTIFY` wake-ups, and the authentication tables. That is one fewer system to run (tenet 4). Since 21 Oct 2026 it also holds the model **spend ledger and caps**, reachable only through `SECURITY DEFINER` functions.
 - The **admin dashboard** (`/dashboard`) is a separate lock from people's sessions: the operator types `ADMIN_DASHBOARD_KEY` once, the web server answers with a short-lived signed cookie, and only the web server calls the API's hidden admin endpoint with the key. It is switched off (a 404) when no key is configured.
+
+### 2.1 How it is deployed (AWS, 22 Oct 2026)
+
+The same three processes run in production on **one EC2 instance** (`deploy/aws`, run by the deployment owner). Nothing in the application changed for it: every difference is configuration.
+
+```mermaid
+flowchart LR
+    U([Browser]) -- "HTTPS app.ic.rgproject.me" --> C
+    U -- "HTTPS api.ic.rgproject.me<br/>(event stream only)" --> C
+    U == "presigned PUT, regional host" ==> S3U[("S3 upload bucket<br/>private, CORS for the app")]
+    subgraph EC2["EC2 instance (Ubuntu 24.04, Docker Compose)"]
+        C["Caddy proxy<br/>Let's Encrypt, HTTP/3<br/>shared 'edge' network"]
+        W["ic-web<br/>Next.js standalone"]
+        A["ic-api<br/>FastAPI"]
+        K["worker<br/>WORKER_CONCURRENCY=1"]
+        P[("postgres:18<br/>private network, no ports")]
+        C --> W
+        C --> A
+        W --> A
+        W --- P
+        A --- P
+        K --- P
+    end
+    A -- "instance role (IMDSv2, hop limit 2)" --> S3U
+    K -- "instance role" --> S3U
+    K -. "masked description only" .-> LLM[[Gemini / backup model]]
+    P -- "nightly pg_dump (cron)" --> S3B[("S3 backups bucket<br/>30-day lifecycle")]
+    GH["GitHub Actions<br/>Images workflow"] -- "api, web, web-tools<br/>tagged latest + commit SHA" --> R[("ghcr.io")]
+    R -- "deploy.sh pulls" --> EC2
+```
+
+| Concern | How it is handled | Where |
+|---|---|---|
+| Build | GitHub Actions builds three images (`api` for API and worker, `web`, `web-tools` for the sign-in table migration) on every push to `main` that touches `backend/` or `frontend/`; the small server only pulls, because `next build` needs more memory than it has | `.github/workflows/images.yml` |
+| Release and rollback | `./deploy.sh` pulls, creates the database roles (`ic_auth`, `ic_app_prod`, both `NOBYPASSRLS`), runs Alembic and the Better Auth migration, then starts `api`, `worker`, `web` and waits for health. `IC_IMAGE_TAG=<sha>` deploys or rolls back to one exact build | `deploy/aws/deploy.sh`, `compose.yml` |
+| HTTPS and routing | A shared Caddy container owns ports 80/443, gets certificates automatically, and proxies `app.` to the web app and `api.` to the API with `flush_interval -1` so live progress is never buffered | `deploy/aws/proxy/` |
+| Secrets | Three git-ignored files on the server only (`.env`, `backend.env`, `web.env`, mode 600), generated with random values by `init-env.sh`; no S3 keys at all (instance role) | `deploy/aws/init-env.sh` |
+| Storage | Amazon S3, block-public-access on, default encryption; CORS limited to the app origin and exposing `ETag`; the IAM policy allows only the upload bucket and write-only access to `backups/ic/*` | `iam-policy.json`, `s3-cors.json` |
+| Database | PostgreSQL 18 in a container on the private network (no published port). Not RDS, because migration `0001` creates a `BYPASSRLS` maintenance role that needs a real superuser | `compose.yml` |
+| Backups | `backup.sh` streams `pg_dump -Fc` to the backups bucket nightly from cron; EBS daily snapshots (keep 7) cover the whole volume, Caddy's certificates included | `deploy/aws/backup.sh` |
+| Capacity | A free-tier `t3.micro` (2 vCPU, 1 GB) with 4 GB swap; the worker runs one analysis at a time. Resizing to `t3.small`/`t3.medium` is a stop, change type, start | `deploy/aws/README.md` |
+| Language model | Optional, as everywhere: `backend.env` takes the `LLM_*` lines and keys. Left unset on the live host (22 Oct 2026), so every run uses the deterministic fallbacks (§5) | `backend.env.example` |
+| Cost | Free-tier instance and 30 GB gp3; about 3.6 USD a month for the public IPv4 address outside the free tier, plus cents for S3; model spend capped by `LLM_SPEND_CAP_AUD` (5) and `LLM_USER_SPEND_CAP_AUD` (1) with `LLM_USAGE_LABEL=prod` | `backend.env.example` |
+
+**Fallback view.** A crashed container restarts (`restart: unless-stopped`); a lost instance is rebuilt from the repository, the three env files and the latest dump (`README.md`, "Restoring a backup"). There is one instance, so there is no high availability: a reboot or a resize is downtime. **Security view.** Only Caddy is reachable from the internet (plus SSH from one address); the API trusts `X-Forwarded-*` only because Caddy is the sole way in, which also gives the sign-in throttle a trustworthy client address (F-07's precondition). Instance metadata is IMDSv2-only.
 
 ---
 
@@ -600,14 +647,16 @@ Settings are typed and validated at start-up (`config.py`, `lib/env.ts`). Securi
 
 - Password sign-up does **not verify the email** (ADR-028).
 - No per-organisation API rate limit and no append-only audit log yet (⬜).
+- **Production is one EC2 `t3.micro`** (22 Oct 2026): no staging, no high availability, no metrics or alerts beyond `docker compose ps` and logs; one analysis at a time, so a second run waits in the queue and large files are slow. Backups are nightly dumps plus EBS snapshots, not point-in-time recovery, and no restore drill is recorded.
 - The SSE path is publicly routable by design (ticket-protected).
 - Tracing is request-id only; OpenTelemetry is planned.
 - Changing `LLM_PROVIDER` or the model ids changes the `understand` and `report` checkpoint keys. Runs started earlier then fail with `pipeline-changed` when they continue to Phase B: a pending review, **Write the answers again**, or an **Explore** of an older run. Start a new analysis after a model change.
 - The Gemini model ids were last checked on 17 Oct 2026; check them again before a release.
 - Open findings of the 18 Oct 2026 system test (`reports/InsightfulCell_System_Test_Report.docx`; F-01 is fixed): cleaning can change data silently (F-02 `*_pct` columns on a 0–100 scale emptied, F-03 decimal commas misparsed, F-05 Austria merged into Australia; automatic mode applies lossy changes, F-12), nested JSON crashes `semantics` (F-04), Better Auth's invitation endpoints are live (F-06), the sign-in throttle trusts `X-Forwarded-For` (F-07: unchanged in code; a reverse proxy that overwrites the header is required in production), no per-organisation API rate limit (F-08; the BFF body cap part is fixed), plus medium and low items F-09 to F-22.
-- The committed `backend/uv.lock` pins `certifi 2026.7.22` and `pillow 12.3.0`, which have 9 known vulnerabilities (21 Oct 2026). The uncommitted lock update to `certifi 2026.10.19` and `pillow 13.0.0` clears `pip-audit`; commit it after a test run.
+- The committed `backend/uv.lock` still pins `certifi 2026.7.22` and `pillow 12.3.0`, which have 9 known vulnerabilities (found 21 Oct 2026), and the deployed `api` image is built from it. Moving to `certifi 2026.10.19` and `pillow 13.0.0` cleared `pip-audit` in a trial on 21 Oct, but that update was never committed (checked 22 Oct 2026).
 - **Spend cap edges (21 Oct 2026).** (a) While a cap is on, a model without a price is never called: the OpenAI defaults (`gpt-6.1-sol`, `gpt-6-luna`) and `deepseek-v4-pro` have no built-in price, so as the **main** provider they fall back to rules unless `LLM_PRICES_JSON` prices them (`gpt-4o-mini`, the suggested backup, is priced). (b) The ledger charges list prices even for free-tier Gemini calls, so it errs high. (c) The overall and per-person totals cover the life of the database, not a month. (d) The spend-cap reasons are not in narration's final reasons (`narrate.py:FINAL_REASONS`), so a report simplified by the cap still offers **Write the answers again**, which falls back again until the cap is raised.
 - **Admin dashboard.** One shared key, no per-person admin accounts or audit trail; the wrong-key counter lives in the web server's memory (reset on restart; one web server assumed). Anyone with the key sees every account's name and email.
+- The deployed admin dashboard needs the `ADMIN_DASHBOARD_KEY` printed by `init-env.sh`; it is not covered by the 22 Oct live check.
 - A free ngrok address changes on every restart and each new one needs `make allow-origin`; testers use `next dev` through the tunnel, so the first visit to each page compiles for a few seconds.
 - "See the data" has no sorting, filtering or search, and does not offer the cleaned table (ADR-040).
 
@@ -637,13 +686,13 @@ Settings are typed and validated at start-up (`config.py`, `lib/env.ts`). Securi
 | `ref.geo_reference_sets` | Reference set catalogue with pinned SHA-256 | Migration `0007` |
 | `procrastinate.*` | Job queue | Own schema |
 | `auth.*` | Better Auth tables | Not read by the API; the web app reads accounts from them for the admin dashboard |
-| Object storage | `bronze/{org}/{sha256}` originals; `bronze/{org}/uploads/{id}` staging; `silver/{org}/{version}/{hash}.parquet` cleaned data; `gold/{org}/{run}/{stage}/{ckpt}-{name}` artifacts | Keys server-built |
+| Object storage (RustFS locally, Amazon S3 in production) | `bronze/{org}/{sha256}` originals; `bronze/{org}/uploads/{id}` staging; `silver/{org}/{version}/{hash}.parquet` cleaned data; `gold/{org}/{run}/{stage}/{ckpt}-{name}` artifacts | Keys server-built |
 
 ---
 
 ## 8. Quality gates
 
-`make check` runs what CI runs: ruff format and lint, mypy (strict), import-linter, backend unit and integration tests (real PostgreSQL, RLS, a real worker), migration up/down/up, OpenAPI contract drift, pip-audit, prettier, eslint (jsx-a11y), `tsc` strict, vitest with **axe**, `next build`, pnpm audit and a secret scan. `make e2e` drives five browser journeys against real storage and a real worker with `LLM_PROVIDER=none` (no model spend). Evaluation suites run with every unit run: the planted-effect suite (`test_engine_evidence.py`) and the corrupted-narrator suite (`test_narration.py`: 31 planted errors must all be rejected, 11 clean sentences kept). Last recorded full gate (iteration 12b): 652 backend tests (92.92 % coverage), 365 frontend tests, 5/5 journeys. After the model default change (17 Oct 2026): backend unit tests 490/490 pass; the integration and e2e suites were not re-run for that change because it only touches defaults and prices. A test-suite of 33 data files with an answer key lives in `sample_data/`. Deep system test (18 Oct 2026, iteration 16): full gate pass (668 backend tests at 92.88 %, 369 frontend), e2e 5/5, 52 sample files run, a 99-check security battery and axe on 15 pages; findings in the test report. Latest run (19 Oct 2026, iterations 18–21): 496 backend unit and 179 integration tests, 391 frontend tests, ruff, mypy, import contracts, eslint, tsc and `next build` pass; a live Gemini run through an ngrok tunnel reached the report. `make check` as a whole and `make e2e` were not re-run. Iteration 24 (20 Oct): full gate passed, 675 backend tests (92.75 %), 393 frontend. **Latest full gate (21 Oct 2026, after the backup model, spend cap and admin dashboard):** 715 backend tests (unit and integration, 93.02 % coverage), 422 frontend tests in 37 files, ruff, mypy strict, import contracts, migrations up/down/up to `0012`, OpenAPI contract, prettier, eslint, tsc, `next build`, pnpm audit and the secret scan pass. **`pip-audit` failed** on the committed lock: 9 advisories published since 20 Oct, in `certifi 2026.7.22` (fixed in 2026.10.19) and `pillow 12.3.0` (fixed in 13.0.0). An uncommitted `backend/uv.lock` in the working tree moves to those versions, and `pip-audit` on it finds no known vulnerabilities; the test suites were not re-run on it. `make e2e` (now 5 journeys plus 2 admin-dashboard tests) and a live model call were not run. Git hooks only format and scan for secrets on commit; push runs nothing.
+`make check` runs what CI runs: ruff format and lint, mypy (strict), import-linter, backend unit and integration tests (real PostgreSQL, RLS, a real worker), migration up/down/up, OpenAPI contract drift, pip-audit, prettier, eslint (jsx-a11y), `tsc` strict, vitest with **axe**, `next build`, pnpm audit and a secret scan. `make e2e` drives five browser journeys against real storage and a real worker with `LLM_PROVIDER=none` (no model spend). Evaluation suites run with every unit run: the planted-effect suite (`test_engine_evidence.py`) and the corrupted-narrator suite (`test_narration.py`: 31 planted errors must all be rejected, 11 clean sentences kept). Last recorded full gate (iteration 12b): 652 backend tests (92.92 % coverage), 365 frontend tests, 5/5 journeys. After the model default change (17 Oct 2026): backend unit tests 490/490 pass; the integration and e2e suites were not re-run for that change because it only touches defaults and prices. A test-suite of 33 data files with an answer key lives in `sample_data/`. Deep system test (18 Oct 2026, iteration 16): full gate pass (668 backend tests at 92.88 %, 369 frontend), e2e 5/5, 52 sample files run, a 99-check security battery and axe on 15 pages; findings in the test report. Latest run (19 Oct 2026, iterations 18–21): 496 backend unit and 179 integration tests, 391 frontend tests, ruff, mypy, import contracts, eslint, tsc and `next build` pass; a live Gemini run through an ngrok tunnel reached the report. `make check` as a whole and `make e2e` were not re-run. Iteration 24 (20 Oct): full gate passed, 675 backend tests (92.75 %), 393 frontend. **Latest full gate (21 Oct 2026, after the backup model, spend cap and admin dashboard):** 715 backend tests (unit and integration, 93.02 % coverage), 422 frontend tests in 37 files, ruff, mypy strict, import contracts, migrations up/down/up to `0012`, OpenAPI contract, prettier, eslint, tsc, `next build`, pnpm audit and the secret scan pass. **`pip-audit` failed** on the committed lock: 9 advisories published since 20 Oct, in `certifi 2026.7.22` (fixed in 2026.10.19) and `pillow 12.3.0` (fixed in 13.0.0). An uncommitted `backend/uv.lock` in the working tree moves to those versions, and `pip-audit` on it finds no known vulnerabilities; the test suites were not re-run on it. `make e2e` (now 5 journeys plus 2 admin-dashboard tests) and a live model call were not run. Git hooks only format and scan for secrets on commit; push runs nothing. **22 Oct 2026 (AWS deployment commits):** 719 backend tests are collected (the 4 new ones check the regional S3 host for upload URLs); the 530 backend unit tests pass. The integration suite, the frontend suite, `make check` and `make e2e` were not re-run, because the only application change is in `storage/s3.py` and the Dockerfile's build heap. Instead, the deployed site was driven end to end with Playwright (register, upload, duplicate check, automatic and manual runs, review, report, inspector, "See the data", dashboard, maps, all four downloads) and every step passed.
 
 ---
 
