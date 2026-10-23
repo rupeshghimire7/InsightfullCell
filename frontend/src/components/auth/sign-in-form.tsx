@@ -310,7 +310,7 @@ export function SignInForm({
   );
 }
 
-interface FieldInputProps {
+export interface FieldInputProps {
   id: string;
   "aria-invalid"?: true;
   "aria-describedby"?: string;
@@ -322,7 +322,7 @@ interface FieldInputProps {
  * the input in tab order, names what it will do ("Show password" / "Hide password") and never
  * submits the form.
  */
-function PasswordInput({
+export function PasswordInput({
   className,
   ...props
 }: FieldInputProps & { name: string; autoComplete: string }) {
@@ -353,7 +353,7 @@ function PasswordInput({
 }
 
 /** A labelled input with an optional hint and an error the input is described by. */
-function Field({
+export function Field({
   label,
   error,
   hint,
