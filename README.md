@@ -400,7 +400,7 @@ LLM_REQUESTS_PER_MINUTE=5    # optional: match a free tier's limit
 
 A provider you name must have its key, or start-up fails. The worker checks the key and models before it takes work. Only the masked description of the table is ever sent.
 
-A **backup model** takes over when the main one fails in any way (`LLM_FALLBACK_PROVIDER=openai`, `LLM_FALLBACK_MODEL=gpt-4o-mini`, `OPENAI_API_KEY`), and a **hard spend cap** covers both (`LLM_SPEND_CAP_AUD`, default 4.00): each call first reserves its worst-case cost, so the total never passes the cap, and past it runs use the built-in rules. Spend, people and usage are on the admin dashboard at `/dashboard` (set the same `ADMIN_DASHBOARD_KEY` in both env files).
+A **backup model** takes over when the main one fails in any way (`LLM_FALLBACK_PROVIDER=openai`, `LLM_FALLBACK_MODEL=gpt-4o-mini`, `OPENAI_API_KEY`), and a **hard spend cap** covers both (`LLM_SPEND_CAP_AUD`, default 4.00): each call first reserves its worst-case cost, so the total never passes the cap, and past it runs use the built-in rules. Spend, people and usage are on the admin dashboard at `/adminboard` (set the same `ADMIN_DASHBOARD_KEY` in both env files).
 
 ### Sharing a local copy (ngrok)
 
@@ -446,7 +446,7 @@ Configuration comes from environment files created by `make bootstrap` from the 
 | `API_BASE_URL`, `API_PUBLIC_URL` | Where the server reaches the API, and where browsers do |
 | `S3_PUBLIC_ORIGIN` | Where browsers upload file parts |
 | `EMAIL_LINK_SIGN_IN`, `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_LINK_ALLOWED_EMAILS` | Optional email sign-in links, to the listed addresses only |
-| `ADMIN_DASHBOARD_KEY`, `ADMIN_SESSION_MINUTES` | Unlocks `/dashboard` (blank: off) and how long it stays unlocked |
+| `ADMIN_DASHBOARD_KEY`, `ADMIN_SESSION_MINUTES` | Unlocks `/adminboard` (blank: off) and how long it stays unlocked |
 
 ---
 

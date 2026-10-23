@@ -72,7 +72,7 @@ const schema = z
     EMAIL_LINK_ALLOWED_EMAILS: z.string().default(""),
 
     /**
-     * Unlocks /dashboard (people, usage, model spend). At least 32 random characters; blank
+     * Unlocks /adminboard (people, usage, model spend). At least 32 random characters; blank
      * switches the dashboard off (it is then a 404). Read on the server only, never sent to a
      * browser: the browser gets a short-lived signed cookie instead.
      */

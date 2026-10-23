@@ -12,7 +12,7 @@ import { getEnv } from "@/lib/env";
 export const metadata: Metadata = { title: "Admin dashboard" };
 
 /**
- * `/dashboard`: everyone's usage and model spend, behind the admin key (`ADMIN_DASHBOARD_KEY`).
+ * `/adminboard`: everyone's usage and model spend, behind the admin key (`ADMIN_DASHBOARD_KEY`).
  * Locked, the page renders no data at all: only the key dialog over a blurred placeholder.
  * Switched off (no key configured), it does not exist.
  */
@@ -43,7 +43,7 @@ export default async function AdminDashboardPage({
           }
           hint="The web server’s log says more. Try again in a minute."
           action={
-            <a href={`/dashboard?days=${days}`} className="font-medium text-accent underline">
+            <a href={`/adminboard?days=${days}`} className="font-medium text-accent underline">
               Try again
             </a>
           }

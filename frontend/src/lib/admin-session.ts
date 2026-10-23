@@ -3,7 +3,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 import type { Env } from "@/lib/env";
 
 /**
- * The admin dashboard's lock (`/dashboard`). The key (`ADMIN_DASHBOARD_KEY`) stays on the server:
+ * The admin dashboard's lock (`/adminboard`). The key (`ADMIN_DASHBOARD_KEY`) stays on the server:
  * the browser sends it once, and gets back a short-lived cookie signed with a secret derived from
  * the key, so changing the key locks every open dashboard. The cookie is `HttpOnly` (no script can
  * read it), `SameSite=Strict`, and over https `__Host-` prefixed: host-only, so no other site on the

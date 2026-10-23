@@ -48,7 +48,7 @@ export function AdminDashboard({
               {PERIODS.map((days) => (
                 <Link
                   key={days}
-                  href={`/dashboard?days=${days}`}
+                  href={`/adminboard?days=${days}`}
                   aria-current={days === overview.days ? "page" : undefined}
                   className="inline-flex min-h-9 items-center px-3 text-sm first:rounded-l-control last:rounded-r-control hover:bg-bg aria-[current=page]:bg-accent aria-[current=page]:text-accent-contrast"
                 >
@@ -57,7 +57,7 @@ export function AdminDashboard({
               ))}
             </nav>
             <Link
-              href={`/dashboard?days=${overview.days}`}
+              href={`/adminboard?days=${overview.days}`}
               className="inline-flex min-h-9 items-center rounded-control border border-border bg-surface px-4 text-sm font-medium hover:bg-bg"
             >
               Refresh

@@ -17,7 +17,7 @@ export function proxy(request: NextRequest) {
   const isPublic =
     pathname === "/sign-in" ||
     pathname.startsWith("/sign-in/") ||
-    pathname === "/dashboard" ||
+    pathname === "/adminboard" ||
     pathname.startsWith("/api/");
   if (!isPublic && !getSessionCookie(request)) {
     return NextResponse.redirect(new URL("/sign-in", request.url));

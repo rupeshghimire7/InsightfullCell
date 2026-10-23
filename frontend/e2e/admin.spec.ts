@@ -18,7 +18,7 @@ test("the admin dashboard opens only with the key", async ({ page, context }) =>
   });
   page.on("pageerror", (error) => errors.push(error.message));
 
-  await page.goto("/dashboard");
+  await page.goto("/adminboard");
   const dialog = page.getByRole("dialog", { name: "Please enter admin key for dashboard access." });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByLabel("Admin key")).toBeFocused();
