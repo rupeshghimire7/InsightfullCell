@@ -114,9 +114,6 @@ export default async function DatasetPage({
                   {FORMAT_LABEL[version.format] ?? version.format}, uploaded{" "}
                   <LocalTime iso={version.created_at} />
                 </p>
-                <p className="mt-1 truncate font-mono text-xs text-muted" title={version.sha256}>
-                  SHA-256 {version.sha256.slice(0, 16)}…
-                </p>
               </li>
             ))}
           </ol>
