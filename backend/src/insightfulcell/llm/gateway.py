@@ -253,7 +253,7 @@ class LLMGateway:
         month_used, month_budget = await self._ledger.month_usage(request.org_id)
         if month_used + estimate > month_budget:
             raise ModelUnavailable(
-                "budget_org", "The organisation's monthly model budget is spent."
+                "budget_org", "The workspace's monthly model budget is spent."
             )
 
         reason = "provider_error"

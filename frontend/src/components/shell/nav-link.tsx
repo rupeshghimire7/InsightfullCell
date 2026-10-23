@@ -24,7 +24,7 @@ export function NavLink({
     <Link
       href={href}
       aria-current={current}
-      className="press inline-flex min-h-9 items-center rounded-control px-3 text-sm font-medium text-muted hover:bg-bg hover:text-text aria-[current=page]:bg-accent/10 aria-[current=page]:text-text pointer-coarse:min-h-11"
+      className="press inline-flex min-h-9 items-center rounded-control px-2 text-sm font-medium text-muted hover:bg-bg hover:text-text aria-[current=page]:bg-accent/10 aria-[current=page]:text-text sm:px-3 pointer-coarse:min-h-11"
     >
       {children}
     </Link>

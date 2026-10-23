@@ -90,7 +90,7 @@ const FEATURE: Record<string, string> = {
 const FALLBACK_REASON: Record<string, string> = {
   disabled: "no language model is configured",
   budget_run: "this run's model budget was spent",
-  budget_org: "the organisation's monthly model budget was spent",
+  budget_org: "the workspace's monthly model budget was spent",
   breaker_open: "the model provider has been failing",
   payload_blocked: "the request would have held personal data",
   timeout: "the model did not answer in time",

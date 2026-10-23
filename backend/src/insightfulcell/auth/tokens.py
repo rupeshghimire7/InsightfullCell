@@ -132,7 +132,7 @@ def _principal_from_claims(claims: dict[str, Any]) -> Principal:
         role = Role(str(claims["role"]))
     except (KeyError, ValueError) as exc:
         raise Unauthenticated(
-            "The access token has no active organisation or role.",
+            "The access token has no active workspace or role.",
             hint="Sign out and sign in again.",
         ) from exc
     raw_name = claims.get("org_name")

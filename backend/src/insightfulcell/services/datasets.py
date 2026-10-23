@@ -77,7 +77,7 @@ class DatasetService:
                 )
             ).scalar_one_or_none()
             if dataset is None:
-                raise DatasetNotFound("No dataset with this id exists in your organisation.")
+                raise DatasetNotFound("No dataset with this id exists in your workspace.")
             (info,) = await load_dataset_infos(session, principal, [dataset])
             versions = (
                 await session.execute(

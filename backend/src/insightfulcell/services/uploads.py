@@ -417,7 +417,7 @@ class UploadService:
             stmt = stmt.with_for_update()
         upload = (await session.execute(stmt)).scalar_one_or_none()
         if upload is None:
-            raise UploadNotFound("No upload with this id exists in your organisation.")
+            raise UploadNotFound("No upload with this id exists in your workspace.")
         return upload
 
     @staticmethod
@@ -430,7 +430,7 @@ class UploadService:
             )
         ).scalar_one_or_none()
         if dataset is None:
-            raise DatasetNotFound("No dataset with this id exists in your organisation.")
+            raise DatasetNotFound("No dataset with this id exists in your workspace.")
         return dataset
 
     @staticmethod

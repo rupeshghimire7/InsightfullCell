@@ -690,7 +690,7 @@ async def stream_events(
 ) -> StreamingResponse:
     if ticket.run_id != run_id:
         # The ticket is for another run: answer as if this run did not exist.
-        raise RunNotFound("No run with this id exists in your organisation.")
+        raise RunNotFound("No run with this id exists in your workspace.")
     after = int(last_event_id) if last_event_id and last_event_id.isdigit() else 0
     # Checks access before the stream starts, so failures are normal problem responses.
     await services.runs.read_events(ticket.principal, run_id, after=after, limit=1)

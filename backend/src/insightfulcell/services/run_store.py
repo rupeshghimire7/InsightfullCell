@@ -71,7 +71,7 @@ async def append_event(  # noqa: PLR0913  (keyword-only)
         )
     ).scalar_one_or_none()
     if seq is None:
-        raise RunNotFound("No run with this id exists in your organisation.")
+        raise RunNotFound("No run with this id exists in your workspace.")
     return int(seq)
 
 
@@ -124,7 +124,7 @@ async def require_run(
 ) -> Run:
     run = await load_run(session, org_id, run_id, lock=lock)
     if run is None:
-        raise RunNotFound("No run with this id exists in your organisation.")
+        raise RunNotFound("No run with this id exists in your workspace.")
     return run
 
 

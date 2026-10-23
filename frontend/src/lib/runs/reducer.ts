@@ -26,8 +26,7 @@ export function applyEvent(view: RunView, event: RunEvent): RunView {
       run.status = "queued";
       break;
     case "run.waiting":
-      note =
-        "Waiting for a free slot: your organisation is running its maximum number of analyses.";
+      note = "Waiting for a free slot: your workspace is running its maximum number of analyses.";
       break;
     case "run.started":
       run.status = "running";

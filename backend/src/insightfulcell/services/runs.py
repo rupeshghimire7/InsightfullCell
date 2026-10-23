@@ -155,7 +155,7 @@ class RunService:
             )
         ).scalar_one_or_none()
         if dataset is None:
-            raise DatasetNotFound("No dataset with this id exists in your organisation.")
+            raise DatasetNotFound("No dataset with this id exists in your workspace.")
         stmt = select(DatasetVersion).where(
             DatasetVersion.org_id == principal.org_id, DatasetVersion.dataset_id == dataset_id
         )

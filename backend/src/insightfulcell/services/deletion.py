@@ -63,7 +63,7 @@ class DeletionService:
                 )
             ).one()
         if outcome == NOT_FOUND:
-            raise RunNotFound("No run with this id exists in your organisation.")
+            raise RunNotFound("No run with this id exists in your workspace.")
         if outcome == BUSY:
             raise StillRunning(
                 "This analysis (or one of its explorations) is still running.",
@@ -97,7 +97,7 @@ class DeletionService:
                 )
             ).one()
         if outcome == NOT_FOUND:
-            raise DatasetNotFound("No dataset with this id exists in your organisation.")
+            raise DatasetNotFound("No dataset with this id exists in your workspace.")
         if outcome == BUSY:
             raise StillRunning(
                 "An analysis of this dataset is still running.",

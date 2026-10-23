@@ -35,7 +35,7 @@ async def load_dataset_info(
         )
     ).scalar_one_or_none()
     if dataset is None:
-        raise DatasetNotFound("No dataset with this id exists in your organisation.")
+        raise DatasetNotFound("No dataset with this id exists in your workspace.")
     infos = await load_dataset_infos(session, principal, [dataset])
     return infos[0]
 

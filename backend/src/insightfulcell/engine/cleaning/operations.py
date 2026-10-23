@@ -220,7 +220,7 @@ def initial_decision(op: Operation, policy: Policy) -> tuple[Decision, str | Non
         if policy is Policy.AUTO_SAFE:
             return (
                 Decision.REJECTED,
-                "Not applied: your organisation applies only safe changes automatically.",
+                "Not applied: your workspace applies only safe changes automatically.",
             )
         return Decision.PENDING, None
     return Decision.ACCEPTED, op.notice

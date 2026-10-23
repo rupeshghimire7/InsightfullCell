@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { axe } from "../axe";
@@ -32,6 +32,7 @@ describe("AppShell", () => {
     expect(screen.getByRole("main")).toHaveAttribute("id", "main");
     expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/o/org-1");
     expect(screen.getByRole("link", { name: "Runs" })).toHaveAttribute("href", "/o/org-1/runs");
+    expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("href", "/adminboard");
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -62,10 +63,48 @@ describe("AppShell", () => {
         <p>content</p>
       </AppShell>,
     );
-    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    // The header button (the menu holds a second one for narrow screens).
+    await user.click(screen.getAllByRole("button", { name: "Sign out" })[0]!);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/sign-in"));
     expect(signOut).toHaveBeenCalledTimes(1);
     expect(refresh).toHaveBeenCalled();
+  });
+});
+
+describe("Header menu and theme", () => {
+  it("lists the about, contact, licence and profile pages", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <AppShell orgId="org-1" email="ada@example.com">
+        <p>content</p>
+      </AppShell>,
+    );
+    await user.click(screen.getByText("", { selector: "summary[aria-label='Menu']" }));
+    const menu = screen.getByRole("navigation", { name: "More" });
+    for (const [name, href] of [
+      ["About us", "/o/org-1/about"],
+      ["Contact", "/o/org-1/contact"],
+      ["License", "/o/org-1/license"],
+      ["Profile", "/o/org-1/profile"],
+    ]) {
+      expect(within(menu).getByRole("link", { name })).toHaveAttribute("href", href);
+    }
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("switches the theme and remembers it in a cookie", async () => {
+    const user = userEvent.setup();
+    document.documentElement.dataset.theme = "light";
+    render(
+      <AppShell orgId="org-1" email="ada@example.com" theme="light">
+        <p>content</p>
+      </AppShell>,
+    );
+    await user.click(screen.getByRole("button", { name: "Switch to dark theme" }));
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(document.cookie).toContain("ic_theme=dark");
+    expect(screen.getByRole("button", { name: "Switch to light theme" })).toBeInTheDocument();
+    delete document.documentElement.dataset.theme;
   });
 });
 

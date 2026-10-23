@@ -73,5 +73,5 @@ def require(principal: Principal, action: Action) -> None:
     if principal.role not in POLICY[action]:
         raise Forbidden(
             f"Your role ({principal.role.value}) cannot perform {action.value}.",
-            hint="Ask an organisation owner or admin to change your role.",
+            hint="Ask a workspace owner or admin to change your role.",
         )

@@ -30,7 +30,7 @@ export default async function RunsPage({
     <>
       <PageHeader
         title="Runs"
-        description="Every analysis in your organisation, newest first. Open one to follow it live or see why it stopped."
+        description="Every analysis in your workspace, newest first. Open one to follow it live or see why it stopped."
       />
       {error ? (
         <ProblemAlert
