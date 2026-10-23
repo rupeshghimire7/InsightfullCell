@@ -1,7 +1,9 @@
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import type { ReactNode } from "react";
+import { parseTheme, THEME_COOKIE } from "@/lib/theme";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -28,7 +30,9 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // The header toggle's choice; without it the system setting decides (globals.css).
+  const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
   return (
     // Browser extensions (password managers, Grammarly, dark mode, translation) add attributes to
     // <html> and <body> before React loads. This ignores attribute differences on these two
@@ -36,6 +40,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html
       lang="en"
       className={`${GeistSans.variable} ${GeistMono.variable}`}
+      data-theme={theme}
       suppressHydrationWarning
     >
       <body className="antialiased" suppressHydrationWarning>
