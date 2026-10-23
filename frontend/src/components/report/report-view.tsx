@@ -5,6 +5,7 @@ import { ExploreProvider } from "@/components/report/explore";
 import { FactsProvider, Sentences } from "@/components/report/facts";
 import { ReportChart } from "@/components/report/report-chart";
 import { ReportMap } from "@/components/report/report-map";
+import { ReportToc } from "@/components/report/report-toc";
 import { ScopeNotice } from "@/components/report/scope-notice";
 import { SimplifiedNotice } from "@/components/report/simplified-notice";
 import { CaretDown, EyeSlash } from "@/components/ui/icons";
@@ -112,18 +113,9 @@ export function ReportView({
             <nav aria-label="Questions in this report" className="hidden lg:block">
               <div className="sticky top-20 space-y-2">
                 <p className="text-xs font-medium text-muted">On this page</p>
-                <ol className="max-h-[70vh] space-y-1 overflow-y-auto pr-1 text-sm">
-                  {answered.map((s) => (
-                    <li key={s.analysis_id}>
-                      <a
-                        href={`#${anchor(s.analysis_id)}`}
-                        className="block rounded-control px-2 py-1 text-muted hover:bg-surface hover:text-text"
-                      >
-                        {s.question}
-                      </a>
-                    </li>
-                  ))}
-                </ol>
+                <ReportToc
+                  items={answered.map((s) => ({ id: anchor(s.analysis_id), label: s.question }))}
+                />
               </div>
             </nav>
           ) : null}
@@ -281,7 +273,7 @@ function HowItWasMade({ report }: { report: Report }) {
             {p.applied.length === 1
               ? "1 change was applied"
               : `${formatCount(p.applied.length)} changes were applied`}
-            {p.reviewed_by_person ? " after your review" : " by your organisation's policy"};{" "}
+            {p.reviewed_by_person ? " after your review" : " by your workspace's policy"};{" "}
             <span className="tabular font-mono">{formatCount(p.rows_before)}</span> rows went in and{" "}
             <span className="tabular font-mono">{formatCount(p.rows_after)}</span> were analysed.
           </p>
