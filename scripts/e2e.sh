@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Browser end-to-end test of the whole stack: sign in -> upload a CSV -> analyse it live, and
-# reset a forgotten password.
+# Browser end-to-end test of the whole stack: register (emailed code, then a password) -> upload a
+# CSV -> analyse it live, sign-in links for existing accounts only, and reset a forgotten password.
 # Starts a fresh database, the API, the worker, an S3 endpoint and the production build of the
 # web app, runs Playwright, then tears everything down.
 #   scripts/e2e.sh [--skip-build]
@@ -96,6 +96,8 @@ backend_env() {
   export EVENTS_ALLOWED_ORIGINS="$WEB_URL"
   # Plan with the built-in rules: deterministic, and a key in backend/.env never spends money.
   export LLM_PROVIDER=none
+  # The admin spec checks the spend meter, which a local backend/.env with "none" would hide.
+  export LLM_SPEND_CAP_AUD=4.00
 }
 
 echo "• api"
@@ -120,10 +122,12 @@ echo "• web"
 export APP_ENV=local BETTER_AUTH_URL="$WEB_URL" AUTH_DATABASE_URL="$AUTH_DB_URL"
 export BETTER_AUTH_SECRET="e2e-only-secret-$(printf '%032d' "$$")"
 export API_BASE_URL="http://127.0.0.1:$API_PORT" S3_PUBLIC_ORIGIN="$S3_URL"
-# Sign-in links stay off whatever frontend/.env.local says: the journey checks that state.
-export EMAIL_LINK_SIGN_IN=off EMAIL_LINK_ALLOWED_EMAILS= EMAIL_TRANSPORT=console AUTH_MAGIC_LINK_RATE_MAX=200
-# "Forgot password?" is on: reset links are printed to web.log, where the browser test reads them.
-export PASSWORD_RESET=on EMAIL_RESET_FROM=
+# Email is on with the console transport, whatever frontend/.env.local says: registration codes and
+# sign-in links are printed to web.log, where the browser tests read them. Google stays off.
+export EMAIL_LINK_SIGN_IN=on EMAIL_LINK_ALLOWED_EMAILS= EMAIL_TRANSPORT=console AUTH_MAGIC_LINK_RATE_MAX=200
+export GOOGLE_SIGN_IN=off
+# "Forgot password?" comes with email (ADR-043): reset links are printed to web.log too.
+export EMAIL_RESET_FROM=
 if [ "$SKIP_BUILD" -eq 0 ]; then (cd "$FRONTEND" && pnpm --silent build >"$STATE/build.log" 2>&1) || { tail -30 "$STATE/build.log" >&2; exit 1; }; fi
 (cd "$FRONTEND" && PORT="$WEB_PORT" HOSTNAME=127.0.0.1 exec node scripts/start.mjs) >"$STATE/web.log" 2>&1 &
 PIDS+=($!)
@@ -131,7 +135,8 @@ wait_for "$WEB_URL/sign-in" "Web app" 60
 
 echo "• browser"
 cd "$FRONTEND"
-export E2E_BASE_URL="$WEB_URL" E2E_WEB_LOG="$STATE/web.log"
+# The registration spec expires a code in the database to check that it is refused.
+export E2E_BASE_URL="$WEB_URL" E2E_WEB_LOG="$STATE/web.log" E2E_AUTH_DATABASE_URL="$AUTH_DB_URL"
 if ! pnpm exec playwright test; then
   echo "Logs: $STATE/{api,worker,web,s3}.log. Missing browser? Run: pnpm --dir frontend exec playwright install chromium" >&2
   exit 1
