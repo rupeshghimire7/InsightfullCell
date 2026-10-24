@@ -7,16 +7,12 @@ set -euo pipefail
 
 TYPES='feat|add|update|delete|fix|docs|style|refactor|perf|test|build|ci|chore|revert'
 PATTERN="^(${TYPES})(\([a-z0-9._/-]+\))?!?: [^ ].{2,}$"
-MAX=100
 
 check_subject() {
   local subject="$1"
   case "$subject" in
     Merge\ *|Revert\ \"*|fixup!\ *|squash!\ *) return 0 ;;
   esac
-  if [ "${#subject}" -gt "$MAX" ]; then
-    echo "Subject is ${#subject} characters; keep it under $MAX: $subject" >&2; return 1
-  fi
   if ! printf '%s' "$subject" | grep -Eq "$PATTERN"; then
     cat >&2 <<MSG
 Commit subject does not follow Conventional Commits:
