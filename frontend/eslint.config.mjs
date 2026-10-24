@@ -9,6 +9,9 @@ export default defineConfig([
   globalIgnores([
     ".next/**",
     "coverage/**",
+    // Playwright's traces and reports (bundled third-party scripts) after an e2e run.
+    "test-results/**",
+    "playwright-report/**",
     "node_modules/**",
     "next-env.d.ts",
     "src/lib/api/schema.d.ts",
