@@ -2,12 +2,14 @@ import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "../axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { SignInForm, validate } from "@/components/auth/sign-in-form";
+import { codeError, registerError, SignInForm, validate } from "@/components/auth/sign-in-form";
 
 const magicLink = vi.fn();
 const social = vi.fn();
 const email = vi.fn();
-const signUpEmail = vi.fn();
+const registerEmail = vi.fn();
+const sendCode = vi.fn();
+const verifyEmail = vi.fn();
 const replace = vi.fn();
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace, refresh }) }));
@@ -18,7 +20,9 @@ vi.mock("@/lib/auth-client", () => ({
       social: (...a: unknown[]) => social(...a),
       email: (...a: unknown[]) => email(...a),
     },
-    signUp: { email: (...a: unknown[]) => signUpEmail(...a) },
+    register: { email: (...a: unknown[]) => registerEmail(...a) },
+    emailCode: { send: (...a: unknown[]) => sendCode(...a) },
+    emailOtp: { verifyEmail: (...a: unknown[]) => verifyEmail(...a) },
   },
 }));
 
@@ -27,7 +31,9 @@ beforeEach(() => {
   magicLink.mockReset().mockResolvedValue({ data: { status: true }, error: null });
   social.mockReset().mockResolvedValue({ data: null, error: null });
   email.mockReset().mockResolvedValue({ data: {}, error: null });
-  signUpEmail.mockReset().mockResolvedValue({ data: {}, error: null });
+  registerEmail.mockReset().mockResolvedValue({ data: { status: true }, error: null });
+  sendCode.mockReset().mockResolvedValue({ data: { status: true }, error: null });
+  verifyEmail.mockReset().mockResolvedValue({ data: { status: true }, error: null });
 });
 
 const form = (props: Partial<React.ComponentProps<typeof SignInForm>> = {}) =>
@@ -35,6 +41,14 @@ const form = (props: Partial<React.ComponentProps<typeof SignInForm>> = {}) =>
 
 const linkButton = () => screen.getByRole("link", { name: "Email me a sign-in link" });
 const offButton = () => screen.getByRole("button", { name: "Email me a sign-in link" });
+
+/** Registers `ada@example.com` and waits for the code step. */
+async function reachCodeStep(user: ReturnType<typeof userEvent.setup>) {
+  form({ mode: "register" });
+  await user.type(screen.getByLabelText("Name"), "Ada");
+  await user.type(screen.getByLabelText("Email address"), "ada@example.com{Enter}");
+  return screen.findByLabelText("6-digit code");
+}
 
 describe("SignInForm: password sign-in", () => {
   it("is accessible and labels fields for password managers", async () => {
@@ -121,95 +135,163 @@ describe("SignInForm: password sign-in", () => {
   });
 });
 
+describe("SignInForm: sign-in mode", () => {
+  it("has no registration fields", () => {
+    form({ passwordReset: true });
+    expect(screen.queryByLabelText("Name")).toBeNull();
+    expect(screen.queryByLabelText("Confirm password")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Send me a code" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Sign up with Google" })).toBeNull();
+  });
+
+  it("asks an older, unverified account for the emailed code instead of failing", async () => {
+    email.mockResolvedValue({ data: null, error: { status: 403, code: "EMAIL_NOT_VERIFIED" } });
+    const user = userEvent.setup();
+    form();
+    await user.type(screen.getByLabelText("Email address"), "old@example.com");
+    await user.type(screen.getByLabelText("Password"), "old-password{Enter}");
+    expect(await screen.findByLabelText("6-digit code")).toHaveFocus();
+    expect(screen.getByRole("status")).toHaveTextContent("confirm your address");
+    await user.type(screen.getByLabelText("6-digit code"), "123456{Enter}");
+    expect(verifyEmail).toHaveBeenCalledWith({ email: "old@example.com", otp: "123456" });
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
+  });
+});
+
 describe("SignInForm: registration", () => {
-  it("is accessible, asks for a name and a new password, and offers the link option", async () => {
+  it("is accessible and asks only for a name and an email, with no password", async () => {
     const { container } = form({ mode: "register" });
     expect(screen.getByLabelText("Name")).toHaveAttribute("autocomplete", "name");
-    const password = screen.getByLabelText("Password");
-    expect(password).toHaveAttribute("autocomplete", "new-password");
-    expect(password).toHaveAccessibleDescription("At least 8 characters.");
-    expect(screen.getByLabelText("Confirm password")).toHaveAttribute(
-      "autocomplete",
-      "new-password",
+    expect(screen.getByLabelText("Email address")).toHaveAccessibleDescription(
+      "We’ll email you a code to confirm it’s yours.",
     );
-    expect(linkButton()).toHaveAttribute("href", "/sign-in/email?mode=register");
+    expect(screen.queryByLabelText("Password")).toBeNull();
+    expect(screen.queryByLabelText("Confirm password")).toBeNull();
+    expect(screen.getByRole("button", { name: "Send me a code" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign up with Google" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Email me a sign-in link" })).toBeNull();
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/sign-in");
     expect(await axe(container)).toHaveNoViolations();
   });
 
-  it("validates every field and focuses the first problem", async () => {
+  it("validates both fields and focuses the first problem", async () => {
     const user = userEvent.setup();
     form({ mode: "register" });
-    await user.type(screen.getByLabelText("Password"), "short");
-    await user.click(screen.getByRole("button", { name: "Create account" }));
+    await user.click(screen.getByRole("button", { name: "Send me a code" }));
     expect(screen.getByLabelText("Name")).toHaveFocus();
     expect(screen.getByLabelText("Email address")).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByLabelText("Password")).toHaveAccessibleDescription(
-      /Use at least 8 characters/,
-    );
-    expect(screen.getByLabelText("Confirm password")).toHaveAccessibleDescription(
-      "Type your password again.",
-    );
-    expect(signUpEmail).not.toHaveBeenCalled();
+    expect(registerEmail).not.toHaveBeenCalled();
   });
 
-  it("refuses passwords that don't match and focuses the confirmation", async () => {
-    const user = userEvent.setup();
-    form({ mode: "register" });
-    await user.type(screen.getByLabelText("Name"), "Ada");
-    await user.type(screen.getByLabelText("Email address"), "ada@example.com");
-    await user.type(screen.getByLabelText("Password"), "analytical engine");
-    await user.type(screen.getByLabelText("Confirm password"), "analytical engines");
-    await user.click(screen.getByRole("button", { name: "Create account" }));
-    const confirm = screen.getByLabelText("Confirm password");
-    expect(confirm).toHaveFocus();
-    expect(confirm).toHaveAccessibleDescription("The passwords don’t match.");
-    expect(signUpEmail).not.toHaveBeenCalled();
-  });
-
-  it("shows and hides each password with its eye button", async () => {
-    const user = userEvent.setup();
-    form({ mode: "register" });
-    const password = screen.getByLabelText("Password");
-    const [showPassword, showConfirm] = screen.getAllByRole("button", { name: "Show password" });
-    expect(password).toHaveAttribute("type", "password");
-    await user.click(showPassword!);
-    expect(password).toHaveAttribute("type", "text");
-    expect(showPassword).toHaveAccessibleName("Hide password");
-    expect(screen.getByLabelText("Confirm password")).toHaveAttribute("type", "password");
-    await user.click(showPassword!);
-    expect(password).toHaveAttribute("type", "password");
-    expect(showConfirm).toHaveAttribute("type", "button");
-  });
-
-  it("creates the account and enters the app", async () => {
+  it("emails a code, verifies it, then goes on to create a password", async () => {
     const user = userEvent.setup();
     form({ mode: "register" });
     await user.type(screen.getByLabelText("Name"), " Ada Lovelace ");
     await user.type(screen.getByLabelText("Email address"), "ada@example.com");
-    await user.type(screen.getByLabelText("Password"), "analytical engine");
-    await user.type(screen.getByLabelText("Confirm password"), "analytical engine");
-    await user.click(screen.getByRole("button", { name: "Create account" }));
-    expect(signUpEmail).toHaveBeenCalledWith({
-      name: "Ada Lovelace",
-      email: "ada@example.com",
-      password: "analytical engine",
-    });
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
+    await user.click(screen.getByRole("button", { name: "Send me a code" }));
+    expect(registerEmail).toHaveBeenCalledWith({ name: "Ada Lovelace", email: "ada@example.com" });
+    const code = await screen.findByLabelText("6-digit code");
+    expect(code).toHaveFocus();
+    expect(code).toHaveAttribute("autocomplete", "one-time-code");
+    expect(code).toHaveAttribute("inputmode", "numeric");
+    expect(screen.getByRole("status")).toHaveTextContent("ada@example.com");
+    expect(screen.getByRole("status")).toHaveTextContent("expires in 10 minutes");
+    await user.type(code, "123 456");
+    await user.click(screen.getByRole("button", { name: "Verify" }));
+    expect(verifyEmail).toHaveBeenCalledWith({ email: "ada@example.com", otp: "123456" });
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/set-password"));
+    expect(refresh).toHaveBeenCalled();
   });
 
-  it("says when the email is already registered", async () => {
-    signUpEmail.mockResolvedValue({
+  it("refuses an email that is already registered, with a link to sign in", async () => {
+    registerEmail.mockResolvedValue({
       data: null,
-      error: { status: 422, code: "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL" },
+      error: { status: 409, code: "EMAIL_ALREADY_REGISTERED" },
     });
     const user = userEvent.setup();
     form({ mode: "register" });
     await user.type(screen.getByLabelText("Name"), "Ada");
-    await user.type(screen.getByLabelText("Email address"), "ada@example.com");
-    await user.type(screen.getByLabelText("Password"), "analytical engine");
-    await user.type(screen.getByLabelText("Confirm password"), "analytical engine{Enter}");
-    expect(await screen.findByRole("alert")).toHaveTextContent("already exists");
+    await user.type(screen.getByLabelText("Email address"), "ada@example.com{Enter}");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "That email is already registered. Sign in instead.",
+    );
+    expect(screen.getAllByRole("link", { name: "Sign in" })[0]).toHaveAttribute("href", "/sign-in");
+    expect(screen.queryByLabelText("6-digit code")).toBeNull();
+  });
+
+  it("checks the code's shape before sending it", async () => {
+    const user = userEvent.setup();
+    const code = await reachCodeStep(user);
+    await user.type(code, "12{Enter}");
+    expect(code).toHaveAccessibleDescription("Enter the 6-digit code from the email.");
+    expect(verifyEmail).not.toHaveBeenCalled();
+  });
+
+  it("explains a wrong code and keeps the step open", async () => {
+    verifyEmail.mockResolvedValue({ data: null, error: { status: 400, code: "INVALID_OTP" } });
+    const user = userEvent.setup();
+    const code = await reachCodeStep(user);
+    await user.type(code, "000000{Enter}");
+    expect(await screen.findByRole("alert")).toHaveTextContent("That code isn’t right");
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("offers a new code only after the cooldown", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await reachCodeStep(user);
+      const resend = screen.getByRole("button", { name: /Send a new code \(60s\)/ });
+      expect(resend).toBeDisabled();
+      // One second at a time: each tick schedules the next.
+      for (let i = 0; i < 60; i++) act(() => vi.advanceTimersByTime(1000));
+      const ready = screen.getByRole("button", { name: "Send a new code" });
+      expect(ready).toBeEnabled();
+      await user.click(ready);
+      expect(sendCode).toHaveBeenCalledWith({ email: "ada@example.com" });
+      expect(await screen.findByText(/We sent a new code/)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Send a new code \(\d+s\)/ })).toBeDisabled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("goes back to change the address", async () => {
+    const user = userEvent.setup();
+    await reachCodeStep(user);
+    await user.click(screen.getByRole("button", { name: "Use a different email" }));
+    expect(screen.getByLabelText("Email address")).toBeInTheDocument();
+  });
+
+  it("says the code is in the server terminal in testing mode", async () => {
+    const user = userEvent.setup();
+    render(<SignInForm google="on" linkDelivery="log" mode="register" />);
+    await user.type(screen.getByLabelText("Name"), "Ada");
+    await user.type(screen.getByLabelText("Email address"), "ada@example.com{Enter}");
+    expect(await screen.findByRole("heading", { name: "Check the server terminal" })).toBeVisible();
+  });
+
+  it("offers only Google, with a short note, when email can't be sent", () => {
+    form({ mode: "register", linkDelivery: "off" });
+    expect(screen.queryByLabelText("Email address")).toBeNull();
+    expect(screen.getByText(/isn’t available yet. Sign up with Google instead/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Sign up with Google" })).toBeEnabled();
+  });
+
+  it("says registration is unavailable when neither email nor Google is", () => {
+    form({ mode: "register", linkDelivery: "off", google: "off" });
+    expect(screen.getByText("Registration isn’t available right now.")).toBeVisible();
+  });
+
+  it("signs up with Google asking for a new account, and returns errors to registration", async () => {
+    form({ mode: "register" });
+    await userEvent.setup().click(screen.getByRole("button", { name: "Sign up with Google" }));
+    expect(social).toHaveBeenCalledWith({
+      provider: "google",
+      callbackURL: "/",
+      errorCallbackURL: "/sign-in?mode=register",
+      requestSignUp: true,
+    });
   });
 });
 
@@ -220,70 +302,43 @@ describe("SignInForm: sign-in link", () => {
     expect(magicLink).not.toHaveBeenCalled();
   });
 
-  it("labels the test sender as testing only and says who it works for", async () => {
-    const user = userEvent.setup();
-    const { container } = form({ linkDelivery: "resend-test" });
-    expect(linkButton()).toHaveAccessibleDescription(/Testing only.*project owner’s email/);
-    await user.hover(linkButton());
-    expect(screen.getByRole("tooltip")).toBeVisible();
-    expect(await axe(container)).toHaveNoViolations();
-    await user.keyboard("{Escape}");
-    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  it("carries no caution note in any delivery mode", async () => {
+    for (const linkDelivery of ["log", "email"] as const) {
+      const user = userEvent.setup();
+      form({ linkDelivery });
+      expect(linkButton()).not.toHaveAccessibleDescription();
+      await user.hover(linkButton());
+      expect(screen.queryByRole("tooltip")).toBeNull();
+      expect(screen.queryByText(/Testing only/)).toBeNull();
+      cleanup();
+    }
   });
 
-  it("has no testing note when real email is configured", () => {
-    form({ linkDelivery: "email" });
-    expect(linkButton()).not.toHaveAccessibleDescription();
-  });
-
-  it("opens the note only on hover while links go to the server log", async () => {
-    const user = userEvent.setup();
-    form({ linkDelivery: "log" });
-    act(() => linkButton().focus());
-    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
-    await user.hover(linkButton());
-    expect(screen.getByRole("tooltip")).toHaveTextContent("No email is sent yet");
-    await user.unhover(linkButton());
-    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
-  });
-});
-
-describe("SignInForm: sign-in links switched off", () => {
-  it("keeps the button visible but inert, and says why only on hover", async () => {
+  it("keeps the button visible but inert while links are off, with no note", async () => {
     const user = userEvent.setup();
     const { container } = form({ linkDelivery: "off" });
     expect(offButton()).toHaveAttribute("aria-disabled", "true");
-    expect(offButton()).not.toBeDisabled(); // still focusable, so the reason can be read
     expect(screen.queryByRole("link", { name: "Email me a sign-in link" })).toBeNull();
     await user.click(offButton());
+    await user.hover(offButton());
     expect(magicLink).not.toHaveBeenCalled();
-    await user.hover(offButton());
-    expect(screen.getByRole("tooltip")).toHaveTextContent("Not available yet");
-    expect(screen.getByRole("tooltip")).toHaveTextContent("password or Google");
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(screen.queryByText(/Not available yet/)).toBeNull();
     expect(await axe(container)).toHaveNoViolations();
-    await user.keyboard("{Escape}");
-    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
-    await user.unhover(offButton());
-    act(() => offButton().focus()); // focus alone never opens it
-    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
-    expect(offButton()).toHaveAccessibleDescription(/Not available yet/);
-  });
-  it("points only to the password while Google is switched off too", async () => {
-    const user = userEvent.setup();
-    form({ linkDelivery: "off", google: "disabled" });
-    await user.hover(offButton());
-    expect(screen.getByRole("tooltip")).toHaveTextContent("sign in with your password.");
-    expect(screen.getByRole("tooltip")).not.toHaveTextContent("Google");
   });
 });
 
 describe("SignInForm: Google and link errors", () => {
-  it("signs in with Google when it is configured", async () => {
+  it("signs in with Google, never asking for a new account, errors back to sign-in", async () => {
     form({ google: "on" });
     const google = screen.getByRole("button", { name: "Continue with Google" });
     expect(google).not.toHaveAccessibleDescription();
     await userEvent.setup().click(google);
-    expect(social).toHaveBeenCalledWith({ provider: "google", callbackURL: "/" });
+    expect(social).toHaveBeenCalledWith({
+      provider: "google",
+      callbackURL: "/",
+      errorCallbackURL: "/sign-in",
+    });
   });
 
   it("shows Google disabled, with setup steps, until it is configured", async () => {
@@ -294,22 +349,20 @@ describe("SignInForm: Google and link errors", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
-  it("shows Google disabled, with a note, while it is switched off", async () => {
+  it("shows Google disabled, with no caution note, while it is switched off", async () => {
     const { container } = form({ google: "disabled" });
     const google = screen.getByRole("button", { name: "Continue with Google" });
     expect(google).toBeDisabled();
-    expect(google).toHaveAccessibleDescription(/isn’t available yet/);
+    expect(google).not.toHaveAccessibleDescription();
+    expect(screen.queryByText(/isn’t available yet/)).toBeNull();
     expect(await axe(container)).toHaveNoViolations();
   });
 
   it("hides Google entirely when it is off, and the link option still follows 'or'", () => {
-    for (const mode of ["sign-in", "register"] as const) {
-      form({ google: "off", mode });
-      expect(screen.queryByRole("button", { name: "Continue with Google" })).toBeNull();
-      expect(screen.getByText("or")).toBeInTheDocument();
-      expect(linkButton()).toBeInTheDocument();
-      cleanup();
-    }
+    form({ google: "off" });
+    expect(screen.queryByRole("button", { name: "Continue with Google" })).toBeNull();
+    expect(screen.getByText("or")).toBeInTheDocument();
+    expect(linkButton()).toBeInTheDocument();
   });
 
   it("puts Google, then the sign-in link, after 'or', below the password sign-in", () => {
@@ -346,27 +399,34 @@ describe("SignInForm: Forgot password?", () => {
 });
 
 describe("validate", () => {
-  const ok = {
-    name: "Ada",
-    email: "ada@example.com",
-    password: "12345678",
-    confirmPassword: "12345678",
-  };
-  it("accepts a password of exactly the minimum length at registration", () => {
-    expect(validate("register", "password", ok)).toEqual({});
-    expect(validate("register", "password", { ...ok, password: "1234567" })).toHaveProperty(
-      "password",
+  const ok = { name: "Ada", email: "ada@example.com", password: "x" };
+  it("asks for a name and an email at registration, never a password", () => {
+    expect(validate("register", { ...ok, password: "" })).toEqual({});
+    expect(validate("register", { ...ok, name: "" })).toEqual({ name: "Enter your name." });
+  });
+  it("asks for a password, never a name, when signing in", () => {
+    expect(validate("sign-in", { ...ok, name: "" })).toEqual({});
+    expect(validate("sign-in", { ...ok, password: "" })).toEqual({
+      password: "Enter your password.",
+    });
+  });
+});
+
+describe("registerError and codeError", () => {
+  it("name the cause where they can", () => {
+    expect(registerError({ status: 403, code: "EMAIL_NOT_ALLOWED" })).toMatch(
+      /can’t send email to this address/,
     );
-  });
-  it("never asks for a name or a confirmation when signing in", () => {
-    expect(validate("sign-in", "password", { ...ok, name: "", confirmPassword: "" })).toEqual({});
-  });
-  it("asks for the password again at registration, and the same one", () => {
-    expect(validate("register", "password", { ...ok, confirmPassword: "" })).toEqual({
-      confirmPassword: "Type your password again.",
-    });
-    expect(validate("register", "password", { ...ok, confirmPassword: "12345679" })).toEqual({
-      confirmPassword: "The passwords don’t match.",
-    });
+    expect(registerError({ status: 429, code: "CODE_COOLDOWN", message: "Wait 12 seconds" })).toBe(
+      "Wait 12 seconds",
+    );
+    expect(registerError({ status: 429 })).toMatch(/Too many attempts/);
+    expect(registerError({ status: 400, code: "RESEND_RECIPIENT_NOT_ALLOWED" })).toBe(
+      "We couldn’t send the code. Try again in a moment.",
+    );
+    expect(registerError({ status: 502, code: "EMAIL_DELIVERY_FAILED" })).toMatch(/send the code/);
+    expect(codeError({ status: 400, code: "OTP_EXPIRED" })).toMatch(/expired/);
+    expect(codeError({ status: 403, code: "TOO_MANY_ATTEMPTS" })).toMatch(/Too many wrong codes/);
+    expect(codeError({ status: 0 })).toMatch(/couldn’t reach the server/);
   });
 });

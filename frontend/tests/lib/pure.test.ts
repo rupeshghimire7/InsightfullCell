@@ -217,7 +217,7 @@ describe("sign-in options", () => {
     expect(linkDelivery(env())).toBe("off");
     expect(linkDelivery(env(resend))).toBe("off");
     expect(linkDelivery(env(on))).toBe("log");
-    expect(linkDelivery(env({ ...on, ...resend }))).toBe("resend-test"); // onboarding@resend.dev
+    expect(linkDelivery(env({ ...on, ...resend }))).toBe("email"); // no test-sender caveat
     expect(linkDelivery(env({ ...on, ...resend, EMAIL_FROM: "Cell <login@cell.example>" }))).toBe(
       "email",
     );

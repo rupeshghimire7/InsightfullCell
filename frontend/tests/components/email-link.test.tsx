@@ -13,7 +13,7 @@ beforeEach(() => {
   magicLink.mockReset().mockResolvedValue({ data: { status: true }, error: null });
 });
 
-const form = (delivery: "email" | "resend-test" | "log" = "resend-test") =>
+const form = (delivery: "email" | "log" = "email") =>
   render(<EmailLinkForm delivery={delivery} expiresInMinutes={10} />);
 const input = () => screen.getByLabelText("Email address");
 const send = () => screen.getByRole("button", { name: "Send sign-in link" });
@@ -58,18 +58,31 @@ describe("EmailLinkForm", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Check the server terminal");
   });
 
-  it("explains an address that can't get links and offers registration", async () => {
+  it("explains an address that can't get links, without naming who can", async () => {
     magicLink.mockResolvedValue({ data: null, error: { status: 403, code: "EMAIL_NOT_ALLOWED" } });
     const user = userEvent.setup();
     const { container } = form();
     await user.type(input(), "someone@example.com{Enter}");
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("isn’t set up with this project");
-    expect(alert).toHaveTextContent("project owner’s email");
-    expect(screen.getByRole("link", { name: "Register with a password" })).toHaveAttribute(
+    expect(alert).toHaveTextContent("We can’t send email to this address");
+    expect(alert).not.toHaveTextContent(/project owner|testing/i);
+    expect(screen.queryByRole("link", { name: /Register/ })).toBeNull();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("tells an address with no account to register first, with the way to do it", async () => {
+    magicLink.mockResolvedValue({ data: null, error: { status: 400, code: "ACCOUNT_NOT_FOUND" } });
+    const user = userEvent.setup();
+    const { container } = form("email");
+    await user.type(input(), "stranger@example.com{Enter}");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No account found for that email. Register first.",
+    );
+    expect(screen.getByRole("link", { name: "Register" })).toHaveAttribute(
       "href",
       "/sign-in?mode=register",
     );
+    expect(screen.queryByRole("status")).toBeNull();
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -83,15 +96,12 @@ describe("EmailLinkForm", () => {
 });
 
 describe("linkError", () => {
-  it("names the cause where it can", () => {
-    expect(linkError({ status: 400, code: "RESEND_RECIPIENT_NOT_ALLOWED" }, "resend-test")).toMatch(
-      /project owner/,
-    );
-    expect(linkError({ status: 400, code: "EMAIL_NOT_CONFIGURED" }, "email")).toMatch(
-      /isn’t set up/,
-    );
-    expect(linkError({ status: 502 }, "resend-test")).toMatch(/testing mode/);
-    expect(linkError({ status: 502 }, "email")).toMatch(/Check the address/);
-    expect(linkError({}, "email")).toMatch(/couldn’t reach the server/);
+  it("names the cause where it can, without test-sender caveats", () => {
+    expect(linkError({ status: 400, code: "EMAIL_NOT_CONFIGURED" })).toMatch(/isn’t set up/);
+    expect(linkError({ status: 429, code: "EMAIL_RATE_LIMITED" })).toMatch(/busy/);
+    for (const error of [{ status: 502 }, { status: 400, code: "RESEND_RECIPIENT_NOT_ALLOWED" }]) {
+      expect(linkError(error)).toBe("We couldn’t send the link. Check the address and try again.");
+    }
+    expect(linkError({})).toMatch(/couldn’t reach the server/);
   });
 });

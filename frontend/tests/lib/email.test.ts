@@ -17,8 +17,10 @@ import {
   EmailDeliveryError,
   escapeAttribute,
   isResendApiKey,
+  renderOtpEmail,
   renderPasswordResetEmail,
   renderSignInEmail,
+  sendOtpEmail,
   sendPasswordResetEmail,
   sendSignInEmail,
 } from "@/lib/email";
@@ -167,13 +169,13 @@ describe("sendPasswordResetEmail", () => {
     expect(body.text).toContain(message.url);
   });
 
-  it("falls back to EMAIL_FROM when no reset sender is set", async () => {
+  it("sends from no-reply@ on EMAIL_FROM's domain when no reset sender is set", async () => {
     env.current.EMAIL_TRANSPORT = "resend";
     env.current.EMAIL_FROM = "IC <login@ic.test>";
     fetchMock.mockResolvedValue(new Response("{}", { status: 200 }));
     await sendPasswordResetEmail(message);
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(JSON.parse(init.body as string).from).toBe("IC <login@ic.test>");
+    expect(JSON.parse(init.body as string).from).toBe("IC <no-reply@ic.test>");
   });
 
   it("failures never contain the link or the recipient", async () => {
@@ -203,5 +205,60 @@ describe("renderPasswordResetEmail", () => {
 describe("escapeAttribute", () => {
   it("escapes what could end an attribute or start a tag", () => {
     expect(escapeAttribute(`a&b"c<d>e'`)).toBe("a&amp;b&quot;c&lt;d&gt;e'");
+  });
+});
+
+describe("renderOtpEmail", () => {
+  it("escapes the code for HTML, keeps it out of the subject, says it expires in 10 minutes", () => {
+    const { subject, html, text } = renderOtpEmail({ otp: '12<b>"&' });
+    expect(subject).toBe("Your InsightfulCell verification code");
+    expect(subject).not.toContain("12");
+    expect(html).toContain("12&lt;b&gt;&quot;&amp;");
+    expect(html).not.toContain("<b>");
+    expect(text).toContain('12<b>"&');
+    expect(text).toContain("expires in 10 minutes");
+    expect(text).toContain("If you didn't ask for this code, ignore this email");
+  });
+});
+
+describe("sendOtpEmail", () => {
+  const fetchMock = vi.fn();
+  const message = { to: "ada@example.com", otp: "482915" };
+  beforeEach(() => vi.stubGlobal("fetch", fetchMock));
+  afterEach(() => {
+    fetchMock.mockReset();
+    vi.unstubAllGlobals();
+  });
+
+  it("console transport prints the code and sends nothing", async () => {
+    env.current.EMAIL_TRANSPORT = "console";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    await sendOtpEmail(message);
+    expect(warn.mock.calls.at(-1)?.[0]).toContain("Verification code for ada@example.com");
+    expect(warn.mock.calls.at(-1)?.[0]).toContain("482915");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sends from EMAIL_FROM, the login address", async () => {
+    env.current.EMAIL_TRANSPORT = "resend";
+    env.current.EMAIL_FROM = "IC <login@ic.test>";
+    env.current.EMAIL_RESET_FROM = "IC <no-reply@ic.test>";
+    fetchMock.mockResolvedValue(new Response("{}", { status: 200 }));
+    await sendOtpEmail(message);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    expect(body).toMatchObject({ from: "IC <login@ic.test>", to: ["ada@example.com"] });
+    expect(body.text).toContain("482915");
+    delete env.current.EMAIL_RESET_FROM;
+  });
+
+  it("failures never contain the code or the recipient", async () => {
+    env.current.EMAIL_TRANSPORT = "resend";
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ name: "invalid_api_key" }), { status: 401 }),
+    );
+    const error = await sendOtpEmail(message).catch((e: Error) => e);
+    expect(error).toMatchObject({ reason: "invalid-key" });
+    expect((error as Error).message).not.toMatch(/482915|ada@example\.com/);
   });
 });

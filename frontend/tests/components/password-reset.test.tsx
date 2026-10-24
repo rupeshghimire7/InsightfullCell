@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "../axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -111,23 +111,56 @@ describe("ResetPasswordForm", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
-  it("refuses a short password and focuses it", async () => {
+  it("refuses a weak password, says what is missing and focuses it", async () => {
     const user = userEvent.setup();
     resetForm();
     await user.type(screen.getByLabelText("New password"), "short");
     await user.type(screen.getByLabelText("Confirm new password"), "short{Enter}");
     expect(screen.getByLabelText("New password")).toHaveFocus();
     expect(screen.getByLabelText("New password")).toHaveAccessibleDescription(
-      expect.stringContaining("Use at least 8 characters."),
+      expect.stringContaining("Choose a stronger password: at least 10 characters"),
     );
     expect(resetPassword).not.toHaveBeenCalled();
+  });
+
+  it("shows the rules as a live checklist, without the email rule (the address is unknown)", async () => {
+    const user = userEvent.setup();
+    resetForm();
+    const list = screen.getByRole("list", { name: "Password rules" });
+    expect(screen.getByLabelText("New password")).toHaveAccessibleDescription(
+      expect.stringContaining("At least 10 characters: not yet"),
+    );
+    expect(list).not.toHaveTextContent("email");
+    await user.type(screen.getByLabelText("New password"), "abcDEF");
+    expect(list).toHaveTextContent("A lowercase letter: met");
+    expect(list).toHaveTextContent("A number: not yet");
+  });
+
+  it("shows the server's policy refusal on the field", async () => {
+    resetPassword.mockResolvedValue({
+      data: null,
+      error: {
+        status: 400,
+        code: "PASSWORD_TOO_WEAK",
+        message: "Choose a stronger password: not the part of your email before the @.",
+      },
+    });
+    const user = userEvent.setup();
+    resetForm();
+    await user.type(screen.getByLabelText("New password"), "Long-enough-Pass1");
+    await user.type(screen.getByLabelText("Confirm new password"), "Long-enough-Pass1{Enter}");
+    await waitFor(() =>
+      expect(screen.getByLabelText("New password")).toHaveAccessibleDescription(
+        expect.stringContaining("not the part of your email"),
+      ),
+    );
   });
 
   it("refuses passwords that don't match and focuses the confirmation", async () => {
     const user = userEvent.setup();
     resetForm();
-    await user.type(screen.getByLabelText("New password"), "a long enough passphrase");
-    await user.type(screen.getByLabelText("Confirm new password"), "a different one!{Enter}");
+    await user.type(screen.getByLabelText("New password"), "Long-enough-Pass1");
+    await user.type(screen.getByLabelText("Confirm new password"), "Different-Pass12{Enter}");
     expect(screen.getByLabelText("Confirm new password")).toHaveFocus();
     expect(screen.getByLabelText("Confirm new password")).toHaveAccessibleDescription(
       "The passwords don’t match.",
@@ -138,11 +171,11 @@ describe("ResetPasswordForm", () => {
   it("sets the new password with the link's token, then points to sign-in", async () => {
     const user = userEvent.setup();
     resetForm();
-    await user.type(screen.getByLabelText("New password"), "a long enough passphrase");
-    await user.type(screen.getByLabelText("Confirm new password"), "a long enough passphrase");
+    await user.type(screen.getByLabelText("New password"), "Long-enough-Pass1");
+    await user.type(screen.getByLabelText("Confirm new password"), "Long-enough-Pass1");
     await user.click(screen.getByRole("button", { name: "Change password" }));
     expect(resetPassword).toHaveBeenCalledWith({
-      newPassword: "a long enough passphrase",
+      newPassword: "Long-enough-Pass1",
       token: "tok123",
     });
     expect(await screen.findByRole("status")).toHaveTextContent("Password changed");
@@ -153,11 +186,8 @@ describe("ResetPasswordForm", () => {
     resetPassword.mockResolvedValue({ data: null, error: { status: 400, code: "INVALID_TOKEN" } });
     const user = userEvent.setup();
     resetForm();
-    await user.type(screen.getByLabelText("New password"), "a long enough passphrase");
-    await user.type(
-      screen.getByLabelText("Confirm new password"),
-      "a long enough passphrase{Enter}",
-    );
+    await user.type(screen.getByLabelText("New password"), "Long-enough-Pass1");
+    await user.type(screen.getByLabelText("Confirm new password"), "Long-enough-Pass1{Enter}");
     expect(await screen.findByRole("alert")).toHaveTextContent("expired or was already used");
     expect(screen.getByRole("link", { name: "Get a new link" })).toHaveAttribute(
       "href",
@@ -169,11 +199,8 @@ describe("ResetPasswordForm", () => {
     resetPassword.mockRejectedValue(new TypeError("Failed to fetch"));
     const user = userEvent.setup();
     resetForm();
-    await user.type(screen.getByLabelText("New password"), "a long enough passphrase");
-    await user.type(
-      screen.getByLabelText("Confirm new password"),
-      "a long enough passphrase{Enter}",
-    );
+    await user.type(screen.getByLabelText("New password"), "Long-enough-Pass1");
+    await user.type(screen.getByLabelText("Confirm new password"), "Long-enough-Pass1{Enter}");
     expect(await screen.findByRole("alert")).toHaveTextContent("couldn’t reach the server");
   });
 });

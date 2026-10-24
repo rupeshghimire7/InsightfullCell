@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  runProgress,
   CANCELLABLE,
   formatDuration,
   isTerminal,
@@ -51,5 +52,19 @@ describe("formatDuration", () => {
 
   it("accepts a timestamp in milliseconds", () => {
     expect(formatDuration(start, Date.parse(start) + 61_000)).toBe("1 min 01 s");
+  });
+});
+
+describe("runProgress", () => {
+  it("says where a run is instead of an empty step", () => {
+    expect(runProgress({ status: "succeeded", stage: null })).toBe("All steps done");
+    expect(runProgress({ status: "queued", stage: null })).toBe("Waiting to start");
+    expect(runProgress({ status: "running", stage: "ingest" })).toBe("Verify and read the file");
+    expect(runProgress({ status: "running", stage: null })).toBe("Starting");
+    expect(runProgress({ status: "awaiting_review", stage: null })).toBe("Waiting for your review");
+    expect(runProgress({ status: "failed", stage: "ingest" })).toBe(
+      "Stopped at: Verify and read the file",
+    );
+    expect(runProgress({ status: "cancelled", stage: null })).toBe("Stopped before the first step");
   });
 });

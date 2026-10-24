@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  adminCookie,
-  adminCookieName,
   adminKeyMatches,
   clientAddress,
   createAdminToken,
@@ -37,7 +35,7 @@ describe("the admin key", () => {
   });
 });
 
-describe("the admin session cookie", () => {
+describe("the page-view token", () => {
   it("unlocks until it expires", () => {
     const now = 1_000_000;
     const token = createAdminToken(env, now);
@@ -56,20 +54,6 @@ describe("the admin session cookie", () => {
     expect(verifyAdminToken(undefined, env)).toBe(false);
     const rotated = parseEnv({ ...base, ADMIN_DASHBOARD_KEY: "n".repeat(40) });
     expect(verifyAdminToken(token, rotated)).toBe(false);
-  });
-
-  it("is host-only, script-proof and same-site over https", () => {
-    expect(adminCookieName(env)).toBe("__Host-ic_admin");
-    expect(adminCookie(env, "v", 60)).toMatchObject({
-      httpOnly: true,
-      secure: true,
-      sameSite: "strict",
-      path: "/",
-      maxAge: 60,
-    });
-    const local = parseEnv({ ...base, BETTER_AUTH_URL: "http://localhost:3000" });
-    expect(adminCookieName(local)).toBe("ic_admin");
-    expect(adminCookie(local, "v", 60).secure).toBe(false);
   });
 });
 

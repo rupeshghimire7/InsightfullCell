@@ -47,12 +47,15 @@ Bio.
   it("parses the shipped team file", () => {
     const file = readFileSync(path.join(process.cwd(), "public/content/team.md"), "utf8");
     const team = parseTeam(file);
-    expect(team.map((m) => m.name)).toEqual(["Rupesh Ghimire", "Sandesh Prasad Paudel"]);
+    expect(team.map((m) => m.name)).toEqual(["Rupesh Ghimire", "Sandesh Paudel"]);
     for (const member of team) {
       expect(member.role).toBeTruthy();
-      expect(member.linkedin).toMatch(/^https:\/\//);
-      expect(member.email).toContain("@");
-      expect(member.bio.length).toBeGreaterThan(0);
+      expect(member.linkedin).toMatch(/^https:\/\/www\.linkedin\.com\/in\//);
+      expect(member.email).toMatch(/@gmail\.com$/);
+      expect(member.university).toBe("Charles Darwin University");
+      expect(member.program).toBe("Masters of Data Science");
+      expect(member.studentId).toMatch(/^s\d{6}$/);
+      expect(member.bio).toHaveLength(1);
     }
   });
 });
@@ -63,5 +66,45 @@ describe("parseTheme", () => {
     expect(parseTheme("light")).toBe("light");
     expect(parseTheme("blue")).toBeUndefined();
     expect(parseTheme(undefined)).toBeUndefined();
+  });
+});
+
+describe("parseTeam: university details", () => {
+  it("reads University, Program and Student ID", () => {
+    const [member] = parseTeam(`## Ada Lovelace
+
+Role: Lead
+University: Charles Darwin University
+Program: Masters of Data Science
+Student ID: s123456
+`);
+    expect(member).toMatchObject({
+      name: "Ada Lovelace",
+      role: "Lead",
+      university: "Charles Darwin University",
+      program: "Masters of Data Science",
+      studentId: "s123456",
+      bio: [],
+    });
+  });
+});
+
+describe("parseTeam: the Bio field", () => {
+  it("reads Bio: in any case and order, with blank lines between fields", () => {
+    const [member] = parseTeam(`## Ada Lovelace
+
+Role: Lead
+
+BIO: Writes the engine.
+
+LinkedIn: https://www.linkedin.com/in/ada
+Email: ada@example.com
+`);
+    expect(member).toMatchObject({
+      role: "Lead",
+      bio: ["Writes the engine."],
+      linkedin: "https://www.linkedin.com/in/ada",
+      email: "ada@example.com",
+    });
   });
 });

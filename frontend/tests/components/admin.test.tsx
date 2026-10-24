@@ -1,24 +1,39 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AdminBoard } from "@/components/admin/admin-board";
 import { AdminDashboard } from "@/components/admin/admin-dashboard";
-import { AdminGate, LockButton } from "@/components/admin/admin-gate";
+import { AdminGate } from "@/components/admin/admin-gate";
 import { axe } from "../axe";
 import { accounts, overview } from "../lib/admin-fixtures";
 
-const refresh = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
-const fetchMock = vi.fn();
+const unlockAdmin = vi.fn();
+const adminPeriod = vi.fn();
+vi.mock("@/app/adminboard/actions", () => ({
+  unlockAdmin: (...a: unknown[]) => unlockAdmin(...a),
+  adminPeriod: (...a: unknown[]) => adminPeriod(...a),
+}));
+
+const noop = () => undefined;
+const dashboard = (props: Partial<React.ComponentProps<typeof AdminDashboard>> = {}) =>
+  render(
+    <AdminDashboard
+      overview={overview()}
+      accounts={accounts}
+      onPeriod={noop}
+      onLock={noop}
+      {...props}
+    />,
+  );
 
 beforeEach(() => {
-  refresh.mockReset();
-  fetchMock.mockReset();
-  vi.stubGlobal("fetch", fetchMock);
+  unlockAdmin.mockReset();
+  adminPeriod.mockReset();
 });
 
 describe("AdminGate", () => {
   it("asks for the key in a dialog and focuses it", async () => {
-    const { container } = render(<AdminGate />);
+    const { container } = render(<AdminGate onUnlock={async () => null} />);
     const dialog = screen.getByRole("dialog", {
       name: "Please enter admin key for dashboard access.",
     });
@@ -30,61 +45,83 @@ describe("AdminGate", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
-  it("sends the key to this app's server only and reloads on success", async () => {
-    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+  it("asks for a key before sending, shows the server's answer, explains a lost connection", async () => {
+    const onUnlock = vi
+      .fn()
+      .mockResolvedValueOnce("That admin key isn’t right.")
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
     const user = userEvent.setup();
-    render(<AdminGate />);
-    await user.type(screen.getByLabelText("Admin key"), "the-key{Enter}");
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/admin/session",
-      expect.objectContaining({ method: "POST", body: JSON.stringify({ key: "the-key" }) }),
-    );
-    expect(refresh).toHaveBeenCalled();
-    expect(screen.getByLabelText("Admin key")).toHaveValue("");
-  });
-
-  it("says when the key is wrong, and when attempts are paused", async () => {
-    const user = userEvent.setup();
-    render(<AdminGate />);
-    fetchMock.mockResolvedValueOnce(new Response("{}", { status: 401 }));
-    await user.type(screen.getByLabelText("Admin key"), "nope{Enter}");
-    expect(await screen.findByRole("alert")).toHaveTextContent("isn’t right");
-    expect(screen.getByLabelText("Admin key")).toHaveAttribute("aria-invalid", "true");
-    fetchMock.mockResolvedValueOnce(
-      Response.json({ detail: "Too many wrong keys. Try again in 15 minutes." }, { status: 429 }),
-    );
-    await user.type(screen.getByLabelText("Admin key"), "again{Enter}");
-    expect(await screen.findByRole("alert")).toHaveTextContent("Try again in 15 minutes");
-    expect(refresh).not.toHaveBeenCalled();
-  });
-
-  it("asks for a key before sending, and explains a lost connection", async () => {
-    const user = userEvent.setup();
-    render(<AdminGate />);
+    render(<AdminGate onUnlock={onUnlock} />);
     await user.click(screen.getByRole("button", { name: "Unlock dashboard" }));
     expect(screen.getByRole("alert")).toHaveTextContent("Enter the admin key");
-    expect(fetchMock).not.toHaveBeenCalled();
-    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    expect(onUnlock).not.toHaveBeenCalled();
+    await user.type(screen.getByLabelText("Admin key"), "nope{Enter}");
+    expect(onUnlock).toHaveBeenCalledWith("nope");
+    expect(await screen.findByRole("alert")).toHaveTextContent("isn’t right");
+    expect(screen.getByLabelText("Admin key")).toHaveValue("");
     await user.type(screen.getByLabelText("Admin key"), "k{Enter}");
     expect(await screen.findByRole("alert")).toHaveTextContent("couldn’t reach the server");
   });
+});
 
-  it("locks again", async () => {
-    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+describe("AdminBoard", { timeout: 30_000 }, () => {
+  const ok = (days = 30) => ({
+    status: "ok",
+    token: "page-token",
+    days,
+    overview: { ...overview(), days },
+    accounts,
+  });
+
+  it("shows no figures until the key is right, then the dashboard", async () => {
+    unlockAdmin.mockResolvedValueOnce({
+      status: "refused",
+      message: "That admin key isn’t right.",
+    });
+    unlockAdmin.mockResolvedValueOnce(ok());
     const user = userEvent.setup();
-    render(<LockButton />);
-    await user.click(screen.getByRole("button", { name: "Lock" }));
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/admin/session",
-      expect.objectContaining({ method: "DELETE" }),
+    render(<AdminBoard initialDays={30} />);
+    expect(screen.queryByRole("region", { name: "Totals" })).toBeNull();
+    await user.type(screen.getByLabelText("Admin key"), "wrong{Enter}");
+    expect(await screen.findByRole("alert")).toHaveTextContent("isn’t right");
+    expect(screen.queryByRole("region", { name: "Totals" })).toBeNull();
+    await user.type(screen.getByLabelText("Admin key"), "the-key{Enter}");
+    expect(unlockAdmin).toHaveBeenLastCalledWith("the-key", 30);
+    expect(await screen.findByRole("region", { name: "Totals" })).toBeVisible();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("switches period with the page's token, and Lock asks for the key again", async () => {
+    unlockAdmin.mockResolvedValue(ok());
+    adminPeriod.mockResolvedValue(ok(7));
+    const user = userEvent.setup();
+    render(<AdminBoard initialDays={30} />);
+    await user.type(screen.getByLabelText("Admin key"), "the-key{Enter}");
+    await user.click(await screen.findByRole("button", { name: "7 days" }));
+    expect(adminPeriod).toHaveBeenCalledWith("page-token", 7);
+    expect(await screen.findByRole("button", { name: "7 days" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
     );
-    expect(refresh).toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Lock" }));
+    expect(screen.getByRole("dialog")).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Totals" })).toBeNull();
+  });
+
+  it("asks for the key again once the page's token has expired", async () => {
+    unlockAdmin.mockResolvedValue(ok());
+    adminPeriod.mockResolvedValue({ status: "locked" });
+    const user = userEvent.setup();
+    render(<AdminBoard initialDays={30} />);
+    await user.type(screen.getByLabelText("Admin key"), "the-key{Enter}");
+    await user.click(await screen.findByRole("button", { name: "Refresh" }));
+    expect(await screen.findByRole("dialog")).toBeVisible();
   });
 });
 
 describe("AdminDashboard", { timeout: 30_000 }, () => {
   it("shows totals, spend against the cap in AUD, and passes axe", async () => {
-    const { container } = render(<AdminDashboard overview={overview()} accounts={accounts} />);
+    const { container } = dashboard({ overview: overview(), accounts: accounts });
     const totals = screen.getByRole("region", { name: "Totals" });
     expect(within(totals).getByText("People").nextSibling).toHaveTextContent("1");
     expect(within(totals).getByText("Files submitted").nextSibling).toHaveTextContent("5");
@@ -100,7 +137,7 @@ describe("AdminDashboard", { timeout: 30_000 }, () => {
   it("warns as the spend nears the cap", () => {
     const near = overview();
     near.spend.total_usd = 2.4; // A$3.84 of A$4.00
-    render(<AdminDashboard overview={near} accounts={accounts} />);
+    dashboard({ overview: near, accounts: accounts });
     expect(screen.getByRole("meter", { name: "Model spend against the cap" })).toHaveAttribute(
       "aria-valuetext",
       expect.stringMatching(/Nearly at the cap/),
@@ -111,7 +148,7 @@ describe("AdminDashboard", { timeout: 30_000 }, () => {
     const noOverall = overview();
     noOverall.config.spend_cap_aud = null;
     noOverall.config.spend_cap_usd = null;
-    render(<AdminDashboard overview={noOverall} accounts={accounts} />);
+    dashboard({ overview: noOverall, accounts: accounts });
     // US$2.50 x 1.60 = A$4.00 of OpenAI's A$4.50; Gemini has no cap, so no meter.
     expect(screen.getByRole("meter", { name: "OpenAI spend against its cap" })).toHaveAttribute(
       "aria-valuetext",
@@ -128,7 +165,7 @@ describe("AdminDashboard", { timeout: 30_000 }, () => {
   });
 
   it("lists people with their sign-in details and usage, deleted accounts too", () => {
-    render(<AdminDashboard overview={overview()} accounts={accounts} />);
+    dashboard({ overview: overview(), accounts: accounts });
     const people = screen.getByRole("region", { name: "People and their usage" });
     const rows = within(people).getAllByRole("row");
     expect(rows).toHaveLength(3); // header, Ada, a deleted account
@@ -142,7 +179,7 @@ describe("AdminDashboard", { timeout: 30_000 }, () => {
   });
 
   it("shows spend by model and the backup, never a key", () => {
-    render(<AdminDashboard overview={overview()} accounts={accounts} />);
+    dashboard({ overview: overview(), accounts: accounts });
     const models = screen.getByRole("region", { name: "Spend by model" });
     expect(models).toHaveTextContent("gpt-4o-mini");
     expect(screen.getByText("OpenAI: gpt-4o-mini")).toBeInTheDocument();
@@ -170,6 +207,8 @@ describe("AdminDashboard", { timeout: 30_000 }, () => {
           },
         })}
         accounts={accounts}
+        onPeriod={noop}
+        onLock={noop}
       />,
     );
     const check = screen.getByText("OpenAI’s own figures").parentElement as HTMLElement;
@@ -184,6 +223,8 @@ describe("AdminDashboard", { timeout: 30_000 }, () => {
           provider_reported: { openai: { status: "unavailable", http_status: 401 } },
         })}
         accounts={[]}
+        onPeriod={noop}
+        onLock={noop}
       />,
     );
     expect(screen.getByText(/couldn’t be read right now \(HTTP 401\)/)).toBeInTheDocument();
@@ -196,7 +237,7 @@ describe("AdminDashboard", { timeout: 30_000 }, () => {
     empty.users = [];
     empty.runs.by_day = [];
     empty.runs.failures = [];
-    render(<AdminDashboard overview={empty} accounts={[]} />);
+    dashboard({ overview: empty, accounts: [] });
     expect(screen.getByText("No model calls in this period.")).toBeInTheDocument();
     expect(screen.getByText("Nobody has signed up yet.")).toBeInTheDocument();
     expect(screen.getByText("No failed analyses.")).toBeInTheDocument();

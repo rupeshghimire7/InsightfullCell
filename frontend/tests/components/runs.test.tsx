@@ -95,7 +95,7 @@ describe("RunTable", () => {
     run({ id: "01a120e9-cc81-7ec1-9428-29aea00bb695", status: "running", stage: "ingest" }),
   ];
 
-  it("links each run, shows status, step and duration, and passes axe", async () => {
+  it("links each run, shows status, progress and duration, and passes axe", async () => {
     const { container } = render(<RunTable runs={runs} orgId="org-1" />);
     const table = screen.getByRole("table", { name: "Analysis runs, newest first" });
     expect(within(table).getAllByRole("link", { name: "Home sales 2026" })[0]).toHaveAttribute(
@@ -103,7 +103,7 @@ describe("RunTable", () => {
       `/o/org-1/runs/${runs[0]!.id}`,
     );
     expect(screen.getByText(/^1\smin 05\ss$/)).toBeInTheDocument();
-    expect(screen.getByText("parse-failure")).toBeInTheDocument();
+    expect(screen.getByText("Stopped before the first step")).toBeInTheDocument();
     expect(screen.getByText("Verify and read the file")).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });

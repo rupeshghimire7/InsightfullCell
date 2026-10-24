@@ -82,10 +82,11 @@ describe("Header menu and theme", () => {
     await user.click(screen.getByText("", { selector: "summary[aria-label='Menu']" }));
     const menu = screen.getByRole("navigation", { name: "More" });
     for (const [name, href] of [
-      ["About us", "/o/org-1/about"],
+      ["About InsightfulCell", "/o/org-1/about"],
       ["Contact", "/o/org-1/contact"],
       ["License", "/o/org-1/license"],
       ["Profile", "/o/org-1/profile"],
+      ["Data & privacy", "/o/org-1/privacy"],
     ]) {
       expect(within(menu).getByRole("link", { name })).toHaveAttribute("href", href);
     }
