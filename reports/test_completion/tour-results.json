@@ -1,0 +1,347 @@
+{
+  "startedAt": "2026-10-24T09:34:19.511Z",
+  "pages": [
+    {
+      "name": "Sign in",
+      "path": "/sign-in",
+      "status": 200,
+      "loadMs": 214,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/sign-in-desktop.png",
+        "screenshots/sign-in-phone.png",
+        "screenshots/sign-in-dark.png"
+      ]
+    },
+    {
+      "name": "Register",
+      "path": "/sign-in",
+      "status": 200,
+      "loadMs": 173,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/register-desktop.png",
+        "screenshots/register-phone.png",
+        "screenshots/register-dark.png"
+      ]
+    },
+    {
+      "name": "Email me a sign-in link",
+      "path": "/sign-in/email",
+      "status": 200,
+      "loadMs": 172,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/email-me-a-sign-in-link-desktop.png",
+        "screenshots/email-me-a-sign-in-link-phone.png"
+      ]
+    },
+    {
+      "name": "Forgot password",
+      "path": "/sign-in/forgot",
+      "status": 200,
+      "loadMs": 168,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/forgot-password-desktop.png",
+        "screenshots/forgot-password-phone.png"
+      ]
+    },
+    {
+      "name": "Not found",
+      "path": "/sign-in",
+      "status": 200,
+      "loadMs": 184,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/not-found-desktop.png",
+        "screenshots/not-found-phone.png"
+      ]
+    },
+    {
+      "name": "Registration code step",
+      "path": "/sign-in?mode=register",
+      "status": 200,
+      "loadMs": null,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/registration-code-step.png"
+      ]
+    },
+    {
+      "name": "Create a password (weak, button disabled)",
+      "path": "/set-password",
+      "status": 200,
+      "loadMs": 188,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/create-a-password-weak-button-disabled--desktop.png",
+        "screenshots/create-a-password-weak-button-disabled--phone.png"
+      ]
+    },
+    {
+      "name": "Home (empty)",
+      "path": "/o/310bfdf0-4a44-4f87-a943-6c38ec73bbdd",
+      "status": 200,
+      "loadMs": 190,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/home-empty--desktop.png",
+        "screenshots/home-empty--phone.png",
+        "screenshots/home-empty--dark.png"
+      ]
+    },
+    {
+      "name": "Analysis while running",
+      "path": "/o/310bfdf0-4a44-4f87-a943-6c38ec73bbdd/runs/01a16d43-302f-743b-a6a8-dca50334d44c",
+      "status": 200,
+      "loadMs": null,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/analysis-running.png"
+      ]
+    },
+    {
+      "name": "Analysis (finished)",
+      "path": "/o/310bfdf0-4a44-4f87-a943-6c38ec73bbdd/runs/01a16d43-302f-743b-a6a8-dca50334d44c",
+      "status": 200,
+      "loadMs": 247,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/analysis-finished--desktop.png",
+        "screenshots/analysis-finished--phone.png"
+      ]
+    },
+    {
+      "name": "Report",
+      "path": "/o/310bfdf0-4a44-4f87-a943-6c38ec73bbdd/runs/01a16d43-302f-743b-a6a8-dca50334d44c/report",
+      "status": 200,
+      "loadMs": 395,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/report-desktop.png",
+        "screenshots/report-phone.png",
+        "screenshots/report-dark.png"
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "path": "/o/310bfdf0-4a44-4f87-a943-6c38ec73bbdd/runs/01a16d43-302f-743b-a6a8-dca50334d44c/dashboard",
+      "status": 200,
+      "loadMs": 388,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/dashboard-desktop.png",
+        "screenshots/dashboard-phone.png",
+        "screenshots/dashboard-dark.png"
+      ]
+    },
+    {
+      "name": "Analysis plan",
+      "path": "/o/310bfdf0-4a44-4f87-a943-6c38ec73bbdd/runs/01a16d43-302f-743b-a6a8-dca50334d44c/plan",
+      "status": 200,
+      "loadMs": 630,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/analysis-plan-desktop.png",
+        "screenshots/analysis-plan-phone.png"
+      ]
+    },
+    {
+      "name": "Recipe",
+      "path": "/o/310bfdf0-4a44-4f87-a943-6c38ec73bbdd/runs/01a16d43-302f-743b-a6a8-dca50334d44c/recipe",
+      "status": 200,
+      "loadMs": 305,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/recipe-desktop.png",
+        "screenshots/recipe-phone.png"
+      ]
+    },
+    {
+      "name": "Dataset",
+      "path": "/o/310bfdf0-4a44-4f87-a943-6c38ec73bbdd/datasets/01a16d43-2cf0-7c56-86bf-089477575275",
+      "status": 200,
+      "loadMs": 210,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/dataset-desktop.png",
+        "screenshots/dataset-phone.png"
+      ]
+    },
+    {
+      "name": "Home (with a dataset)",
+      "path": "/o/310bfdf0-4a44-4f87-a943-6c38ec73bbdd",
+      "status": 200,
+      "loadMs": 193,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/home-with-a-dataset--desktop.png",
+        "screenshots/home-with-a-dataset--phone.png"
+      ]
+    },
+    {
+      "name": "Runs",
+      "path": "/o/310bfdf0-4a44-4f87-a943-6c38ec73bbdd/runs",
+      "status": 200,
+      "loadMs": 187,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/runs-desktop.png",
+        "screenshots/runs-phone.png"
+      ]
+    },
+    {
+      "name": "Profile",
+      "path": "/o/310bfdf0-4a44-4f87-a943-6c38ec73bbdd/profile",
+      "status": 200,
+      "loadMs": 211,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/profile-desktop.png",
+        "screenshots/profile-phone.png"
+      ]
+    },
+    {
+      "name": "Data & privacy",
+      "path": "/o/310bfdf0-4a44-4f87-a943-6c38ec73bbdd/privacy",
+      "status": 200,
+      "loadMs": 194,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/data-privacy-desktop.png",
+        "screenshots/data-privacy-phone.png",
+        "screenshots/data-privacy-dark.png"
+      ]
+    },
+    {
+      "name": "About InsightfulCell",
+      "path": "/o/310bfdf0-4a44-4f87-a943-6c38ec73bbdd/about",
+      "status": 200,
+      "loadMs": 192,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/about-insightfulcell-desktop.png",
+        "screenshots/about-insightfulcell-phone.png"
+      ]
+    },
+    {
+      "name": "Contact",
+      "path": "/o/310bfdf0-4a44-4f87-a943-6c38ec73bbdd/contact",
+      "status": 200,
+      "loadMs": 194,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/contact-desktop.png",
+        "screenshots/contact-phone.png"
+      ]
+    },
+    {
+      "name": "License",
+      "path": "/o/310bfdf0-4a44-4f87-a943-6c38ec73bbdd/license",
+      "status": 200,
+      "loadMs": 173,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/license-desktop.png",
+        "screenshots/license-phone.png"
+      ]
+    },
+    {
+      "name": "Admin dashboard (locked)",
+      "path": "/adminboard",
+      "status": 200,
+      "loadMs": 187,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/admin-dashboard-locked--desktop.png",
+        "screenshots/admin-dashboard-locked--phone.png"
+      ]
+    },
+    {
+      "name": "Admin dashboard (unlocked)",
+      "path": "/adminboard",
+      "status": 200,
+      "loadMs": null,
+      "axe": [],
+      "phoneOverflow": false,
+      "screenshots": [
+        "screenshots/admin-dashboard-unlocked.png"
+      ]
+    }
+  ],
+  "consoleErrors": [],
+  "security": {
+    "headers": {
+      "content-security-policy": "default-src 'self'; script-src 'self' 'nonce-NGJhOWJiOTAtYzg1NC00YjA5LWI2NzctMjc2Y2ZkNTU4NTFh' 'strict-dynamic' 'wasm-unsafe-eval'; style-src 'self' 'nonce-NGJhOWJiOTAtYzg1NC00YjA5LWI2NzctMjc2Y2ZkNTU4NTFh'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:9000 http://127.0.0.1:8100; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "x-frame-options": null,
+      "permissions-policy": "camera=(), microphone=(), geolocation=()",
+      "strict-transport-security": "max-age=63072000; includeSubDomains"
+    },
+    "signedOutRedirect": "/sign-in",
+    "sessionCookie": {
+      "httpOnly": true,
+      "sameSite": "Lax",
+      "secure": false
+    },
+    "apiTokenRoute": 404,
+    "passwordSignUpRoute": 404,
+    "replayedCookiesAfterSignOut": 401,
+    "wrongPasswordStatuses": [
+      401,
+      401,
+      401,
+      429,
+      429,
+      429
+    ]
+  },
+  "flows": [
+    {
+      "name": "Register by emailed code, then a password",
+      "ok": true
+    },
+    {
+      "name": "Upload a file, analyse it, open the report and dashboard",
+      "ok": true
+    },
+    {
+      "name": "Admin dashboard asks for the key on every visit",
+      "ok": true
+    },
+    {
+      "name": "Sign out ends the session at once",
+      "ok": true
+    },
+    {
+      "name": "Repeated wrong passwords are rate-limited",
+      "ok": true
+    }
+  ],
+  "finishedAt": "2026-10-24T09:36:07.509Z"
+}
