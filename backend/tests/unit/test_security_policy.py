@@ -20,6 +20,7 @@ EXPECTED: dict[Action, set[Role]] = {
     Action.CLEANING_DECIDE: {Role.OWNER, Role.ADMIN, Role.ANALYST},
     Action.DRILLDOWN_CREATE: {Role.OWNER, Role.ADMIN, Role.ANALYST},
     Action.DATA_READ: {Role.OWNER, Role.ADMIN, Role.ANALYST, Role.VIEWER},
+    Action.WORKSPACE_DELETE: {Role.OWNER},
 }
 
 

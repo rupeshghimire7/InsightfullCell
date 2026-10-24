@@ -383,3 +383,119 @@ class TestPurge:
         assert len(purges(owner_sql, alice.org_id)) == scheduled
         monkeypatch.undo()
         assert await maintenance.purge_deleted_files() == scheduled
+
+
+def count(owner_sql: OwnerSql, sql: str, **params: object) -> int:
+    ((value,),) = owner_sql(sql, **params)
+    return int(str(value))
+
+
+#: Every tenant table that holds a workspace's own rows.
+WORKSPACE_TABLES = (
+    "datasets",
+    "dataset_versions",
+    "dataset_preferences",
+    "uploads",
+    "runs",
+    "llm_calls",
+    "idempotency_keys",
+    "usage_counters",
+    "user_activity",
+)
+
+
+class TestDeleteWorkspace:
+    """ "Delete my account" (ADR-043): the API side erases the whole workspace."""
+
+    async def test_everything_goes_at_once_and_the_files_at_the_next_sweep(
+        self,
+        client: httpx.AsyncClient,
+        auth: AuthHeaders,
+        alice: Identity,
+        bob: Identity,
+        executor: RunExecutor,
+        maintenance: Maintenance,
+        owner_sql: OwnerSql,
+        raw_s3: S3Client,
+    ) -> None:
+        headers = auth(alice)
+        run_id = await finished(client, headers, executor, alice.org_id, sales_csv())
+        await create_dataset(client, headers)  # a second dataset, never analysed
+        bobs = (await create_dataset(client, auth(bob)))["dataset"]["id"]
+        assert keys_under(raw_s3, f"bronze/{alice.org_id}/")
+        assert keys_under(raw_s3, f"gold/{alice.org_id}/{run_id}/")
+
+        # Only the workspace's owner may erase it.
+        analyst = Identity(user_id=alice.user_id, org_id=alice.org_id, role="analyst")
+        assert (await client.delete("/v1/me", headers=auth(analyst))).status_code == 403
+
+        response = await client.delete("/v1/me", headers=headers)
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert run_id in body["run_ids"]
+        assert datetime.fromisoformat(body["files_removed_after"]) <= datetime.now(UTC)
+
+        assert rows_left(owner_sql, [run_id]) == {}
+        for table in WORKSPACE_TABLES:
+            assert (
+                count(
+                    owner_sql,
+                    f"SELECT count(*) FROM app.{table} WHERE org_id = :org",
+                    org=alice.org_id,
+                )
+                == 0
+            ), table
+        assert (
+            count(owner_sql, "SELECT count(*) FROM app.users WHERE id = :id", id=alice.user_id) == 0
+        )
+        # A nameless tombstone until its files are gone (the purges refer to it).
+        ((name, deleted_at),) = owner_sql(
+            "SELECT name, deleted_at FROM app.organizations WHERE id = :org", org=alice.org_id
+        )
+        assert (name, deleted_at is not None) == ("Deleted workspace", True)
+        assert purges(owner_sql, alice.org_id)
+
+        await maintenance.purge_deleted_files()
+        for zone in ("bronze", "silver", "gold"):
+            assert keys_under(raw_s3, f"{zone}/{alice.org_id}/") == [], zone
+        assert purges(owner_sql, alice.org_id) == {}
+        assert (
+            count(
+                owner_sql,
+                "SELECT count(*) FROM app.organizations WHERE id = :org",
+                org=alice.org_id,
+            )
+            == 0
+        )
+
+        # Another workspace is untouched.
+        theirs = await client.get(f"/v1/datasets/{bobs}", headers=auth(bob))
+        assert theirs.status_code == 200
+
+    async def test_an_empty_workspace_leaves_nothing_behind(
+        self, client: httpx.AsyncClient, auth: AuthHeaders, alice: Identity, owner_sql: OwnerSql
+    ) -> None:
+        headers = auth(alice)
+        assert (await client.get("/v1/me", headers=headers)).status_code == 200
+        assert (await client.delete("/v1/me", headers=headers)).status_code == 200
+        assert (
+            count(
+                owner_sql,
+                "SELECT count(*) FROM app.organizations WHERE id = :org",
+                org=alice.org_id,
+            )
+            == 0
+        )
+
+    async def test_refused_while_an_analysis_is_running(
+        self, client: httpx.AsyncClient, auth: AuthHeaders, alice: Identity, owner_sql: OwnerSql
+    ) -> None:
+        headers = auth(alice)
+        dataset_id = (await create_dataset(client, headers))["dataset"]["id"]
+        run_id = (await start_run(client, headers, dataset_id)).json()["id"]
+        owner_sql("UPDATE app.runs SET status = 'running' WHERE id = :id", id=run_id)
+
+        refused = await client.delete("/v1/me", headers=headers)
+        assert (refused.status_code, refused.json()["code"]) == (409, "still-running")
+        assert rows_left(owner_sql, [run_id]).get("runs") == 1
+        assert (await client.get(f"/v1/datasets/{dataset_id}", headers=headers)).status_code == 200

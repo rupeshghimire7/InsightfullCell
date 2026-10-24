@@ -33,6 +33,7 @@ class Action(StrEnum):
     CLEANING_DECIDE = "cleaning:decide"
     DRILLDOWN_CREATE = "drilldown:create"
     DATA_READ = "data:read"
+    WORKSPACE_DELETE = "workspace:delete"
 
 
 _ALL: Final = frozenset(Role)
@@ -55,6 +56,8 @@ POLICY: Final[dict[Action, frozenset[Role]]] = {
     Action.DRILLDOWN_CREATE: _WRITERS,
     # The analysed table's rows (personal-data columns stay hidden): everyone who reads reports.
     Action.DATA_READ: _ALL,
+    # "Delete my account" erases the whole workspace: only its owner (ADR-043).
+    Action.WORKSPACE_DELETE: frozenset({Role.OWNER}),
 }
 
 

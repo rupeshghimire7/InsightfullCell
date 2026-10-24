@@ -283,12 +283,15 @@ async def test_maintenance_functions_return_ids_only_and_are_not_public(
         ("admin_overview", False, True),
         ("delete_dataset", False, True),
         ("delete_run", False, True),
+        ("delete_workspace", False, True),
         ("ensure_llm_call_partitions", False, True),
         ("ensure_run_event_partitions", False, True),
         ("ensure_test_log_partitions", False, True),
         ("ensure_verification_partitions", False, True),
         # Internal: only the delete functions (running as the owner) may call it.
         ("erase_runs", False, False),
+        # Called by the worker's purge sweep, after each run of it.
+        ("forget_deleted_organizations", False, True),
         ("llm_spend_by_provider", False, True),
         ("llm_spend_record", False, True),
         ("llm_spend_reserve", False, True),

@@ -104,6 +104,46 @@ class DeletionService:
                 hint="Cancel it, wait until it has stopped, then delete the dataset.",
             )
         await self._discard_jobs(run_ids)
+        await self._abort_uploads(open_uploads)
+        logger.info("dataset deleted", extra={"dataset_id": str(dataset_id), "runs": len(run_ids)})
+        return Deleted(run_ids=tuple(run_ids), files_removed_after=after)
+
+    async def delete_workspace(self, principal: Principal) -> Deleted:
+        """ "Delete my account" (ADR-043): every dataset, analysis and upload of the workspace,
+        its counters and the person's mirror row, at once. The files are due for removal at
+        the worker's next sweep: no grace period, since the person asked for everything to go.
+        The web app deletes the sign-in account itself afterwards."""
+        require(principal, Action.WORKSPACE_DELETE)
+        after = datetime.now(UTC)
+        async with self._db.transaction(principal) as session:
+            open_uploads = (
+                await session.execute(
+                    select(Upload.staging_key, Upload.s3_upload_id).where(
+                        Upload.org_id == principal.org_id,
+                        Upload.status == "pending",
+                        Upload.s3_upload_id.is_not(None),
+                    )
+                )
+            ).all()
+            outcome, run_ids = (
+                await session.execute(
+                    text("SELECT outcome, run_ids FROM app.delete_workspace(:member, :after)"),
+                    {"member": principal.user_id, "after": after},
+                )
+            ).one()
+        if outcome == BUSY:
+            raise StillRunning(
+                "An analysis in your workspace is still running.",
+                hint="Cancel it, wait until it has stopped, then delete your account.",
+            )
+        await self._discard_jobs(run_ids)
+        await self._abort_uploads(open_uploads)
+        logger.info("workspace deleted", extra={"runs": len(run_ids)})
+        return Deleted(run_ids=tuple(run_ids), files_removed_after=after)
+
+    async def _abort_uploads(self, open_uploads: Sequence[tuple[str, str | None]]) -> None:
+        """Multipart uploads still open: their parts are not objects yet, so storage can only
+        drop them when the upload is aborted (after commit)."""
         for staging_key, s3_upload_id in open_uploads:
             if s3_upload_id is None:
                 continue
@@ -113,8 +153,6 @@ class DeletionService:
                 logger.warning(
                     "could not abort an upload of a deleted dataset", extra=exception_summary(exc)
                 )
-        logger.info("dataset deleted", extra={"dataset_id": str(dataset_id), "runs": len(run_ids)})
-        return Deleted(run_ids=tuple(run_ids), files_removed_after=after)
 
     async def _discard_jobs(self, run_ids: Sequence[UUID]) -> None:
         """Best effort: a waiting job whose run is gone does nothing when a worker takes it."""

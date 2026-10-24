@@ -131,7 +131,10 @@ class DeletedOut(_Out):
 
     run_ids: list[UUID] = Field(description="Every run that was deleted with it.")
     files_removed_after: datetime = Field(
-        description="When the worker removes the files from storage (STORAGE_PURGE_AFTER_DAYS)."
+        description=(
+            "When the worker removes the files from storage (STORAGE_PURGE_AFTER_DAYS; at once "
+            "for a deleted account)."
+        )
     )
 
 

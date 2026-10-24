@@ -1160,7 +1160,7 @@
         "description": "What a delete removed. The rows are gone already; the files follow later.",
         "properties": {
           "files_removed_after": {
-            "description": "When the worker removes the files from storage (STORAGE_PURGE_AFTER_DAYS).",
+            "description": "When the worker removes the files from storage (STORAGE_PURGE_AFTER_DAYS; at once for a deleted account).",
             "format": "date-time",
             "title": "Files Removed After",
             "type": "string"
@@ -4519,6 +4519,121 @@
       }
     },
     "/v1/me": {
+      "delete": {
+        "description": "Removes every dataset, analysis, upload and usage counter of the caller's workspace from\nthe database at once (owner only); the files leave storage at the worker's next sweep\n(``files_removed_after`` is now). ``409`` ``still-running`` while an analysis is running.\nThe web app then deletes the sign-in account (ADR-043).",
+        "operationId": "delete_me_v1_me_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete everything in my workspace (\"Delete my account\")",
+        "tags": [
+          "identity"
+        ]
+      },
       "get": {
         "description": "Verifies the token and provisions the user and organisation mirror rows if needed.",
         "operationId": "me_v1_me_get",

@@ -83,7 +83,7 @@ async def test_unknown_route_and_method_are_problem_json(
     missing = await client.get("/v1/nope", headers=auth(alice))
     assert missing.status_code == 404
     assert missing.headers["content-type"].startswith("application/problem+json")
-    wrong_method = await client.delete("/v1/me", headers=auth(alice))
+    wrong_method = await client.put("/v1/me", headers=auth(alice))
     assert wrong_method.status_code == 405
     assert wrong_method.json()["code"] == "http-405"
 

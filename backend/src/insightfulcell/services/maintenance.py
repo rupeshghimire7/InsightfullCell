@@ -278,6 +278,10 @@ class Maintenance:
                 )
                 continue
             purged += 1
+        # Deleted accounts' workspaces (ADR-043) are kept as tombstones until their files are
+        # gone; then nothing is left of them.
+        async with self._db.unscoped_transaction() as session:
+            await session.execute(text("SELECT app.forget_deleted_organizations()"))
         return purged
 
     # ------------------------------------------------------------------ helpers
