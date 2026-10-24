@@ -1,5 +1,7 @@
 /** Shared by server and client code, so it must not import server-only modules. */
 export const MAGIC_LINK_TTL_SECONDS = 10 * 60;
+/** How long a password-reset link works (Better Auth's default is an hour). */
+export const PASSWORD_RESET_TTL_SECONDS = 30 * 60;
 
 /** Password length accepted at registration (NIST SP 800-63B minimum; the cap bounds hashing). */
 export const PASSWORD_MIN_LENGTH = 8;

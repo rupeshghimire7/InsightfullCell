@@ -56,6 +56,8 @@ export interface SignInFormProps {
   mode?: SignInMode;
   google: GoogleSignIn;
   linkDelivery: LinkDelivery;
+  /** "Forgot password?" under the password, when sign-in only (`PASSWORD_RESET=on`). */
+  passwordReset?: boolean;
   /** Message from a failed link verification, shown above the form. */
   initialError?: string;
 }
@@ -136,6 +138,7 @@ export function SignInForm({
   mode = "sign-in",
   google,
   linkDelivery,
+  passwordReset = false,
   initialError,
 }: SignInFormProps) {
   const router = useRouter();
@@ -260,6 +263,16 @@ export function SignInForm({
             />
           )}
         </Field>
+        {passwordReset && !registering ? (
+          <p className="-mt-2 text-right text-sm">
+            <Link
+              href="/sign-in/forgot"
+              className="inline-flex min-h-6 items-center font-medium text-accent underline underline-offset-2 pointer-coarse:min-h-11"
+            >
+              Forgot password?
+            </Link>
+          </p>
+        ) : null}
         {registering ? (
           <Field label="Confirm password" error={fieldErrors.confirmPassword}>
             {(props) => (
@@ -277,8 +290,8 @@ export function SignInForm({
               : "Sign in"}
         </Button>
 
-        {/* The other ways in, after "or": Google, then the sign-in link. They stay inside the
-            form (as plain buttons) because the link reads the email field above. */}
+        {/* The other ways in, after "or": Google, then the sign-in link (which opens its own page,
+            `/sign-in/email`, in both modes: a link to a new address creates the account). */}
         <div className="space-y-4 pt-1">
           <div className="flex items-center gap-3 text-xs text-muted" aria-hidden="true">
             <span className="h-px flex-1 bg-border" />

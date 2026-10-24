@@ -14,6 +14,8 @@ const optional = (inner: z.ZodString) =>
   );
 
 const EMAIL_PATTERN = /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/;
+/** Resend's shared `@resend.dev` sender, which only delivers to the Resend account owner. */
+const RESEND_TEST_SENDER = /@resend\.dev>?\s*$/i;
 
 const schema = z
   .object({
@@ -70,6 +72,14 @@ const schema = z
      * Resend's test sender, only the Resend account owner can receive it, so list that address.
      */
     EMAIL_LINK_ALLOWED_EMAILS: z.string().default(""),
+
+    /**
+     * "Forgot password?". Off: the link is not shown, the pages are a 404, and the server sends
+     * no reset emails (Better Auth answers RESET_PASSWORD_DISABLED).
+     */
+    PASSWORD_RESET: z.enum(["on", "off"]).default("off"),
+    /** Sender of password-reset emails (a no-reply address); defaults to EMAIL_FROM. */
+    EMAIL_RESET_FROM: optional(z.string().min(3)),
 
     /**
      * Unlocks /adminboard (people, usage, model spend). At least 32 random characters; blank
@@ -165,7 +175,7 @@ const schema = z
       }
       if (
         env.EMAIL_LINK_SIGN_IN === "on" &&
-        /@resend\.dev>?\s*$/i.test(env.EMAIL_FROM) &&
+        RESEND_TEST_SENDER.test(env.EMAIL_FROM) &&
         listOrigins(env.EMAIL_LINK_ALLOWED_EMAILS).length === 0
       ) {
         ctx.addIssue({
@@ -180,6 +190,20 @@ const schema = z
           code: "custom",
           path: ["EMAIL_TRANSPORT"],
           message: "The console transport prints sign-in links and is not allowed in production",
+        });
+      }
+      if (env.PASSWORD_RESET === "on" && env.EMAIL_TRANSPORT === "console") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["EMAIL_TRANSPORT"],
+          message: "The console transport prints reset links and is not allowed in production",
+        });
+      }
+      if (env.PASSWORD_RESET === "on" && RESEND_TEST_SENDER.test(resetSender(env))) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["EMAIL_RESET_FROM"],
+          message: "Resend's test sender only reaches the account owner: use a verified domain",
         });
       }
     }
@@ -246,6 +270,11 @@ export function emailLinkAllowList(env: Env = getEnv()): string[] {
 export function emailLinkAllowed(email: string, env: Env = getEnv()): boolean {
   const allowed = emailLinkAllowList(env);
   return allowed.length === 0 || allowed.includes(email.trim().toLowerCase());
+}
+
+/** Who password-reset emails come from: EMAIL_RESET_FROM, else EMAIL_FROM. */
+export function resetSender(env: Pick<Env, "EMAIL_RESET_FROM" | "EMAIL_FROM"> = getEnv()): string {
+  return env.EMAIL_RESET_FROM ?? env.EMAIL_FROM;
 }
 
 /** Where browsers reach the API (live progress only; everything else goes through the BFF). */

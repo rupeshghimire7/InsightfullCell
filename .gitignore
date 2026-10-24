@@ -13,6 +13,9 @@ deploy/**/backups/
 
 # Scratch space for scripts/e2e.sh
 .e2e/
+# Leftovers from patches and merges
+*.orig
+*.rej
 
 # Python
 __pycache__/
@@ -22,6 +25,7 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
+.hypothesis/
 .mypy_cache/
 .ruff_cache/
 .import_linter_cache/
@@ -37,6 +41,11 @@ out/
 coverage/
 playwright-report/
 test-results/
+blob-report/
+playwright/.cache/
+.eslintcache
+.vercel/
+.turbo/
 *.tsbuildinfo
 next-env.d.ts
 .pnpm-store/
@@ -56,6 +65,8 @@ graphify-out/
 *~
 .DS_Store
 Thumbs.db
+.direnv/
+.envrc
 
 # Kept local by choice (design baseline, notes, reports, ADRs)
 INITIAL_DOCS/
@@ -65,6 +76,9 @@ docs/
 CHANGELOG.md
 CLAUDE.md
 SETUP_MANUAL.md
+# Setup guides for email (Resend + Namecheap) and Google sign-in
+/email_connect.md
+/google_login.md
 # progress.md
 review_cr.jsonl
 sample_data/*.py

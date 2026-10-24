@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Browser end-to-end test of the whole stack: sign in -> upload a CSV -> analyse it live.
+# Browser end-to-end test of the whole stack: sign in -> upload a CSV -> analyse it live, and
+# reset a forgotten password.
 # Starts a fresh database, the API, the worker, an S3 endpoint and the production build of the
 # web app, runs Playwright, then tears everything down.
 #   scripts/e2e.sh [--skip-build]
@@ -121,6 +122,8 @@ export BETTER_AUTH_SECRET="e2e-only-secret-$(printf '%032d' "$$")"
 export API_BASE_URL="http://127.0.0.1:$API_PORT" S3_PUBLIC_ORIGIN="$S3_URL"
 # Sign-in links stay off whatever frontend/.env.local says: the journey checks that state.
 export EMAIL_LINK_SIGN_IN=off EMAIL_LINK_ALLOWED_EMAILS= EMAIL_TRANSPORT=console AUTH_MAGIC_LINK_RATE_MAX=200
+# "Forgot password?" is on: reset links are printed to web.log, where the browser test reads them.
+export PASSWORD_RESET=on EMAIL_RESET_FROM=
 if [ "$SKIP_BUILD" -eq 0 ]; then (cd "$FRONTEND" && pnpm --silent build >"$STATE/build.log" 2>&1) || { tail -30 "$STATE/build.log" >&2; exit 1; }; fi
 (cd "$FRONTEND" && PORT="$WEB_PORT" HOSTNAME=127.0.0.1 exec node scripts/start.mjs) >"$STATE/web.log" 2>&1 &
 PIDS+=($!)

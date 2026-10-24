@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type * as EnvModule from "@/lib/env";
 
 const env = vi.hoisted(() => ({
   current: {
@@ -7,12 +8,18 @@ const env = vi.hoisted(() => ({
     RESEND_API_KEY: "re_key",
   } as Record<string, string>,
 }));
-vi.mock("@/lib/env", () => ({ getEnv: () => env.current }));
+vi.mock("@/lib/env", async (original) => ({
+  ...(await original<typeof EnvModule>()),
+  getEnv: () => env.current,
+}));
 
 import {
   EmailDeliveryError,
+  escapeAttribute,
   isResendApiKey,
+  renderPasswordResetEmail,
   renderSignInEmail,
+  sendPasswordResetEmail,
   sendSignInEmail,
 } from "@/lib/email";
 
@@ -120,5 +127,81 @@ describe("renderSignInEmail", () => {
     const { html, text } = renderSignInEmail({ url: 'https://a.test/?a=1&b="2"<x>' });
     expect(html).toContain("a=1&amp;b=&quot;2&quot;&lt;x&gt;");
     expect(text).toContain('https://a.test/?a=1&b="2"<x>');
+  });
+});
+
+describe("sendPasswordResetEmail", () => {
+  const fetchMock = vi.fn();
+  const message = { to: "ada@example.com", url: "https://app.test/api/auth/reset-password/t" };
+  beforeEach(() => vi.stubGlobal("fetch", fetchMock));
+  afterEach(() => {
+    fetchMock.mockReset();
+    vi.unstubAllGlobals();
+    delete env.current.EMAIL_RESET_FROM;
+  });
+
+  it("console transport prints the link and sends nothing", async () => {
+    env.current.EMAIL_TRANSPORT = "console";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    await sendPasswordResetEmail(message);
+    expect(warn.mock.calls.at(-1)?.[0]).toContain("Password reset link");
+    expect(warn.mock.calls.at(-1)?.[0]).toContain(message.url);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sends from EMAIL_RESET_FROM, the no-reply address", async () => {
+    env.current.EMAIL_TRANSPORT = "resend";
+    env.current.EMAIL_RESET_FROM = "IC <no-reply@ic.test>";
+    env.current.EMAIL_FROM = "IC <login@ic.test>";
+    fetchMock.mockResolvedValue(new Response("{}", { status: 200 }));
+    await sendPasswordResetEmail(message);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://api.resend.com/emails");
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer re_key");
+    const body = JSON.parse(init.body as string);
+    expect(body).toMatchObject({
+      from: "IC <no-reply@ic.test>",
+      to: ["ada@example.com"],
+      subject: "Reset your InsightfulCell password",
+    });
+    expect(body.text).toContain(message.url);
+  });
+
+  it("falls back to EMAIL_FROM when no reset sender is set", async () => {
+    env.current.EMAIL_TRANSPORT = "resend";
+    env.current.EMAIL_FROM = "IC <login@ic.test>";
+    fetchMock.mockResolvedValue(new Response("{}", { status: 200 }));
+    await sendPasswordResetEmail(message);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string).from).toBe("IC <login@ic.test>");
+  });
+
+  it("failures never contain the link or the recipient", async () => {
+    env.current.EMAIL_TRANSPORT = "resend";
+    fetchMock.mockResolvedValue(new Response("{}", { status: 500 }));
+    const error = await sendPasswordResetEmail({
+      to: "ada@example.com",
+      url: "https://app.test/api/auth/reset-password/secret",
+    }).catch((e: Error) => e);
+    expect(error).toBeInstanceOf(EmailDeliveryError);
+    expect((error as Error).message).not.toMatch(/secret|ada@example\.com/);
+  });
+});
+
+describe("renderPasswordResetEmail", () => {
+  it("escapes the link for HTML and says how long it works", () => {
+    const { subject, html, text } = renderPasswordResetEmail({
+      url: 'https://a.test/?a=1&b="2"<x>',
+    });
+    expect(subject).toBe("Reset your InsightfulCell password");
+    expect(html).toContain("a=1&amp;b=&quot;2&quot;&lt;x&gt;");
+    expect(text).toContain('https://a.test/?a=1&b="2"<x>');
+    expect(text).toContain("expires in 30 minutes");
+  });
+});
+
+describe("escapeAttribute", () => {
+  it("escapes what could end an attribute or start a tag", () => {
+    expect(escapeAttribute(`a&b"c<d>e'`)).toBe("a&amp;b&quot;c&lt;d&gt;e'");
   });
 });

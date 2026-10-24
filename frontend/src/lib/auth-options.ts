@@ -8,9 +8,10 @@ import {
   MAGIC_LINK_TTL_SECONDS,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  PASSWORD_RESET_TTL_SECONDS,
 } from "@/lib/auth-constants";
 import { EMAIL_NOT_ALLOWED_MESSAGE } from "@/lib/auth-constants";
-import { EmailDeliveryError, sendSignInEmail } from "@/lib/email";
+import { EmailDeliveryError, sendPasswordResetEmail, sendSignInEmail } from "@/lib/email";
 import { appOrigins, emailLinkAllowed, getEnv } from "@/lib/env";
 import { ac, roles } from "@/lib/permissions";
 import { createIdentity, type OrganizationApi } from "@/lib/identity";
@@ -42,6 +43,23 @@ export function buildAuthOptions(pool: Pool, getApi: () => OrganizationApi = unb
       autoSignIn: true,
       minPasswordLength: PASSWORD_MIN_LENGTH,
       maxPasswordLength: PASSWORD_MAX_LENGTH,
+      // "Forgot password?" (ADR-041). Switched off (PASSWORD_RESET=off), no reset email is sent.
+      ...(env.PASSWORD_RESET === "on"
+        ? {
+            resetPasswordTokenExpiresIn: PASSWORD_RESET_TTL_SECONDS,
+            // A password someone else learned stops working everywhere at once.
+            revokeSessionsOnPasswordReset: true,
+            sendResetPassword: async ({ user, url }: { user: { email: string }; url: string }) => {
+              // Not awaited, and failures only logged: the answer and its timing must be the same
+              // whether or not the address has an account. The message never holds the link.
+              void sendPasswordResetEmail({ to: user.email, url }).catch((error: unknown) => {
+                console.error(
+                  `[auth] password reset email not sent: ${error instanceof Error ? error.message : "unknown error"}`,
+                );
+              });
+            },
+          }
+        : {}),
     },
     socialProviders:
       env.GOOGLE_SIGN_IN === "on" && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
@@ -58,7 +76,14 @@ export function buildAuthOptions(pool: Pool, getApi: () => OrganizationApi = unb
     // The API token is minted on the server only (BFF, `getApiToken`). Better Auth's JWT plugin
     // would also hand it to any page script at GET /api/auth/token; that route does not exist.
     disabledPaths: ["/token"],
-    rateLimit: { enabled: true, storage: "database", window: 60, max: 60 },
+    rateLimit: {
+      enabled: true,
+      storage: "database",
+      window: 60,
+      max: 60,
+      // Each request may send an email: three a minute from one address (IP) is plenty.
+      customRules: { "/request-password-reset": { window: 60, max: 3 } },
+    },
     advanced: {
       // The API identifies users and organisations by UUID.
       database: { generateId: "uuid" },

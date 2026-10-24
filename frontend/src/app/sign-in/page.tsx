@@ -59,6 +59,7 @@ export default async function SignInPage({
             mode={mode}
             google={googleSignIn(env)}
             linkDelivery={linkDelivery(env)}
+            passwordReset={env.PASSWORD_RESET === "on"}
             initialError={
               error
                 ? (LINK_ERRORS[error] ??

@@ -3,9 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as EmailModule from "@/lib/email";
 
 const sendSignInEmail = vi.fn();
+const sendPasswordResetEmail = vi.fn();
 vi.mock("@/lib/email", async (original) => ({
   ...(await original<typeof EmailModule>()),
   sendSignInEmail: (...args: unknown[]) => sendSignInEmail(...args),
+  sendPasswordResetEmail: (...args: unknown[]) => sendPasswordResetEmail(...args),
 }));
 
 describe("buildAuthOptions", () => {
@@ -100,6 +102,66 @@ describe("buildAuthOptions", () => {
       sendSignInEmail.mockReset().mockResolvedValue(undefined);
       await send("anyone@example.com", "");
       expect(sendSignInEmail).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("password reset", () => {
+    type ResetOptions = {
+      sendResetPassword?: (data: { user: { email: string }; url: string }) => Promise<void>;
+      resetPasswordTokenExpiresIn?: number;
+      revokeSessionsOnPasswordReset?: boolean;
+    };
+    const reset = async (env: Record<string, string> = {}) =>
+      (await options(env)).emailAndPassword as ResetOptions;
+
+    it("sends no reset emails while it is off (the default)", async () => {
+      const built = await reset();
+      expect(built.sendResetPassword).toBeUndefined();
+      expect(built.revokeSessionsOnPasswordReset).toBeUndefined();
+    });
+
+    it("once on, links last 30 minutes and a reset signs every session out", async () => {
+      const built = await reset({ PASSWORD_RESET: "on" });
+      expect(built.resetPasswordTokenExpiresIn).toBe(30 * 60);
+      expect(built.revokeSessionsOnPasswordReset).toBe(true);
+      expect(built.sendResetPassword).toBeTypeOf("function");
+    });
+
+    it("does not wait for the email, so the answer is the same for every address", async () => {
+      let deliver: () => void = () => undefined;
+      sendPasswordResetEmail.mockReset().mockReturnValue(
+        new Promise<void>((resolve) => {
+          deliver = resolve;
+        }),
+      );
+      const built = await reset({ PASSWORD_RESET: "on" });
+      // Resolves although the delivery above never finished.
+      await built.sendResetPassword?.({ user: { email: "ada@example.com" }, url: "https://x/r" });
+      expect(sendPasswordResetEmail).toHaveBeenCalledWith({
+        to: "ada@example.com",
+        url: "https://x/r",
+      });
+      deliver();
+    });
+
+    it("only logs a failed delivery, never the link or the address", async () => {
+      const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      sendPasswordResetEmail.mockReset().mockRejectedValue(new Error("HTTP 500"));
+      const built = await reset({ PASSWORD_RESET: "on" });
+      await expect(
+        built.sendResetPassword?.({ user: { email: "ada@example.com" }, url: "https://x/secret" }),
+      ).resolves.toBeUndefined();
+      await vi.waitFor(() => expect(logged).toHaveBeenCalled());
+      const line = String(logged.mock.calls[0]?.[0]);
+      expect(line).toContain("password reset email not sent");
+      expect(line).not.toMatch(/secret|ada@example\.com/);
+      logged.mockRestore();
+    });
+
+    it("limits reset requests to three a minute", async () => {
+      expect((await options()).rateLimit.customRules).toEqual({
+        "/request-password-reset": { window: 60, max: 3 },
+      });
     });
   });
 

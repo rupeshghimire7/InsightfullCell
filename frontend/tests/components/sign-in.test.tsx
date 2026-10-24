@@ -326,6 +326,25 @@ describe("SignInForm: Google and link errors", () => {
   });
 });
 
+describe("SignInForm: Forgot password?", () => {
+  const forgot = () => screen.queryByRole("link", { name: "Forgot password?" });
+
+  it("links to the reset page under the password when signing in", () => {
+    form({ passwordReset: true });
+    expect(forgot()).toHaveAttribute("href", "/sign-in/forgot");
+  });
+
+  it("is never offered at registration", () => {
+    form({ mode: "register", passwordReset: true });
+    expect(forgot()).not.toBeInTheDocument();
+  });
+
+  it("is not shown while password reset is off (the default)", () => {
+    form();
+    expect(forgot()).not.toBeInTheDocument();
+  });
+});
+
 describe("validate", () => {
   const ok = {
     name: "Ada",

@@ -5,6 +5,7 @@ import {
   emailLinkAllowed,
   emailLinkAllowList,
   parseEnv,
+  resetSender,
 } from "@/lib/env";
 
 const valid = {
@@ -32,6 +33,20 @@ describe("parseEnv", () => {
   it("requires Google credentials as a pair", () => {
     expect(() => parseEnv({ ...valid, GOOGLE_CLIENT_ID: "id" })).toThrow(/GOOGLE_CLIENT_SECRET/);
     expect(parseEnv({ ...valid, GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "s" })).toBeTruthy();
+  });
+
+  it("keeps password reset off by default, and reset emails come from EMAIL_FROM", () => {
+    const env = parseEnv(valid);
+    expect(env.PASSWORD_RESET).toBe("off");
+    expect(resetSender(env)).toBe(env.EMAIL_FROM);
+    expect(() => parseEnv({ ...valid, PASSWORD_RESET: "yes" })).toThrow(/PASSWORD_RESET/);
+  });
+
+  it("sends reset emails from EMAIL_RESET_FROM when set, treating blank as unset", () => {
+    const sender = "IC <no-reply@ic.example.com>";
+    expect(resetSender(parseEnv({ ...valid, EMAIL_RESET_FROM: sender }))).toBe(sender);
+    const blank = parseEnv({ ...valid, EMAIL_RESET_FROM: " " });
+    expect(resetSender(blank)).toBe(blank.EMAIL_FROM);
   });
 
   it("requires an API key for the resend transport", () => {
@@ -83,6 +98,29 @@ describe("parseEnv", () => {
       };
       expect(() => parseEnv(resend)).toThrow(/EMAIL_LINK_ALLOWED_EMAILS/);
       expect(parseEnv({ ...resend, EMAIL_LINK_ALLOWED_EMAILS: "owner@example.com" })).toBeTruthy();
+    });
+    it("rejects the console transport when password reset is on (it prints the links)", () => {
+      expect(() => parseEnv({ ...production, PASSWORD_RESET: "on" })).toThrow(
+        /EMAIL_TRANSPORT: The console transport prints reset links/,
+      );
+    });
+    it("rejects Resend's test sender for reset emails, which reaches the owner only", () => {
+      const resend = { ...production, EMAIL_TRANSPORT: "resend", RESEND_API_KEY: "k" };
+      expect(() => parseEnv({ ...resend, PASSWORD_RESET: "on" })).toThrow(/EMAIL_RESET_FROM/);
+      expect(() =>
+        parseEnv({
+          ...resend,
+          PASSWORD_RESET: "on",
+          EMAIL_FROM: "IC <login@ic.example.com>",
+          EMAIL_RESET_FROM: "IC <onboarding@resend.dev>",
+        }),
+      ).toThrow(/EMAIL_RESET_FROM/);
+      const ok = parseEnv({
+        ...resend,
+        PASSWORD_RESET: "on",
+        EMAIL_RESET_FROM: "IC <no-reply@ic.example.com>",
+      });
+      expect(ok.PASSWORD_RESET).toBe("on");
     });
     it("allows it while sign-in links are off (the default): nothing is sent", () => {
       expect(parseEnv(production).EMAIL_LINK_SIGN_IN).toBe("off");

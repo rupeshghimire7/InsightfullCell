@@ -1,9 +1,17 @@
 import "server-only";
-import { getEnv } from "@/lib/env";
+import { PASSWORD_RESET_TTL_SECONDS } from "@/lib/auth-constants";
+import { getEnv, resetSender } from "@/lib/env";
 
 export interface SignInEmail {
   to: string;
   url: string;
+}
+
+/** What every email is made of: Resend gets the plain text and the HTML together. */
+export interface EmailContent {
+  subject: string;
+  text: string;
+  html: string;
 }
 
 const EXPIRY_MINUTES = 10;
@@ -35,11 +43,16 @@ export class EmailDeliveryError extends Error {
   }
 }
 
-export function renderSignInEmail({ url }: Pick<SignInEmail, "url">): {
-  subject: string;
-  text: string;
-  html: string;
-} {
+/** A value made safe for a double-quoted HTML attribute (and for text). */
+export function escapeAttribute(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+export function renderSignInEmail({ url }: Pick<SignInEmail, "url">): EmailContent {
   const subject = "Your InsightfulCell sign-in link";
   const text = [
     "Use this link to sign in to InsightfulCell:",
@@ -49,16 +62,31 @@ export function renderSignInEmail({ url }: Pick<SignInEmail, "url">): {
     `The link expires in ${EXPIRY_MINUTES} minutes and works once.`,
     "If you didn't request it, you can ignore this email.",
   ].join("\n");
-  const safeUrl = url
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
   const html =
     `<p>Use this link to sign in to InsightfulCell:</p>` +
-    `<p><a href="${safeUrl}">Sign in to InsightfulCell</a></p>` +
+    `<p><a href="${escapeAttribute(url)}">Sign in to InsightfulCell</a></p>` +
     `<p>The link expires in ${EXPIRY_MINUTES} minutes and works once.<br>` +
     `If you didn't request it, you can ignore this email.</p>`;
+  return { subject, text, html };
+}
+
+export function renderPasswordResetEmail({ url }: Pick<SignInEmail, "url">): EmailContent {
+  const minutes = PASSWORD_RESET_TTL_SECONDS / 60;
+  const subject = "Reset your InsightfulCell password";
+  const text = [
+    "Someone asked to reset the password for your InsightfulCell account.",
+    "",
+    "Choose a new password here:",
+    url,
+    "",
+    `The link expires in ${minutes} minutes and works once.`,
+    "If you didn't ask for this, ignore this email: your password stays the same.",
+  ].join("\n");
+  const html =
+    `<p>Someone asked to reset the password for your InsightfulCell account.</p>` +
+    `<p><a href="${escapeAttribute(url)}">Choose a new password</a></p>` +
+    `<p>The link expires in ${minutes} minutes and works once.<br>` +
+    `If you didn't ask for this, ignore this email: your password stays the same.</p>`;
   return { subject, text, html };
 }
 
@@ -88,11 +116,25 @@ export async function sendSignInEmail(
   await sendWithResend(env.RESEND_API_KEY ?? "", env.EMAIL_FROM, message.to, content);
 }
 
+/**
+ * Deliver a password-reset link, from EMAIL_RESET_FROM (a no-reply address) or EMAIL_FROM.
+ * `console` prints it (local development only, blocked in production by the env schema).
+ */
+export async function sendPasswordResetEmail(message: SignInEmail): Promise<void> {
+  const env = getEnv();
+  const content = renderPasswordResetEmail(message);
+  if (env.EMAIL_TRANSPORT === "console") {
+    console.warn(`\n[email:console] Password reset link for ${message.to}\n${message.url}\n`);
+    return;
+  }
+  await sendWithResend(env.RESEND_API_KEY ?? "", resetSender(env), message.to, content);
+}
+
 async function sendWithResend(
   apiKey: string,
   from: string,
   to: string,
-  content: ReturnType<typeof renderSignInEmail>,
+  content: EmailContent,
 ): Promise<void> {
   let response: Response;
   try {
