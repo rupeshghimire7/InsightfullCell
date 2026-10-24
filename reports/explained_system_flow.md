@@ -39,9 +39,13 @@ Conventions: ✅ built and tested · 🟠 built, not yet through a full recorded
 - R4 Security lens: trust boundary, identity, tenant isolation, data exposure, abuse limits.
 - R5 Business value: what the component buys a user or an operator.
 
-### 0.4 Status (22 Oct 2026)
+### 0.4 Status (25 Oct 2026)
 
-Phases 0 to 6 are done (✅, v0.6.0), plus iteration 12 (malformed-CSV check, review modes, Markdown/Word/PDF exports, model quota handling, token exposure fixes; ADR-036) and iteration 13 (deleting runs and datasets, "waiting for a worker"; ADR-037). The Gemini default models changed on 17 Oct 2026 to `gemini-3.5-flash-lite` / `gemini-3.1-flash-lite` (✅: a live run reached the report on 19 Oct 2026, after the F-01 fix). Since then: a deep system test with a test report (iteration 16; its F-01, every model-planned run failing, is fixed), sharing the local stack through one tunnel (iterations 17 to 18, ADR-038, ADR-039: §4) and "See the data" (iteration 19, ADR-040: §31.1). Iteration 24 (20 to 21 Oct) added a 2 MiB body cap on the web proxy and self-hosted S3 in production behind an https public URL. The commits of 21 Oct 2026 added (✅ unit and integration tests, no live paid call recorded) a backup model and a hard spend cap with a spend ledger (§17.7, migrations `0011` to `0012`), an admin dashboard behind a key (§4.1), and confirm password and show password on registration (§3). No ADR has been written for these yet. On 22 Oct 2026 the application went live on AWS (`deploy/aws`, §33.1): one EC2 instance running PostgreSQL, the API, the worker and the web app under Docker Compose behind a Caddy HTTPS proxy, uploads in Amazon S3 through the instance role, images built by GitHub Actions; the only code change it needed was signing upload URLs for the bucket's regional host (`storage/s3.py`). A Playwright journey on the live site the same day passed end to end with no language model configured there (rules planner and template sentences). Not built (⬜): questions about the data (tiered Q&A, Phase 7), hosted operations and observability (Phase 8), embeddings and fused search (Release 2). Part 11 lists every gap.
+Everything below is built and covered by tests (✅) unless marked. The code on `main` (pushed 25 Oct 2026) adds, since the 22 Oct deployment: registration by emailed 6-digit code (or Google) with a mandatory password and one password policy (§3); Profile, Data & privacy and "Delete my account" (§3); "Forgot password?" with emailed reset links (§3); the admin dashboard moved to `/adminboard` and asking for its key on every visit (§4.1); a header with Home, Runs, Dashboard, a light/dark theme toggle and a menu; About InsightfulCell, Contact and License pages. The live site (`https://app.ic.rgproject.me`, §33.1) still runs the 22 Oct build (password registration with any email, admin page at `/dashboard`) until the next deploy; no language model is configured there, so plans come from the rules planner and sentences from templates.
+
+Latest checks (24 Oct 2026): 726 backend tests (93.04% coverage), 537 frontend tests (536 pass; one expects an older spelling of a team member's name), 12 browser tests on a fresh stack, axe on 24 pages with 0 violations. A Zomato restaurants analysis (9,551 rows) on the local stack on 25 Oct 2026 took 25 s including the review step: 10 tests, 10 reliable findings, 21 charts and 1 map with 1,439 values recomputed and none withheld.
+
+Not built (⬜): questions about the data in plain language, hosted staging and observability, per-workspace rate limits, an audit log, team workspaces and invitations, embeddings and search by meaning. Part 11 lists every gap.
 
 ---
 
@@ -58,8 +62,8 @@ flowchart TB
         AUTH["Better Auth<br/>sessions, JWT, JWKS"]
         BFF["BFF /api/backend/*<br/>GET POST DELETE"]
         TK["/api/runs/id/events-ticket"]
-        RL["Relays (ADR-039):<br/>/api/storage/*, /api/runs/id/events"]
-        AD["Admin: /dashboard,<br/>/api/admin/session"]
+        RL["Relays:<br/>/api/storage/*, /api/runs/id/events"]
+        AD["Admin: /adminboard<br/>(key every visit)"]
     end
     subgraph API["FastAPI"]
         MW["RequestContextMiddleware"]
@@ -122,7 +126,7 @@ Why this shape (business reasoning).
 
 ---
 
-## Part 2. The user journey and where each component acts
+## Part 2. The user flow and where each component acts
 
 ```mermaid
 flowchart LR
@@ -154,53 +158,53 @@ flowchart LR
 
 ### 3. Identity and sessions (Better Auth)
 
-Business value. People get in with an email and a password, so no mail provider is needed to try the product. Every account gets a workspace on first sign-in, so the tenancy model is never empty.
+Business value. Every account has a proven email address and a strong password, and every account owns a private workspace from its first visit.
 
-Source. `lib/auth-options.ts`, `lib/auth.ts`, `lib/identity.ts`, `lib/roles.ts`, `lib/permissions.ts`, `lib/auth-constants.ts`, `lib/env.ts` (`appOrigins`), `components/auth/sign-in-form.tsx`.
+Source. `lib/auth-options.ts`, `lib/auth.ts`, `lib/registration.ts`, `lib/password-policy.ts`, `lib/identity.ts`, `lib/roles.ts`, `lib/permissions.ts`, `lib/auth-constants.ts`, `lib/email.ts`, `lib/env.ts` (`appOrigins`), `components/auth/*`, `app/set-password`, `app/sign-in/{email,forgot,reset}`, `app/o/[org]/{profile,privacy}`.
 
 ```mermaid
 flowchart TD
-    A["Visitor opens any page"] --> P{"proxy.ts: session cookie present?"}
-    P -- no --> R["Redirect to /sign-in"]
-    P -- yes --> L["Layout: getSession() via Better Auth"]
-    L --> Q{"Auth database reachable?"}
-    Q -- no --> U["ServiceUnavailable page with Try again<br/>(never treated as signed out)"]
-    Q -- yes --> V{"Valid session with active organisation?"}
-    V -- no --> R
-    V -- yes --> OK["Render page"]
-
-    subgraph SignIn["Sign-in"]
-        M1["Email + password<br/>register or sign in, scrypt"]
-    end
-    SignIn --> H["Session create hook"]
-    H --> E{"User has an organisation?"}
-    E -- no --> C["createOrganization<br/>slug from user id, role owner"]
-    E -- yes --> S["Set activeOrganizationId"]
-    C --> S
+    R0["/sign-in?mode=register"] --> R1["Name + email → Send me a code"]
+    R1 --> R2{"Address already registered?"}
+    R2 -- yes --> RX["'That email is already registered. Sign in instead.'"]
+    R2 -- no --> R3["6-digit code emailed<br/>(10 min, hashed, 3 guesses, 1 a minute per address)"]
+    R3 --> R4["Verify → account created, email verified"]
+    G0["Sign up with Google (when enabled)"] --> R4
+    R4 --> SP["/set-password: one password policy<br/>(10–128, upper, lower, digit, symbol, no spaces,<br/>not the part of the email before @)"]
+    SP --> WS["Session create hook: workspace (organisation)<br/>created or set active, role owner"]
+    S0["/sign-in: password, sign-in link or Google"] --> S1{"Existing account?"}
+    S1 -- no --> SX["'No account found for that email. Register first.'"]
+    S1 -- yes --> S2{"Has a password?"}
+    S2 -- no --> SP
+    S2 -- yes --> WS
+    WS --> OK["Home of the workspace"]
 ```
 
 Logic and rules.
 
-- Sessions last 7 days and refresh daily. The cookie cache is off, so signing out ends access at once (a replayed cookie gets 401; e2e checks it). Database-backed rate limits apply to sign-in.
-- `createIdentity().ensureOrganization` is race-safe: the workspace slug is derived from the user id, so two parallel first sign-ins converge on one organisation.
-- `organizationLimit: 1`: one workspace per person. Members and invitations are ⬜.
-- Roles come from `member.role`. A user removed from an organisation gets empty claims, so the API rejects their next token.
-- The `jwt` plugin signs EdDSA tokens with `expirationTime: "15m"`; `disabledPaths: ["/token"]` and `disableSettingJwtHeader: true` mean page scripts can never obtain an API token (found in the 16 Oct practical test, fixed in ADR-036).
-- Registration form (21 Oct 2026). Name, email, password and Confirm password ("Type your password again." / "The passwords don't match."); each password field has a Show password / Hide password toggle in tab order. Lengths 8 to 128 (`PASSWORD_MIN_LENGTH`, `PASSWORD_MAX_LENGTH`).
-- Trusted origins (ADR-038). Better Auth refuses a sign-in or sign-up whose `Origin` it does not trust (`403 INVALID_ORIGIN`). It trusts `appOrigins()`: `BETTER_AUTH_URL` first, then each entry of `AUTH_TRUSTED_ORIGINS` (bare `scheme://host[:port]`; https when `BETTER_AUTH_URL` is, because the cookies are `Secure`). The same list drives the BFF and ticket origin checks, the storage relay and `next dev`'s `allowedDevOrigins`.
-- The form cannot leak a password (iteration 18). Until React has hydrated, the submit button is disabled (`useHydrated`, a `useSyncExternalStore` flag) and the form is `method="post"`, so a page whose scripts never load cannot fall back to a native GET that puts the email and password in the address bar. A CSS-only notice (`.reveal-late`, shown after 8 s without JavaScript) says the page is still loading.
+- Accounts are created only by registering: by emailed code, or by "Sign up with Google" (`requestSignUp`). Better Auth's password sign-up route is disabled, sign-in links refuse unknown addresses before anything is stored (`magicLink({ disableSignUp })` plus a `hooks.before` guard), and "Continue with Google" never creates an account (`disableImplicitSignUp`).
+- Everyone must have a password. The `/` and `o/[org]` layouts send anyone without one to `/set-password` (a server action calling `auth.api.setPassword`). The policy (`lib/password-policy.ts`) is enforced on the server for set, change and reset, and shown live as a checklist.
+- Older password accounts created before email verification existed verify by code at their next password sign-in; the password is kept.
+- "Forgot password?" (shown in sign-in mode only, whenever email is on) emails a single-use reset link from a no-reply address. Unknown addresses get the same answer, so the page reveals nothing. After a reset, every device is signed out and the sign-in page shows a one-time "Password changed" note.
+- Profile edits the name only (1–100 characters); the email address never changes (`/change-email` disabled). "Change password" signs other devices out.
+- Data & privacy → "Delete my account": the person re-enters the password; a server action calls the API's `DELETE /v1/me` (owner only), which erases the workspace's rows in one transaction (`app.delete_workspace`) and schedules its files for the next sweep; then Better Auth deletes the user (`/delete-user` is disabled for direct calls). The address can register again.
+- Sessions last 7 days and refresh daily; the cookie cache is off, so signing out ends access at once (a replayed cookie gets 401). Rate limits are database-backed: 60 requests a minute by default, 3 a minute for reset requests, and a configurable limit on code and link routes.
+- `organizationLimit: 1`: one workspace per person. Members and invitations are ⬜ (Better Auth's invitation endpoints are still enabled although no screen uses them).
+- The `jwt` plugin signs EdDSA tokens with `expirationTime: "15m"`; `/token` is disabled and `disableSettingJwtHeader: true`, so page scripts can never obtain an API token.
+- Trusted origins. Better Auth refuses a request whose `Origin` it does not trust (`403 INVALID_ORIGIN`). It trusts `appOrigins()`: `BETTER_AUTH_URL`, then each entry of `AUTH_TRUSTED_ORIGINS`. The same list drives the BFF and ticket origin checks, the storage relay and `next dev`'s allowed origins.
+- The form cannot leak a password: until the page's scripts have loaded, submit is disabled and the form is `method="post"`; a CSS-only notice appears after 8 s without scripts.
 
-Fallbacks. Auth database outage → "Sign-in is unavailable" page and `503 auth-unavailable` from the BFF; the pool's error handler stops a database restart crashing the web server; connection timeout 5 s. Every sign-in failure is named (`transportError`; calls wrapped by `settle`, so a thrown network error becomes status 0):
+Fallbacks. Auth database outage → "Sign-in is unavailable right now" with Try again, and `503 auth-unavailable` from the BFF. Email provider busy or refusing → a named message ("The email provider is busy…", "We can't email this address…"). Every sign-in failure is named:
 
 | Failure | Message |
 |---|---|
 | Status 0 (network, server down) | "We couldn't reach the server. Check your connection, then try again." |
 | 429 | "Too many attempts. Wait a minute, then try again." |
-| `INVALID_ORIGIN` / `MISSING_OR_NULL_ORIGIN` | "Sign-in isn't allowed from this web address…" (fix: `make allow-origin`) |
+| `INVALID_ORIGIN` | "Sign-in isn't allowed from this web address…" (fix: `make allow-origin`) |
+| Wrong or expired code | "That code isn't right…" / "That code has expired. Send a new one." |
 | 5xx | "The server ran into a problem. Try again in a moment." |
-| Wrong password, existing account | The specific Better Auth message, never a cell value |
 
-Security notes. Passwords never reach the API. Password sign-up does not verify email (ADR-028): a documented risk.
+Security notes. Passwords never reach the API. Accepted trade-off: sign-in reveals whether an address is registered ("Register first"); "Forgot password?" does not. Registration needs working email in production (or Google sign-in switched on).
 
 ---
 
@@ -248,7 +252,7 @@ sequenceDiagram
 
 Why two audiences. `AUTH_JWT_AUDIENCE` and `AUTH_EVENTS_AUDIENCE` must differ; the web app (`env.ts`) and the API (`config.py`) both refuse equal values. An API token cannot open a stream, and a stolen ticket cannot call any other endpoint. (Known low finding: the ticket route mints a ticket for a run id of another workspace; the API still refuses the stream.)
 
-Sharing from another address (ADR-038, ADR-039). A friend opening the local stack through a tunnel (ngrok) or a LAN address cannot reach `localhost:9000` (storage) or `localhost:8000` (API) on the host machine. The web app therefore relays those two things from its own origin, and only in that case (`needsRelay(url, pageHostname)`: the target is loopback and the page is not).
+Sharing from another address. A friend opening the local stack through a tunnel (ngrok) or a LAN address cannot reach `localhost:9000` (storage) or `localhost:8000` (API) on the host machine. The web app therefore relays those two things from its own origin, and only in that case (`needsRelay(url, pageHostname)`: the target is loopback and the page is not).
 
 ```mermaid
 flowchart TD
@@ -268,39 +272,34 @@ flowchart TD
 
 CSP. A nonce per request: `script-src 'self' 'nonce-…' 'strict-dynamic' 'wasm-unsafe-eval'` (the WASM SHA-256), `style-src` with nonce, `connect-src` limited to self, storage and API origins, `object-src 'none'`, `frame-ancestors 'none'`, `form-action 'self'`.
 
-Body cap (iteration 24). Everything the browser sends through the BFF is small JSON (file bytes go to storage), so `backend-policy.ts:MAX_BODY_BYTES` (2 MiB) is checked on `Content-Length` before reading and again on the bytes read (a chunked body declares none). The production reverse proxy also caps bodies at 10 MB. This closes the body-size half of test finding F-08.
+Body cap. Everything the browser sends through the BFF is small JSON (file bytes go to storage), so `backend-policy.ts:MAX_BODY_BYTES` (2 MiB) is checked on `Content-Length` before reading and again on the bytes read (a chunked body declares none). The production reverse proxy also caps bodies at 10 MB.
 
-### 4.1 Admin dashboard (21 Oct 2026)
+### 4.1 Admin dashboard
 
-Business value. The person running a demo or pilot sees who signed up, what they uploaded and ran, and what the models cost against each cap, without a database console and without giving anyone database access.
+Business value. The person running a demo or pilot sees who signed up, what they uploaded and ran, and what the models cost against each cap, without a database console.
 
-Source. Web: `app/dashboard/page.tsx`, `app/api/admin/session/route.ts`, `lib/admin-session.ts`, `lib/admin-data.ts`, `components/admin/admin-gate.tsx`, `admin-dashboard.tsx`, `proxy.ts`. API: `api/routers/admin.py`, `services/admin.py`, `services/provider_usage.py`, `config.py`, migrations `0011` (`app.admin_overview`) and `0012` (`app.llm_spend_by_provider`).
+Source. Web: `app/adminboard/page.tsx`, `app/adminboard/actions.ts`, `lib/admin-session.ts`, `lib/admin-data.ts`, `components/admin/admin-gate.tsx`, `admin-board.tsx`, `admin-dashboard.tsx`. API: `api/routers/admin.py`, `services/admin.py`, `services/provider_usage.py`, the definer functions `app.admin_overview` and `app.llm_spend_by_provider`.
 
 ```mermaid
 flowchart TD
-    A["GET /dashboard (public in proxy.ts: no person's session needed)"] --> K{"ADMIN_DASHBOARD_KEY set?"}
-    K -- no --> NF["404 (the page does not exist)"]
-    K -- yes --> C{"Admin cookie valid?<br/>v1.expires.nonce.HMAC, signed with a key derived from<br/>ADMIN_DASHBOARD_KEY, not expired"}
-    C -- no --> L["Blurred placeholder (no figures) + key dialog"]
-    L --> P["POST /api/admin/session {key}"]
-    P --> O{"Trusted origin? body ≤ 2 KB?<br/>not paused (5 wrong per address,<br/>30 overall, per 15 min)?"}
-    O -- no --> E["403 forbidden-origin / 413 / 429 + Retry-After"]
+    A["GET /adminboard"] --> K{"ADMIN_DASHBOARD_KEY set?"}
+    K -- no --> NF["404"]
+    K -- yes --> L["Key dialog only: no figures in the page"]
+    L --> P["Server action checks the key"]
+    P --> O{"Not paused?<br/>(5 wrong per address, 30 overall, per 15 min)"}
+    O -- no --> E["'Too many wrong keys…' with a wait"]
     O -- yes --> M{"SHA-256 digests equal (constant time)?"}
-    M -- no --> W["401 wrong-key; failure counted; log line with address"]
-    M -- yes --> S["204 + cookie: HttpOnly, SameSite=Strict, Secure and<br/>__Host-ic_admin over https, ADMIN_SESSION_MINUTES (30)"]
-    S --> A
-    C -- yes --> D["loadAdminData(days 7 / 30 / 90)"]
-    D --> AO["API GET /v1/admin/overview?days=…<br/>X-Admin-Key (server to server, 20 s timeout, no-store)"]
-    D --> AC["Accounts from Better Auth's tables:<br/>name, email, verified, sign-in methods,<br/>workspace, last active, live sessions"]
-    AO --> R{"Both answered?"}
-    AC --> R
-    R -- no --> U["'The dashboard's figures couldn't be loaded' + Try again"]
-    R -- yes --> V["Totals · spend by provider vs its cap · spend per day ·<br/>by model (p50/p95 latency) · outcomes · purpose · label ·<br/>people · analyses per day · analyses · storage and queue ·<br/>configuration · OpenAI's own report"]
+    M -- no --> W["'That admin key isn't right.' (counted, logged)"]
+    M -- yes --> D["Figures returned with a page-memory token<br/>(no cookie, nothing stored in the browser;<br/>period switching for ADMIN_SESSION_MINUTES)"]
+    D --> AO["API GET /v1/admin/overview?days=7/30/90<br/>(X-Admin-Key, server to server)"]
+    D --> AC["Accounts from Better Auth's tables"]
+    AO --> V["Totals · spend by provider vs its cap · spend per day ·<br/>by model · outcomes · purpose · people · analyses ·<br/>storage and queue · configuration (never keys)"]
+    AC --> V
 ```
 
-API side. `require_admin_key` compares the header with `ADMIN_DASHBOARD_KEY` (`hmac.compare_digest` over SHA-256 digests, so neither content nor length leaks). Off, missing and wrong all answer the same `404 not-found` (`AdminNotFound`). The router is `include_in_schema=False`, `v1/admin` is not on the BFF allow-list, and the production reverse proxy exposes only the events path of the API. `AdminService.overview` runs `app.admin_overview(days)` and `app.llm_spend_by_provider()` in an unscoped transaction (definer functions, counts and sums only; people by id). It adds each configured provider with its own cap even before it has spent anything, plus the configuration without keys. `OpenAIUsage` adds OpenAI's own Costs and Usage figures when `OPENAI_ADMIN_KEY` (read-only admin key) is set: cached 10 min, 10 s timeout, at most 10 pages, any failure → `status: unavailable` (Gemini AI Studio keys have no such API).
+The key is asked on every visit: a reload or a new tab shows the dialog again, and **Lock** clears the page. API side: `require_admin_key` compares digests in constant time; off, missing and wrong keys all answer the same `404`; the router is hidden from the OpenAPI schema, `v1/admin` is not on the BFF allow-list, and the production reverse proxy exposes only the events path of the API. The overview returns counts and sums only (people by id); the web server adds names and emails from the auth tables.
 
-Security notes. Both sides refuse a key shorter than 32 characters; the two env files must carry the same key. Changing the key invalidates every cookie. Unlocked, the page shows names and emails of every account. The wrong-key counter is in memory (one web server assumed; a restart resets it). There are no per-person admin accounts and no audit log of who unlocked it, only a log line.
+Security notes. Both sides refuse a key shorter than 32 characters and must carry the same key. Anyone with the key sees every account's name and email. The wrong-key counter lives in the web server's memory (one web server assumed). There are no per-person admin accounts or audit log yet.
 
 ---
 
@@ -425,7 +424,7 @@ Server flow (`complete_upload`) is the flowchart in `system_flow.md` §4.2. A st
 
 Content-addressed storage and dedupe. An advisory lock on `hash(org:digest)` serialises racing completions. If the organisation already has the digest, the existing version is returned (`duplicate=true`) and staging is deleted. Otherwise a pending purge of the same bytes (from a deleted dataset) is cancelled, the object is copied to `bronze/{org}/{sha256}` unless it is still there, and a `dataset_versions` row is created. (Noted: dedupe ignores `dataset_id` when the bytes exist in another dataset.)
 
-Why the digest is only a claim here (ADR-026). Reading 250 MB in the request would block it; the worker re-hashes before parsing (`IntegrityMismatch` otherwise).
+Why the digest is only a claim here. Reading 250 MB in the request would block it; the worker re-hashes before parsing (`IntegrityMismatch` otherwise).
 
 Maintenance. `expire_abandoned_uploads` (hourly) expires pending uploads older than 24 h and aborts their parts.
 
@@ -467,7 +466,7 @@ flowchart TD
 
 Rules. 250 MiB, 1,000,000 rows, 500 columns, 255-character names, 300 s parse timeout. Parquet is written to a temporary path and renamed. Error messages never echo cell values. JSON objects nest as DuckDB `STRUCT` and arrays as `LIST`.
 
-Known gaps (found with `sample_data/6_ingestion_edge_cases`). An Excel sheet with title rows above the real header ingests with the title as the only column (no header-row detection). A 0-byte file says "header but no data rows". From the 18 Oct system test (still open): nested JSON values (`STRUCT`/`LIST`) crash the column-meaning step after parsing (F-04); a quoted header with a line break fails to parse (F-15); decimal commas (`122,97`) are misread by the number parsing in cleaning (F-03, §19).
+Known gaps (found with `sample_data/6_ingestion_edge_cases`). An Excel sheet with title rows above the real header ingests with the title as the only column (no header-row detection). A 0-byte file says "header but no data rows". From the 18 Oct system test (still open): nested JSON values (`STRUCT`/`LIST`) crash the column-meaning step after parsing; a quoted header with a line break fails to parse; decimal commas (`122,97`) are misread by the number parsing in cleaning .
 
 Fallbacks. Typing failure → all-text reread; encoding → transcode; everything else → a specific user-safe `DomainError` that fails the run without retry.
 
@@ -498,7 +497,7 @@ flowchart TD
     DF -. "defer fails" .-> RC["run stays queued: reconciler re-defers it"]
 ```
 
-Review modes (ADR-036). `auto` (the default): every change that would wait for review is applied in `clean_plan`, and the run goes on to the report without stopping. `manual`: the run stops at the review gate. Independently, the organisation's cleaning policy (`review_lossy` default, `always_review`, `auto_safe`) sets each change's starting decision; under `auto_safe` lossy changes are simply not applied and the run never pauses.
+Review modes. `auto` (the default): every change that would wait for review is applied in `clean_plan`, and the run goes on to the report without stopping. `manual`: the run stops at the review gate. Independently, the organisation's cleaning policy (`review_lossy` default, `always_review`, `auto_safe`) sets each change's starting decision; under `auto_safe` lossy changes are simply not applied and the run never pauses.
 
 Why snapshot inputs. `RunInputs` is fixed at creation, so retries are reproducible and "future dates" are judged against the run's date. It is replaced only by a plan revision.
 
@@ -627,7 +626,7 @@ Browser reader rules. Reconnect with `Last-Event-ID` (backoff `min(8 s, 0.5 s ·
 
 ---
 
-### 13. Deleting runs and datasets (ADR-037)
+### 13. Deleting runs and datasets
 
 Business value. People can remove what they uploaded or analysed, at once, and storage is cleaned without a manual step.
 
@@ -737,7 +736,7 @@ A real card (from `sample_data/2_medium/customer_subscriptions.csv`, 25 rows × 
 
 Business value. Cost, privacy and reliability policy are written once and apply to every model call. A provider outage, a quota or a price spike cannot fail a customer's run.
 
-Source. `llm/gateway.py`, `llm/fallback.py`, `llm/breaker.py`, `llm/pricing.py`, `llm/transport.py`, `llm/providers/{__init__,gemini,anthropic,openai_compatible}.py`, `services/llm_ledger.py`, `services/llm_spend.py`, `worker/runtime.py` (`build_gateway`, `check_model`), `config.py`, migrations `0011` to `0012`, ADR-031, ADR-036.
+Source. `llm/gateway.py`, `llm/fallback.py`, `llm/breaker.py`, `llm/pricing.py`, `llm/transport.py`, `llm/providers/{__init__,gemini,anthropic,openai_compatible}.py`, `services/llm_ledger.py`, `services/llm_spend.py`, `worker/runtime.py` (`build_gateway`, `check_model`), `config.py`, migrations `0011` to `0012`.
 
 #### 17.1 Which model is used
 
@@ -1038,7 +1037,7 @@ Measured on the 25-row, 50-column sample: system ≈ 5,800 characters, user ≈ 
 5. Apply the person: requests the model answered use its outcome; the rest are read by the engine (`requests.py`: column names + intent words → a catalogue analysis checked by the same validator; anything unmapped is "not understood" with a reason). A request is never silently dropped.
 6. Freeze the `ResolvedPlan` with provenance (`source` model/cache/rules, provider, model, prompt version, `fallback_reason`, rejected items).
 
-Storage note (F-01, fixed 19 Oct 2026). `analysis_plans.input_card` is checked to be a JSON object when present; a plan saved without a card (the model proposal) stores SQL `NULL` because the nullable JSON columns use `JSONB(none_as_null=True)` (`db/models.py:NULLABLE_JSONB`). Before the fix SQLAlchemy wrote JSON `null`, the check failed, and every model-planned run ended in an internal error after its paid calls.
+Storage note. `analysis_plans.input_card` is checked to be a JSON object when present; a plan saved without a card (the model proposal) stores SQL `NULL` because the nullable JSON columns use `JSONB(none_as_null=True)` (`db/models.py:NULLABLE_JSONB`). Before the fix SQLAlchemy wrote JSON `null`, the check failed, and every model-planned run ended in an internal error after its paid calls.
 
 Fallbacks recorded. `plan_source` ∈ {rules, cache, model}; `fallback_reason` ∈ {disabled, quota_exhausted, rate_limited, breaker_open, payload_blocked, budget_run, budget_org, invalid_output, provider_error, timeout, refused, auth_failed, spend_cap, spend_cap_provider, spend_cap_user, spend_unavailable, price_unknown}. With a backup configured, the reason recorded is the backup's when both fail, or the main one's when the backup was not allowed (§17.7).
 
@@ -1083,7 +1082,7 @@ flowchart TD
     P2 -- no --> RV["proposed; needs_review → review gate"]
 ```
 
-Known issues (18 Oct system test, still open). `set_invalid_to_null [0, 1]` empties `*_pct` columns stored on a 0 to 100 scale (F-02); decimal commas are misparsed yet classed lossless (F-03); the similar-label merge proposed Austria → Australia (F-05); codes with leading zeros are parsed as numbers (F-09); exact-duplicate removal is proposed for a one-column table (F-13). Automatic mode applies the lossy ones without a decision (F-12).
+Known issues (18 Oct system test, still open). `set_invalid_to_null [0, 1]` empties `*_pct` columns stored on a 0 to 100 scale; decimal commas are misparsed yet classed lossless; the similar-label merge proposed Austria → Australia; codes with leading zeros are parsed as numbers; exact-duplicate removal is proposed for a one-column table. Automatic mode applies the lossy ones without a decision.
 
 ---
 
@@ -1159,7 +1158,7 @@ flowchart TD
     R -- yes --> Y["Two analysis columns: standard region name + ISO 3166 code;<br/>place findings planned (where the rows are, outcome by region)"]
 ```
 
-Not in v1: suburbs/LGAs, US ZIP codes, rates per resident, spatial clustering (no population or neighbour data; ADR-035).
+Not in v1: suburbs/LGAs, US ZIP codes, rates per resident, spatial clustering (no population or neighbour data).
 
 ---
 
@@ -1400,7 +1399,7 @@ Accessibility rules are enforced by tests: axe on every component, focusable lab
 
 The run page's elapsed time for a running run shows "—" until hydration, then the browser's clock (the server's clock would differ by a second and break hydration).
 
-#### 31.1 "See the data" (ADR-040)
+#### 31.1 "See the data"
 
 Business value. A reader can check a finding against the rows themselves, next to the report, without downloading anything, and still never sees personal data.
 
@@ -1479,10 +1478,10 @@ flowchart LR
 | Tampering with history | Append-only triggers; deletes only through definer functions | migrations `0004` to `0010` |
 | Cost abuse | Run and monthly budgets, hard spend caps (overall, per provider, per person) reserved before each call under one lock, breaker, quota pause, pacing, concurrency cap, upload limits, 2 MiB BFF body cap | `gateway.py`, `llm_spend.py`, `0011`/`0012`, executor, `backend-policy.ts` |
 | Spend ledger tampering or reading | Tables with forced RLS, no policy, no grant to `ic_app`; definer functions only; ledger append-only and kept after deletions | migrations `0011`, `0012` |
-| Admin dashboard guessed or exposed | Key ≥ 32 chars on the server only; digest comparison in constant time; signed short-lived `HttpOnly` `SameSite=Strict` cookie; trusted origin; 5 / 30 wrong keys per 15 min; API endpoint hidden (one 404 for off and wrong), not on the BFF allow-list, not exposed by the production reverse proxy | `admin-session.ts`, `app/api/admin/session`, `api/routers/admin.py`, `services/admin.py` |
+| Admin dashboard guessed or exposed | Key ≥ 32 chars on the server only; digest comparison in constant time; asked on every visit, no cookie; throttled per address and overall; API endpoint hidden and answering one 404 | `app/adminboard`, `api/routers/admin.py` |
 | Misconfiguration | Validated config; provider (and backup) requires key; admin key length; worker model check | `config.py`, `env.ts`, `runtime.py` |
 
-Residual risks. Unverified password sign-ups (ADR-028); no per-organisation rate limiting or audit log; OpenTelemetry pending; model ids must be rechecked before release; the SSE route must be the only API path exposed publicly; a model change makes older runs' re-narration and drill-downs fail `pipeline-changed`; the open findings of the 18 Oct system test (F-02 to F-22, among them live invitation endpoints F-06, a sign-in throttle keyed on `X-Forwarded-For` F-07 (a reverse proxy that overwrites the header is required in production) and no per-organisation rate limit F-08; F-08's body cap is fixed); a deleted run's cached table on the API host for up to an hour (ADR-040); one shared admin key with an in-memory attempt counter and no admin audit trail; unpriced models never called under a cap (§17.7).
+Residual risks. No per-organisation rate limiting or audit log; OpenTelemetry pending; model ids must be rechecked before release; the SSE route must be the only API path exposed publicly; a model change makes older runs' re-narration and drill-downs fail `pipeline-changed`; the open findings of the 18 Oct system test (among them live invitation endpoints, a sign-in throttle keyed on `X-Forwarded-For`, which needs a reverse proxy that overwrites the header, as Caddy does in production, and no per-workspace rate limit); a deleted run's cached table on the API host for up to an hour; one shared admin key with an in-memory attempt counter and no admin audit trail; unpriced models never called under a cap (§17.7).
 
 ### 33. Observability and operations
 
@@ -1493,7 +1492,7 @@ Residual risks. Unverified password sign-ups (ADR-028); no per-organisation rate
 - Verification results give the rejection rate per check and prompt version.
 - Test log holds every statistical test with its q-value.
 - Health `/healthz` and `/readyz` (schema revision check).
-- Delivery gates: `make check` mirrors CI; `make e2e` runs five browser journeys with `LLM_PROVIDER=none`. Git hooks only format staged files and scan for secrets on commit; push runs nothing (iteration 17). Last full gate (iteration 16, 18 Oct): 668 backend tests (92.88 %), 369 frontend tests, 5/5 journeys. Latest run (19 Oct, iterations 18 to 21): 496 backend unit and 179 integration tests, 391 frontend tests, lint, types, import contracts and build pass; a live Gemini run through an ngrok tunnel reached the report; `make check` as a whole and `make e2e` not re-run. Latest full gate (21 Oct 2026): 715 backend tests (93.02 %), 422 frontend tests, lint, types, contracts, migrations to `0012`, build, pnpm audit and secret scan pass; `pip-audit` failed on 9 new advisories in `certifi 2026.7.22` and `pillow 12.3.0` in the committed lock (a trial `uv.lock` update to `certifi 2026.10.19` / `pillow 13.0.0` passed `pip-audit`, but it was not committed: the lock on `main` still pins the old versions on 22 Oct); `make e2e` (now 5 journeys + 2 admin tests) and live model calls not run. 22 Oct 2026 (AWS deployment commits): 719 backend tests are collected (the 4 new ones check the regional S3 host for upload URLs); the 530 backend unit tests pass. The integration suite, the frontend suite, `make check` and `make e2e` were not re-run, because the only application change is in `storage/s3.py` and the Dockerfile's build heap. Instead, the deployed site was driven end to end with Playwright (register, upload, duplicate check, automatic and manual runs, review, report, inspector, "See the data", dashboard, maps, all four downloads) and every step passed.
+- Delivery gates: `make check` mirrors CI; `make e2e` runs 12 browser tests with `LLM_PROVIDER=none`. Git hooks only format staged files and scan for secrets on commit; push runs nothing. Latest results (24 Oct 2026): 726 backend tests (93.04% coverage), 537 frontend tests (536 passing; one expects an older spelling of a team member's name), 12 of 12 browser tests, 0 axe violations on 24 pages.
 - Users in the local database: `scripts/db-users.sh`.
 
 #### 33.1 The production host (AWS, 22 Oct 2026)
@@ -1525,9 +1524,9 @@ flowchart TB
 | Deploy | `deploy.sh`: pull images → start PostgreSQL → create `ic_auth` and its `auth` schema → `alembic upgrade head` as the owner → create `ic_app_prod` (`NOBYPASSRLS`, member of `ic_app`) → Better Auth migration from the `web-tools` image → `up --wait` for `api`, `worker`, `web` | The same role split as locally (`scripts/db_bootstrap.py`, which refuses non-local hosts): the API can never bypass row-level security |
 | Roll back | `IC_IMAGE_TAG=<previous sha> ./deploy.sh` | Images are immutable per commit; safe while no migration changed the schema since |
 | Storage | Browser PUTs part URLs to `https://<bucket>.s3.<region>.amazonaws.com` (regional host, 22 Oct fix); CORS allows only the app origin and exposes `ETag` | The global host redirects for new buckets, and a browser cannot follow a redirect on a CORS upload |
-| Proxy | The API trusts `X-Forwarded-*` (`FORWARDED_ALLOW_IPS=*`) because only Caddy can reach it; Caddy sets the client address | Gives the sign-in throttle a real client IP (finding F-07's precondition) |
+| Proxy | The API trusts `X-Forwarded-*` (`FORWARDED_ALLOW_IPS=*`) because only Caddy can reach it; Caddy sets the client address | Gives the sign-in throttle a real client IP |
 | Health | Compose health checks on `api` and `web` (180 s start period on the small host); `restart: unless-stopped` on all | A crash restarts; a deploy waits until the new containers are healthy |
-| Observe | `docker compose ps`, `docker compose logs`, the admin dashboard | No metrics or alerting yet (⬜ Phase 8) |
+| Observe | `docker compose ps`, `docker compose logs`, the admin dashboard | No metrics or alerting yet (⬜) |
 
 What this does not give yet. No staging, one instance (a reboot or resize is downtime), no point-in-time recovery and no recorded restore drill, no metrics or alerts, and one analysis at a time. On 22 Oct 2026 `LLM_PROVIDER` was not set on the host, so the live site plans with the rules and narrates with templates.
 
@@ -1579,4 +1578,4 @@ What this does not give yet. No staging, one instance (a reboot or resize is dow
 
 These items come from the project plan and the baseline design. None of them is built yet.
 
-⬜ Questions about the data (Phase 7): split view, tier 0 (suggestion, cache, single fact), tier 1 (one fast-model call → one strict tool call), tier 2 (strong-model agent, ≤ 3 calls, ≤ 4 tools), six closed tools (`search_facts`, `get_fact`, `describe_columns`, `aggregate`, `compare_groups`, `request_drilldown`), quotas (5 questions per report, 20 tests), answer cache · ⬜ embeddings (pgvector + HNSW) and fused word/meaning search (Release 2) · ⬜ suburbs/LGAs, US ZIP codes, rates per resident, smoothing, spatial clustering · ⬜ unattended PDFs (headless browser) · ⬜ the judge's spike (it stays off) · ⬜ Excel header-row detection; clearer message for a 0-byte file · ⬜ members and invitations, password reset, email verification · ⬜ per-organisation rate limits, audit log, OpenTelemetry, Sentry, metrics (RED, queue, stage durations, model cost, rejection rate), age-based retention and partition dropping, hosted staging, release flow · ⬜ migration lint for dangerous operations · ⬜ sorting, filtering, search and the cleaned table in "See the data" · ⬜ fixes for the 18 Oct system test's open findings F-02 to F-22 (cleaning heuristics, nested JSON, invitation endpoints, throttling, rate limits and others; F-01 and F-08's body cap are fixed) · ⬜ admin accounts per person and an admin audit trail; monthly (rather than lifetime) spend caps; prices for the OpenAI and DeepSeek default models; spend-cap reasons treated as final for re-narration · ⬜ ADRs for the backup model, spend cap and admin dashboard · ⬜ staging, high availability, point-in-time recovery and a restore drill for the AWS host (live since 22 Oct 2026 on one instance) · ⬜ a committed `uv.lock` with `certifi 2026.10.19` and `pillow 13.0.0` (the deployed image still carries the 9 advisories found on 21 Oct).
+⬜ Questions about the data: split view, tier 0 (suggestion, cache, single fact), tier 1 (one fast-model call → one strict tool call), tier 2 (strong-model agent, ≤ 3 calls, ≤ 4 tools), six closed tools (`search_facts`, `get_fact`, `describe_columns`, `aggregate`, `compare_groups`, `request_drilldown`), quotas (5 questions per report, 20 tests), answer cache · ⬜ embeddings (pgvector + HNSW) and fused word/meaning search (Release 2) · ⬜ suburbs/LGAs, US ZIP codes, rates per resident, smoothing, spatial clustering · ⬜ unattended PDFs (headless browser) · ⬜ the judge's spike (it stays off) · ⬜ Excel header-row detection; clearer message for a 0-byte file · ⬜ members and invitations, password reset, email verification · ⬜ per-organisation rate limits, audit log, OpenTelemetry, Sentry, metrics (RED, queue, stage durations, model cost, rejection rate), age-based retention and partition dropping, hosted staging, release flow · ⬜ migration lint for dangerous operations · ⬜ sorting, filtering, search and the cleaned table in "See the data" · ⬜ fixes for the open findings of the 18 Oct system test (cleaning heuristics, nested JSON, invitation endpoints, throttling, rate limits and others) · ⬜ admin accounts per person and an admin audit trail; monthly (rather than lifetime) spend caps; prices for the OpenAI and DeepSeek default models; spend-cap reasons treated as final for re-narration · ⬜ ADRs for the backup model, spend cap and admin dashboard · ⬜ staging, high availability, point-in-time recovery and a restore drill for the AWS host (live since 22 Oct 2026 on one instance) · ⬜ a committed `uv.lock` with `certifi 2026.10.19` and `pillow 13.0.0` (the deployed image still carries the 9 advisories found on 21 Oct).
