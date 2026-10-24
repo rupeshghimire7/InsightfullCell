@@ -28,10 +28,7 @@ export default async function RunsPage({
 
   return (
     <>
-      <PageHeader
-        title="Runs"
-        description="Every analysis in your workspace, newest first. Open one to follow it live or see why it stopped."
-      />
+      <PageHeader title="Runs" description="Every analysis in your workspace, newest first." />
       {error ? (
         <ProblemAlert
           title={error.title ?? "Runs are unavailable"}

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { AppShell } from "@/components/shell/app-shell";
 import { ServiceUnavailable } from "@/components/ui/service-unavailable";
 import { getEnv } from "@/lib/env";
-import { getSessionOrUnavailable } from "@/lib/session";
+import { getSessionOrUnavailable, requirePassword } from "@/lib/session";
 import { parseTheme, THEME_COOKIE } from "@/lib/theme";
 
 export default async function OrganisationLayout({
@@ -22,6 +22,7 @@ export default async function OrganisationLayout({
     );
   }
   if (!session) redirect("/sign-in");
+  await requirePassword(session);
   // The URL never grants access: the API trusts the token's organisation, so a mismatched URL
   // is only ever a stale link. Send the user to the organisation they are actually in.
   if (org !== session.organizationId) redirect(`/o/${session.organizationId}`);

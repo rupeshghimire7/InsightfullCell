@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
+import { AccountDeletedNotice } from "@/components/auth/account-deleted-notice";
 import { SignInForm } from "@/components/auth/sign-in-form";
 import { Brand } from "@/components/ui/brand";
 import { ServiceUnavailable } from "@/components/ui/service-unavailable";
-import { getEnv } from "@/lib/env";
+import { getEnv, passwordResetOn } from "@/lib/env";
 import { googleSignIn, linkDelivery } from "@/lib/sign-in-options";
 import { getSessionOrUnavailable } from "@/lib/session";
 
@@ -12,17 +13,27 @@ export const metadata: Metadata = { title: "Sign in" };
 
 const TAGLINE = "Your one stop solution for data analysis.";
 
+/** `?error=` from a sign-in link or from Google (Better Auth's OAuth callback codes). */
 const LINK_ERRORS: Record<string, string> = {
   EXPIRED_TOKEN: "That sign-in link has expired. Request a new one with “Email me a sign-in link”.",
   INVALID_TOKEN:
     "That sign-in link was already used or isn’t valid. Request a new one with “Email me a sign-in link”.",
+  new_user_signup_disabled: "No account found for that email. Register first.",
   access_denied: "Sign-in was cancelled. You can try again below.",
+  // Google on the sign-in page never creates an account (ADR-042).
+  signup_disabled:
+    "No InsightfulCell account uses that Google address. Register first, with “Sign up with Google”.",
+  account_not_linked:
+    "That email already has an InsightfulCell account whose address isn’t verified yet. Sign in with its password, or register it again to get a code, then use Google.",
+  state_mismatch: "Google sign-in took too long or was opened in another tab. Try again.",
+  please_restart_the_process:
+    "Google sign-in took too long or was opened in another tab. Try again.",
 };
 
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; mode?: string }>;
+  searchParams: Promise<{ error?: string; mode?: string; account?: string }>;
 }) {
   // Rendered per request: configuration is read when the server runs, never at build time
   // (the image is built without it).
@@ -33,7 +44,7 @@ export default async function SignInPage({
     return <ServiceUnavailable retryHref="/sign-in" developerHint={env.APP_ENV === "local"} />;
   }
   if (session) redirect("/");
-  const { error, mode: modeParam } = await searchParams;
+  const { error, mode: modeParam, account } = await searchParams;
   const mode = modeParam === "register" ? "register" : "sign-in";
 
   return (
@@ -54,16 +65,17 @@ export default async function SignInPage({
               ? "Your workspace is created with your account."
               : "Welcome back. Sign in to your workspace."}
           </p>
+          {account === "deleted" ? <AccountDeletedNotice /> : null}
           <SignInForm
             key={mode}
             mode={mode}
             google={googleSignIn(env)}
             linkDelivery={linkDelivery(env)}
-            passwordReset={env.PASSWORD_RESET === "on"}
+            passwordReset={passwordResetOn(env)}
             initialError={
               error
                 ? (LINK_ERRORS[error] ??
-                  "We couldn’t sign you in. Try again, or request a new link.")
+                  "We couldn’t sign you in. Try again, or use another way in.")
                 : undefined
             }
           />

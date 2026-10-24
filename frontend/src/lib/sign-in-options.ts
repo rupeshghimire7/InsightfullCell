@@ -8,9 +8,8 @@ export function googleSignIn(env: Env): GoogleSignIn {
   return env.APP_ENV === "production" ? "off" : "setup-needed";
 }
 
-/** Resend's shared `@resend.dev` sender only delivers to the Resend account owner. */
+/** Whether the app emails links and codes, prints them (local development), or neither. */
 export function linkDelivery(env: Env): LinkDelivery {
   if (env.EMAIL_LINK_SIGN_IN !== "on") return "off";
-  if (env.EMAIL_TRANSPORT === "console") return "log";
-  return /@resend\.dev>?\s*$/i.test(env.EMAIL_FROM) ? "resend-test" : "email";
+  return env.EMAIL_TRANSPORT === "console" ? "log" : "email";
 }

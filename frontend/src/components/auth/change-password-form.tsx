@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, type FormEvent } from "react";
+import { NewPasswordFields, useNewPassword } from "@/components/auth/new-password-fields";
 import {
   Field,
   PasswordInput,
@@ -11,18 +12,19 @@ import {
 import { Button } from "@/components/ui/button";
 import { ProblemAlert } from "@/components/ui/problem-alert";
 import { authClient } from "@/lib/auth-client";
-import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/lib/auth-constants";
 
 type Errors = Partial<Record<"current" | "next" | "confirm", string>>;
 type Status = { kind: "idle" | "busy" | "done" } | { kind: "error"; message: string };
 
 /**
- * Change the password: the current one, the new one twice. Other devices are signed out, so a
- * password someone else learned stops working everywhere at once.
+ * Change the password: the current one, the new one twice, with the shared policy and its live
+ * checklist. Other devices are signed out, so a password someone else learned stops working
+ * everywhere at once.
  */
-export function ChangePasswordForm() {
+export function ChangePasswordForm({ email }: { email?: string }) {
   const form = useRef<HTMLFormElement>(null);
   const hydrated = useHydrated();
+  const fresh = useNewPassword(email);
   const [errors, setErrors] = useState<Errors>({});
   const [status, setStatus] = useState<Status>({ kind: "idle" });
 
@@ -31,21 +33,21 @@ export function ChangePasswordForm() {
     if (status.kind === "busy") return;
     const data = new FormData(event.currentTarget);
     const current = String(data.get("currentPassword") ?? "");
-    const next = String(data.get("newPassword") ?? "");
-    const confirm = String(data.get("confirmPassword") ?? "");
+    const next = fresh.password;
     const found: Errors = {};
     if (!current) found.current = "Enter your current password.";
-    if (next.length < PASSWORD_MIN_LENGTH) {
-      found.next = `Use at least ${PASSWORD_MIN_LENGTH} characters.`;
-    } else if (next.length > PASSWORD_MAX_LENGTH) {
-      found.next = `Use at most ${PASSWORD_MAX_LENGTH} characters.`;
-    } else if (next === current) {
-      found.next = "Choose a password different from the current one.";
-    }
-    if (!found.next && confirm !== next) found.confirm = "The passwords don’t match.";
+    if (fresh.problem) found.next = fresh.problem;
+    else if (next === current) found.next = "Choose a password different from the current one.";
+    if (!found.next && fresh.confirmProblem) found.confirm = fresh.confirmProblem;
     setErrors(found);
     if (Object.keys(found).length > 0) {
-      form.current?.querySelector<HTMLInputElement>("[aria-invalid=true]")?.focus();
+      // By name: the inputs are not marked invalid until React renders the errors.
+      const first = found.current
+        ? "currentPassword"
+        : found.next
+          ? "newPassword"
+          : "confirmPassword";
+      form.current?.querySelector<HTMLInputElement>(`[name="${first}"]`)?.focus();
       return;
     }
     setStatus({ kind: "busy" });
@@ -58,6 +60,7 @@ export function ChangePasswordForm() {
     );
     if (!error) {
       form.current?.reset();
+      fresh.reset();
       setStatus({ kind: "done" });
       return;
     }
@@ -65,7 +68,9 @@ export function ChangePasswordForm() {
       transportError(error) ??
       (error.code === "INVALID_PASSWORD"
         ? "Your current password isn’t right."
-        : "We couldn’t change your password. Try again.");
+        : error.code === "PASSWORD_TOO_WEAK" && error.message
+          ? error.message
+          : "We couldn’t change your password. Try again.");
     setStatus({ kind: "error", message });
   }
 
@@ -87,16 +92,7 @@ export function ChangePasswordForm() {
           <PasswordInput {...props} name="currentPassword" autoComplete="current-password" />
         )}
       </Field>
-      <Field
-        label="New password"
-        error={errors.next}
-        hint={`At least ${PASSWORD_MIN_LENGTH} characters.`}
-      >
-        {(props) => <PasswordInput {...props} name="newPassword" autoComplete="new-password" />}
-      </Field>
-      <Field label="Confirm new password" error={errors.confirm}>
-        {(props) => <PasswordInput {...props} name="confirmPassword" autoComplete="new-password" />}
-      </Field>
+      <NewPasswordFields state={fresh} email={email} errors={errors} />
       <Button type="submit" loading={status.kind === "busy"} disabled={!hydrated}>
         {status.kind === "busy" ? "Changing password…" : "Change password"}
       </Button>

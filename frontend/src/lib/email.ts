@@ -1,10 +1,15 @@
 import "server-only";
-import { PASSWORD_RESET_TTL_SECONDS } from "@/lib/auth-constants";
+import { OTP_TTL_SECONDS, PASSWORD_RESET_TTL_SECONDS } from "@/lib/auth-constants";
 import { getEnv, resetSender } from "@/lib/env";
 
 export interface SignInEmail {
   to: string;
   url: string;
+}
+
+export interface CodeEmail {
+  to: string;
+  otp: string;
 }
 
 /** What every email is made of: Resend gets the plain text and the HTML together. */
@@ -90,6 +95,26 @@ export function renderPasswordResetEmail({ url }: Pick<SignInEmail, "url">): Ema
   return { subject, text, html };
 }
 
+/** The 6-digit code that verifies an address at registration (or an older, unverified account). */
+export function renderOtpEmail({ otp }: Pick<CodeEmail, "otp">): EmailContent {
+  const minutes = OTP_TTL_SECONDS / 60;
+  const subject = "Your InsightfulCell verification code";
+  const text = [
+    "Your InsightfulCell verification code is:",
+    "",
+    otp,
+    "",
+    `Type it on the page that asked for it. It expires in ${minutes} minutes.`,
+    "If you didn't ask for this code, ignore this email: nobody can use it without your inbox.",
+  ].join("\n");
+  const html =
+    `<p>Your InsightfulCell verification code is:</p>` +
+    `<p style="font-size:24px;font-weight:600;letter-spacing:4px">${escapeAttribute(otp)}</p>` +
+    `<p>Type it on the page that asked for it. It expires in ${minutes} minutes.<br>` +
+    `If you didn't ask for this code, ignore this email: nobody can use it without your inbox.</p>`;
+  return { subject, text, html };
+}
+
 /**
  * Deliver a sign-in link.
  * - `apiKey` given (testing only): sent through Resend with *that* key, from Resend's test sender.
@@ -128,6 +153,20 @@ export async function sendPasswordResetEmail(message: SignInEmail): Promise<void
     return;
   }
   await sendWithResend(env.RESEND_API_KEY ?? "", resetSender(env), message.to, content);
+}
+
+/**
+ * Deliver a verification code from EMAIL_FROM (login@…). `console` prints it (local development
+ * and e2e only: production refuses that transport), so no code is ever logged in production.
+ */
+export async function sendOtpEmail(message: CodeEmail): Promise<void> {
+  const env = getEnv();
+  const content = renderOtpEmail(message);
+  if (env.EMAIL_TRANSPORT === "console") {
+    console.warn(`\n[email:console] Verification code for ${message.to}\n${message.otp}\n`);
+    return;
+  }
+  await sendWithResend(env.RESEND_API_KEY ?? "", env.EMAIL_FROM, message.to, content);
 }
 
 async function sendWithResend(

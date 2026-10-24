@@ -8,7 +8,7 @@ const ITEM =
   "flex min-h-11 w-full items-center rounded-control px-3 text-left text-sm font-medium hover:bg-bg focus-visible:bg-bg";
 
 /**
- * The menu beside "Sign out": about, contact, licence and profile pages. A native disclosure, as
+ * The menu beside "Sign out": about, contact, licence, profile and data & privacy pages. A native disclosure, as
  * the report's download menu: it closes after a choice, on Escape and on a click elsewhere. On
  * narrow screens it also holds "Sign out", whose own button is hidden there to fit the header.
  */
@@ -47,10 +47,11 @@ export function SiteMenu({
     if (menu.current) menu.current.open = false;
   };
   const pages = [
-    { href: `${home}/about`, label: "About us" },
+    { href: `${home}/about`, label: "About InsightfulCell" },
     { href: `${home}/contact`, label: "Contact" },
     { href: `${home}/license`, label: "License" },
     { href: `${home}/profile`, label: "Profile" },
+    { href: `${home}/privacy`, label: "Data & privacy" },
   ];
 
   return (

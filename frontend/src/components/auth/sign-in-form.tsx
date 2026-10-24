@@ -9,27 +9,35 @@ import {
   useState,
   useSyncExternalStore,
   type FormEvent,
+  type InputHTMLAttributes,
   type ReactNode,
 } from "react";
 import { Button } from "@/components/ui/button";
-import { Eye, EyeSlash, Info } from "@/components/ui/icons";
+import { Eye, EyeSlash } from "@/components/ui/icons";
 import { ProblemAlert } from "@/components/ui/problem-alert";
 import { authClient } from "@/lib/auth-client";
-import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/lib/auth-constants";
+import {
+  EMAIL_ALREADY_REGISTERED_MESSAGE,
+  EMAIL_NOT_ALLOWED_MESSAGE,
+  OTP_LENGTH,
+  OTP_RESEND_COOLDOWN_SECONDS,
+  OTP_TTL_SECONDS,
+  PASSWORD_MAX_LENGTH,
+} from "@/lib/auth-constants";
 
 export type SignInMode = "sign-in" | "register";
-type Action = "password" | "google";
+type Action = "password" | "code" | "google";
 type Status =
-  { kind: "idle" } | { kind: "busy"; action: Action } | { kind: "error"; message: string };
+  | { kind: "idle" }
+  | { kind: "busy"; action: Action }
+  | { kind: "error"; message: string; action?: ReactNode };
 
-type FieldName = "name" | "email" | "password" | "confirmPassword";
+type FieldName = "name" | "email" | "password";
 type FieldErrors = Partial<Record<FieldName, string>>;
 interface Values {
   name: string;
   email: string;
   password: string;
-  /** Registration only: the password typed again. Checked here, never sent. */
-  confirmPassword: string;
 }
 
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -39,16 +47,20 @@ const SERVER_PROBLEM = "The server ran into a problem. Try again in a moment.";
 const ORIGIN_REFUSED =
   "Sign-in isn’t allowed from this web address. Open the app at its usual address, or ask whoever runs it to allow this one.";
 
+const linkClass =
+  "inline-flex min-h-6 items-center font-medium text-accent underline underline-offset-2 pointer-coarse:min-h-11";
+const actionLinkClass =
+  "inline-flex min-h-9 items-center rounded-control bg-accent px-4 text-sm font-medium text-accent-contrast hover:brightness-110";
+
 /**
- * Where sign-in links go. `log`: printed in the web server's terminal, never emailed.
- * `resend-test`: emailed from Resend's shared test sender, which only delivers to the Resend
- * account owner. `email`: emailed from a verified domain, to anyone. `off`: sign-in links are
- * switched off (the button is shown disabled, with a note saying so).
+ * Where emails (sign-in links, registration codes) go. `log`: printed in the web server's
+ * terminal, never emailed (local development). `email`: emailed. `off`: no email at all: links
+ * are switched off and registration is by Google only.
  */
-export type LinkDelivery = "log" | "resend-test" | "email" | "off";
+export type LinkDelivery = "log" | "email" | "off";
 /**
  * `setup-needed`: shown disabled with setup steps (development only). `disabled`: switched off
- * (`GOOGLE_SIGN_IN=off`), shown disabled with a note saying so. `off`: not shown.
+ * (`GOOGLE_SIGN_IN=off`), shown disabled. `off`: not shown.
  */
 export type GoogleSignIn = "on" | "setup-needed" | "disabled" | "off";
 
@@ -56,42 +68,33 @@ export interface SignInFormProps {
   mode?: SignInMode;
   google: GoogleSignIn;
   linkDelivery: LinkDelivery;
-  /** "Forgot password?" under the password, when sign-in only (`PASSWORD_RESET=on`). */
+  /** "Forgot password?" under the password, when signing in only (whenever email is on). */
   passwordReset?: boolean;
-  /** Message from a failed link verification, shown above the form. */
+  /** Message from a failed link verification or Google sign-in, shown above the form. */
   initialError?: string;
 }
 
-/** What is wrong with the fields an action needs, in field order. Empty when all are valid. */
-export function validate(mode: SignInMode, action: "password", values: Values) {
+/** What is wrong with the fields the form needs, in field order. Empty when all are valid. */
+export function validate(mode: SignInMode, values: Values) {
   const errors: FieldErrors = {};
   if (mode === "register" && !values.name) errors.name = "Enter your name.";
   if (!EMAIL_PATTERN.test(values.email)) {
     errors.email = "Enter your email address, like name@company.com.";
   }
-  if (action === "password") {
-    if (mode === "sign-in" && !values.password) errors.password = "Enter your password.";
-    if (mode === "register" && values.password.length < PASSWORD_MIN_LENGTH) {
-      errors.password = `Use at least ${PASSWORD_MIN_LENGTH} characters.`;
-    }
-    if (mode === "register" && !values.confirmPassword) {
-      errors.confirmPassword = "Type your password again.";
-    } else if (mode === "register" && values.confirmPassword !== values.password) {
-      errors.confirmPassword = "The passwords don’t match.";
-    }
-  }
+  if (mode === "sign-in" && !values.password) errors.password = "Enter your password.";
   return errors;
 }
 
 export interface AuthError {
   status?: number;
   code?: string;
+  message?: string;
 }
 
 /** Failures that are not about what was typed: the connection, this address, the server. */
 export function transportError(error: AuthError): string | null {
   if (!error.status) return UNREACHABLE;
-  if (error.status === 429) return TOO_MANY;
+  if (error.status === 429 && error.code !== "CODE_COOLDOWN") return TOO_MANY;
   if (error.code === "INVALID_ORIGIN" || error.code === "MISSING_OR_NULL_ORIGIN") {
     return ORIGIN_REFUSED;
   }
@@ -121,18 +124,51 @@ export function useHydrated(): boolean {
   );
 }
 
-export function passwordError(mode: SignInMode, error: AuthError): string {
-  const transport = transportError(error);
-  if (transport) return transport;
-  if (mode === "register") {
-    return error.code?.startsWith("USER_ALREADY_EXISTS")
-      ? "An account with this email already exists. Sign in instead."
-      : "We couldn’t create your account. Try again.";
-  }
-  return error.status === 401
-    ? "That email and password don’t match. If you signed up with an emailed link or Google, use that instead."
-    : "We couldn’t sign you in. Try again.";
+/** Why a password sign-in failed. Unknown email or wrong password: one answer for both. */
+export function passwordError(error: AuthError): string {
+  return (
+    transportError(error) ??
+    (error.status === 401
+      ? "That email and password don’t match. If you signed up with an emailed link or Google, use that instead."
+      : "We couldn’t sign you in. Try again.")
+  );
 }
+
+/** Why the registration code was not sent, from the server's error code (`registration.ts`). */
+export function registerError(error: AuthError): string {
+  switch (error.code) {
+    case "EMAIL_ALREADY_REGISTERED":
+      return EMAIL_ALREADY_REGISTERED_MESSAGE;
+    case "EMAIL_NOT_ALLOWED":
+      return EMAIL_NOT_ALLOWED_MESSAGE;
+    case "CODE_COOLDOWN":
+      return error.message ?? "We just sent a code. Wait a minute before asking for another.";
+    case "EMAIL_NOT_CONFIGURED":
+      return "Email isn’t set up correctly on this server. Sign up with Google instead.";
+    case "EMAIL_RATE_LIMITED":
+      return "The email provider is busy. Wait a minute, then try again.";
+    case "RESEND_RECIPIENT_NOT_ALLOWED":
+    case "EMAIL_DELIVERY_FAILED":
+      return "We couldn’t send the code. Try again in a moment.";
+  }
+  return transportError(error) ?? "We couldn’t create your account. Try again.";
+}
+
+/** Why a code was refused (emailOTP plugin error codes). */
+export function codeError(error: AuthError): string {
+  switch (error.code) {
+    case "INVALID_OTP":
+      return "That code isn’t right. Check the email and try again.";
+    case "OTP_EXPIRED":
+      return "That code has expired. Send a new one.";
+    case "TOO_MANY_ATTEMPTS":
+      return "Too many wrong codes. Send a new one.";
+  }
+  return transportError(error) ?? "We couldn’t check the code. Try again.";
+}
+
+/** Who the code step is for: a new registration, or an older account verifying its address. */
+type CodeStep = { email: string; purpose: "register" | "verify" };
 
 export function SignInForm({
   mode = "sign-in",
@@ -146,18 +182,19 @@ export function SignInForm({
   const formRef = useRef<HTMLFormElement>(null);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [codeStep, setCodeStep] = useState<CodeStep | null>(null);
   const registering = mode === "register";
+  const registerByEmail = linkDelivery !== "off";
 
   /** Reads the form, shows any field errors and focuses the first; `null` when invalid. */
-  function readValid(action: "password"): Values | null {
+  function readValid(): Values | null {
     const data = new FormData(formRef.current ?? undefined);
     const values: Values = {
       name: (data.get("name") ?? "").toString().trim(),
       email: (data.get("email") ?? "").toString().trim(),
       password: (data.get("password") ?? "").toString(),
-      confirmPassword: (data.get("confirmPassword") ?? "").toString(),
     };
-    const errors = validate(mode, action, values);
+    const errors = validate(mode, values);
     setFieldErrors(errors);
     const first = Object.keys(errors)[0];
     if (first) {
@@ -167,37 +204,66 @@ export function SignInForm({
     return values;
   }
 
-  function enterApp() {
-    router.replace("/");
-    router.refresh();
-  }
-
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (status.kind === "busy") return;
-    const values = readValid("password");
+    const values = readValid();
     if (!values) return;
-    setStatus({ kind: "busy", action: "password" });
-    const error = await settle(() =>
-      registering
-        ? authClient.signUp.email({
-            name: values.name,
-            email: values.email,
-            password: values.password,
-          })
-        : authClient.signIn.email({ email: values.email, password: values.password }),
-    );
-    if (error) {
-      setStatus({ kind: "error", message: passwordError(mode, error) });
+    if (registering) {
+      setStatus({ kind: "busy", action: "code" });
+      const error = await settle(() =>
+        authClient.register.email({ name: values.name, email: values.email }),
+      );
+      if (!error) {
+        setStatus({ kind: "idle" });
+        setCodeStep({ email: values.email, purpose: "register" });
+        return;
+      }
+      setStatus({
+        kind: "error",
+        message: registerError(error),
+        action:
+          error.code === "EMAIL_ALREADY_REGISTERED" ? (
+            <Link href="/sign-in" className={actionLinkClass}>
+              Sign in
+            </Link>
+          ) : undefined,
+      });
       return;
     }
-    enterApp();
+    setStatus({ kind: "busy", action: "password" });
+    const error = await settle(() =>
+      authClient.signIn.email({ email: values.email, password: values.password }),
+    );
+    if (!error) {
+      router.replace("/");
+      router.refresh();
+      return;
+    }
+    // The password was right, but the address was never verified (an account registered with a
+    // password before ADR-042): the server has just emailed a code.
+    if (error.code === "EMAIL_NOT_VERIFIED") {
+      setStatus({ kind: "idle" });
+      setCodeStep({ email: values.email, purpose: "verify" });
+      return;
+    }
+    setStatus({ kind: "error", message: passwordError(error) });
   }
 
   async function onGoogle() {
     setStatus({ kind: "busy", action: "google" });
     const error = await settle(() =>
-      authClient.signIn.social({ provider: "google", callbackURL: "/" }),
+      authClient.signIn.social(
+        registering
+          ? {
+              provider: "google",
+              callbackURL: "/",
+              errorCallbackURL: "/sign-in?mode=register",
+              // Only this button may create an account (`disableImplicitSignUp` on the server).
+              requestSignUp: true,
+            }
+          : { provider: "google", callbackURL: "/", errorCallbackURL: "/sign-in" },
+      ),
     );
     if (error) {
       setStatus({
@@ -208,17 +274,55 @@ export function SignInForm({
     }
   }
 
+  if (codeStep) {
+    return (
+      <EmailCodeStep
+        {...codeStep}
+        delivery={linkDelivery}
+        onDone={() => {
+          // A new account has no password yet; the signed-in area would send it there anyway.
+          router.replace(codeStep.purpose === "register" ? "/set-password" : "/");
+          router.refresh();
+        }}
+        onBack={() => setCodeStep(null)}
+      />
+    );
+  }
+
   const busy = status.kind === "busy" ? status.action : null;
-  return (
-    <div className="space-y-5">
-      {initialError ? <ProblemAlert title="Sign-in link problem" detail={initialError} /> : null}
+  const googleButton =
+    google !== "off" ? (
+      <GoogleButton
+        state={google}
+        label={registering ? "Sign up with Google" : "Continue with Google"}
+        busy={busy === "google"}
+        disabled={busy !== null && busy !== "google"}
+        onClick={onGoogle}
+      />
+    ) : null;
+  const switchMode = (
+    <p className="text-center text-sm text-muted">
+      {registering ? "Already have an account? " : "New to InsightfulCell? "}
+      <Link href={registering ? "/sign-in" : "/sign-in?mode=register"} className={linkClass}>
+        {registering ? "Sign in" : "Create an account"}
+      </Link>
+    </p>
+  );
+  const alerts = (
+    <>
+      {initialError ? (
+        <ProblemAlert
+          title={registering ? "Registration didn’t work" : "Sign-in problem"}
+          detail={initialError}
+        />
+      ) : null}
       {status.kind === "error" ? (
         <ProblemAlert
           title={registering ? "Registration didn’t work" : "Sign-in didn’t work"}
           detail={status.message}
+          action={status.action}
         />
       ) : null}
-
       {hydrated ? null : (
         // Shown only if the page's scripts never start (CSS reveals it after a delay), so a sign-in
         // that cannot work says so instead of doing nothing.
@@ -227,6 +331,28 @@ export function SignInForm({
           the server isn’t allowing this web address yet.
         </p>
       )}
+    </>
+  );
+
+  // Registration without email delivery: Google is the only way to create an account.
+  if (registering && !registerByEmail) {
+    return (
+      <div className="space-y-5">
+        {alerts}
+        <p className="text-sm">
+          {google === "off"
+            ? "Registration isn’t available right now."
+            : "Registering with an email code isn’t available yet. Sign up with Google instead."}
+        </p>
+        {googleButton}
+        {switchMode}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {alerts}
       {/* POST, so that even without scripts the password never ends up in the address bar. */}
       <form ref={formRef} onSubmit={onSubmit} method="post" noValidate className="space-y-4">
         {registering ? (
@@ -236,7 +362,11 @@ export function SignInForm({
             )}
           </Field>
         ) : null}
-        <Field label="Email address" error={fieldErrors.email}>
+        <Field
+          label="Email address"
+          error={fieldErrors.email}
+          hint={registering ? "We’ll email you a code to confirm it’s yours." : undefined}
+        >
           {(props) => (
             <input
               {...props}
@@ -246,79 +376,189 @@ export function SignInForm({
               autoComplete="email"
               autoCapitalize="none"
               spellCheck={false}
+              maxLength={254}
               placeholder="name@company.com…"
             />
           )}
         </Field>
-        <Field
-          label="Password"
-          error={fieldErrors.password}
-          hint={registering ? `At least ${PASSWORD_MIN_LENGTH} characters.` : undefined}
+        {registering ? null : (
+          <>
+            <Field label="Password" error={fieldErrors.password}>
+              {(props) => (
+                <PasswordInput {...props} name="password" autoComplete="current-password" />
+              )}
+            </Field>
+            {passwordReset ? (
+              <p className="-mt-2 text-right text-sm">
+                <Link href="/sign-in/forgot" className={linkClass}>
+                  Forgot password?
+                </Link>
+              </p>
+            ) : null}
+          </>
+        )}
+        <Button
+          type="submit"
+          loading={busy === "password" || busy === "code"}
+          disabled={!hydrated}
+          className="w-full"
         >
-          {(props) => (
-            <PasswordInput
-              {...props}
-              name="password"
-              autoComplete={registering ? "new-password" : "current-password"}
-            />
-          )}
-        </Field>
-        {passwordReset && !registering ? (
-          <p className="-mt-2 text-right text-sm">
-            <Link
-              href="/sign-in/forgot"
-              className="inline-flex min-h-6 items-center font-medium text-accent underline underline-offset-2 pointer-coarse:min-h-11"
-            >
-              Forgot password?
-            </Link>
-          </p>
-        ) : null}
-        {registering ? (
-          <Field label="Confirm password" error={fieldErrors.confirmPassword}>
-            {(props) => (
-              <PasswordInput {...props} name="confirmPassword" autoComplete="new-password" />
-            )}
-          </Field>
-        ) : null}
-        <Button type="submit" loading={busy === "password"} disabled={!hydrated} className="w-full">
           {registering
-            ? busy === "password"
-              ? "Creating account…"
-              : "Create account"
+            ? busy === "code"
+              ? "Sending code…"
+              : "Send me a code"
             : busy === "password"
               ? "Signing in…"
               : "Sign in"}
         </Button>
 
-        {/* The other ways in, after "or": Google, then the sign-in link (which opens its own page,
-            `/sign-in/email`, in both modes: a link to a new address creates the account). */}
-        <div className="space-y-4 pt-1">
-          <div className="flex items-center gap-3 text-xs text-muted" aria-hidden="true">
-            <span className="h-px flex-1 bg-border" />
-            or
-            <span className="h-px flex-1 bg-border" />
+        {/* The other ways in, after "or": Google, then (signing in only) the sign-in link, which
+            opens its own page, `/sign-in/email`. */}
+        {googleButton || !registering ? (
+          <div className="space-y-4 pt-1">
+            <div className="flex items-center gap-3 text-xs text-muted" aria-hidden="true">
+              <span className="h-px flex-1 bg-border" />
+              or
+              <span className="h-px flex-1 bg-border" />
+            </div>
+            {googleButton}
+            {registering ? null : <MagicLinkButton delivery={linkDelivery} />}
           </div>
-          {google !== "off" ? (
-            <GoogleButton
-              state={google}
-              busy={busy === "google"}
-              disabled={busy !== null && busy !== "google"}
-              onClick={onGoogle}
-            />
-          ) : null}
-          <MagicLinkButton delivery={linkDelivery} mode={mode} googleOn={google === "on"} />
-        </div>
+        ) : null}
       </form>
+      {switchMode}
+    </div>
+  );
+}
 
-      <p className="text-center text-sm text-muted">
-        {registering ? "Already have an account? " : "New to InsightfulCell? "}
-        <Link
-          href={registering ? "/sign-in" : "/sign-in?mode=register"}
-          className="inline-flex min-h-6 items-center font-medium text-accent underline underline-offset-2 pointer-coarse:min-h-11"
+/**
+ * The 6-digit code step: after registering, or when an older account signs in with a password
+ * before its address was verified. A correct code verifies the address and signs in. "Send a new
+ * code" waits out the cooldown, counting down in its label.
+ */
+export function EmailCodeStep({
+  email,
+  purpose,
+  delivery,
+  onDone,
+  onBack,
+}: CodeStep & { delivery: LinkDelivery; onDone: () => void; onBack: () => void }) {
+  const hydrated = useHydrated();
+  const inputId = useId();
+  const errorId = `${inputId}-error`;
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState<"verify" | "resend" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [wait, setWait] = useState(OTP_RESEND_COOLDOWN_SECONDS);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+  useEffect(() => {
+    if (wait <= 0) return;
+    const timer = setTimeout(() => setWait((seconds) => seconds - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [wait]);
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+    const otp = (inputRef.current?.value ?? "").replace(/\s+/g, "");
+    if (!new RegExp(`^\\d{${OTP_LENGTH}}$`).test(otp)) {
+      setError(`Enter the ${OTP_LENGTH}-digit code from the email.`);
+      inputRef.current?.focus();
+      return;
+    }
+    setBusy("verify");
+    setError(null);
+    const failure = await settle(() => authClient.emailOtp.verifyEmail({ email, otp }));
+    if (!failure) {
+      onDone();
+      return;
+    }
+    setBusy(null);
+    setNotice(null);
+    setError(codeError(failure));
+    inputRef.current?.select();
+  }
+
+  async function onResend() {
+    if (busy || wait > 0) return;
+    setBusy("resend");
+    const failure = await settle(() => authClient.emailCode.send({ email }));
+    setBusy(null);
+    if (failure) {
+      setNotice(null);
+      setError(registerError(failure));
+      return;
+    }
+    setError(null);
+    setNotice("We sent a new code. Only the newest code works.");
+    setWait(OTP_RESEND_COOLDOWN_SECONDS);
+    if (inputRef.current) inputRef.current.value = "";
+    inputRef.current?.focus();
+  }
+
+  const toLog = delivery === "log";
+  return (
+    <div className="space-y-5">
+      <div role="status" className="space-y-2">
+        <h2 className="text-xl font-semibold">
+          {toLog ? "Check the server terminal" : "Check your email"}
+        </h2>
+        <p>
+          {toLog ? "Testing mode: no email was sent. The code" : "We sent a 6-digit code"} for{" "}
+          <strong className="font-semibold break-all">{email}</strong>
+          {toLog ? " is printed in the terminal running the web app." : "."}{" "}
+          {purpose === "register"
+            ? "Enter it to confirm the address and create your account."
+            : "Enter it to confirm your address, then you’re signed in."}{" "}
+          It expires in {OTP_TTL_SECONDS / 60}&nbsp;minutes.
+        </p>
+        {notice ? <p className="text-sm text-muted">{notice}</p> : null}
+      </div>
+      <form onSubmit={onSubmit} method="post" noValidate className="space-y-4">
+        <div>
+          <label htmlFor={inputId} className="block text-sm font-medium">
+            6-digit code
+          </label>
+          <input
+            ref={inputRef}
+            id={inputId}
+            name="otp"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={OTP_LENGTH + 2}
+            spellCheck={false}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? errorId : undefined}
+            className="mt-1.5 block min-h-10 w-full rounded-control border border-border bg-surface px-3 font-mono text-lg tracking-[0.3em] transition-colors hover:border-muted/60 focus-visible:border-accent aria-invalid:border-danger pointer-coarse:min-h-11"
+          />
+          {error ? (
+            <p id={errorId} role="alert" className="mt-1 text-sm text-danger">
+              {error}
+            </p>
+          ) : null}
+        </div>
+        <Button type="submit" loading={busy === "verify"} disabled={!hydrated} className="w-full">
+          {busy === "verify" ? "Checking…" : "Verify"}
+        </Button>
+      </form>
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+        <Button
+          variant="secondary"
+          onClick={onResend}
+          loading={busy === "resend"}
+          disabled={!hydrated || wait > 0}
         >
-          {registering ? "Sign in" : "Create an account"}
-        </Link>
-      </p>
+          {wait > 0 ? `Send a new code (${wait}s)` : "Send a new code"}
+        </Button>
+        <button type="button" onClick={onBack} className={linkClass}>
+          Use a different email
+        </button>
+      </div>
     </div>
   );
 }
@@ -338,7 +578,10 @@ export interface FieldInputProps {
 export function PasswordInput({
   className,
   ...props
-}: FieldInputProps & { name: string; autoComplete: string }) {
+}: FieldInputProps & {
+  name: string;
+  autoComplete: string;
+} & Pick<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange">) {
   const [visible, setVisible] = useState(false);
   const Icon = visible ? EyeSlash : Eye;
   return (
@@ -365,22 +608,29 @@ export function PasswordInput({
   );
 }
 
-/** A labelled input with an optional hint and an error the input is described by. */
+/**
+ * A labelled input with an optional hint and an error the input is described by. `describedBy`
+ * adds the id of something rendered elsewhere (a password checklist).
+ */
 export function Field({
   label,
   error,
   hint,
+  describedBy: extra,
   children,
 }: {
   label: string;
   error?: string;
   hint?: string;
+  describedBy?: string;
   children: (props: FieldInputProps) => ReactNode;
 }) {
   const id = useId();
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
-  const describedBy = [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(" ");
+  const describedBy = [hint ? hintId : null, extra ?? null, error ? errorId : null]
+    .filter(Boolean)
+    .join(" ");
   return (
     <div>
       <label htmlFor={id} className="block text-sm font-medium">
@@ -408,118 +658,43 @@ export function Field({
 }
 
 /**
- * "Email me a sign-in link": opens the page that asks for the address (`/sign-in/email`). While
- * links cannot reach everyone (printed to the server log, or sent from Resend's test sender), a
- * "Testing only" note says so, shown on hover of the link or its info icon; Escape dismisses it
- * (WCAG 1.4.13); screen readers read it through `aria-describedby`. Switched off, it is a button
- * that stays visible but inert (`aria-disabled`), and the same note says links are not available.
+ * "Email me a sign-in link": opens the page that asks for the address (`/sign-in/email`). Switched
+ * off, it is a button that stays visible but inert (`aria-disabled`).
  */
-function MagicLinkButton({
-  delivery,
-  mode,
-  googleOn,
-}: {
-  delivery: LinkDelivery;
-  mode: SignInMode;
-  googleOn: boolean;
-}) {
-  const noteId = useId();
-  const testing = delivery !== "email";
-  const off = delivery === "off";
-  const [hovered, setHovered] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
-  const open = testing && !dismissed && hovered;
-
-  // Escape closes the note while it is open (WCAG 1.4.13).
-  useEffect(() => {
-    if (!open) return;
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
-      setDismissed(true);
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open]);
-
-  const control = off ? (
-    <Button variant="secondary" className="w-full" aria-disabled={true} aria-describedby={noteId}>
-      Email me a sign-in link
-    </Button>
-  ) : (
+function MagicLinkButton({ delivery }: { delivery: LinkDelivery }) {
+  if (delivery === "off") {
+    return (
+      <Button variant="secondary" className="w-full" aria-disabled={true}>
+        Email me a sign-in link
+      </Button>
+    );
+  }
+  return (
     <Link
-      href={mode === "register" ? "/sign-in/email?mode=register" : "/sign-in/email"}
-      aria-describedby={testing ? noteId : undefined}
+      href="/sign-in/email"
       className="press inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-control border border-border bg-surface px-4 text-sm font-medium whitespace-nowrap text-text hover:bg-bg pointer-coarse:min-h-11"
     >
       Email me a sign-in link
     </Link>
   );
-  if (!testing) return control;
-
-  return (
-    <div
-      className="relative"
-      onMouseEnter={() => {
-        setHovered(true);
-        setDismissed(false);
-      }}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <div className="flex gap-2">
-        {control}
-        <span
-          aria-hidden="true"
-          className="inline-flex size-9 shrink-0 cursor-help items-center justify-center rounded-control border border-border bg-surface text-muted hover:bg-bg hover:text-text pointer-coarse:size-11"
-        >
-          <Info weight="fill" className="size-4" />
-        </span>
-      </div>
-      {/* Padding, not margin, so the pointer can move onto the note without it closing. */}
-      <div
-        id={noteId}
-        role="tooltip"
-        hidden={!open}
-        className="absolute inset-x-0 top-full z-10 pt-2"
-      >
-        <div className="rounded-panel border border-warning/50 bg-raised p-3 text-sm shadow-lg">
-          <p className="font-semibold text-warning">{off ? "Not available yet" : "Testing only"}</p>
-          {off ? (
-            <p className="mt-1">
-              Sign-in links arrive once email delivery is set up. For now, sign in with your
-              {googleOn ? " password or Google." : " password."}
-            </p>
-          ) : delivery === "log" ? (
-            <p className="mt-1">
-              No email is sent yet: the link is printed in the terminal running the web app.
-            </p>
-          ) : (
-            <p className="mt-1">
-              Email sign-in is for testing this demo: it only works with the project owner’s email
-              until an organisation’s email domain is set up. Everyone else, please register with a
-              password.
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
 }
 
-/** Google sign-in. Switched off, or before it is configured (development only), it is shown
- * disabled with a note (or the steps to set it up), so the option is not silently missing. */
+/** Google sign-in (or sign-up). Switched off it is shown disabled; before it is configured
+ * (development only), disabled with the steps to set it up. */
 function GoogleButton({
   state,
+  label,
   busy,
   disabled,
   onClick,
 }: {
   state: Exclude<GoogleSignIn, "off">;
+  label: string;
   busy: boolean;
   disabled: boolean;
   onClick: () => void;
 }) {
   const noteId = useId();
-  const unavailable = state !== "on";
   return (
     <div>
       <Button
@@ -527,16 +702,12 @@ function GoogleButton({
         className="w-full"
         onClick={onClick}
         loading={busy}
-        disabled={unavailable || disabled}
-        aria-describedby={unavailable ? noteId : undefined}
+        disabled={state !== "on" || disabled}
+        aria-describedby={state === "setup-needed" ? noteId : undefined}
       >
-        Continue with Google
+        {label}
       </Button>
-      {state === "disabled" ? (
-        <p id={noteId} className="mt-1 text-center text-xs text-muted">
-          Google sign-in isn’t available yet. Sign in with your password.
-        </p>
-      ) : state === "setup-needed" ? (
+      {state === "setup-needed" ? (
         <p id={noteId} className="mt-1 text-center text-xs text-muted">
           Not set up yet: add <code className="font-mono">GOOGLE_CLIENT_ID</code> and{" "}
           <code className="font-mono">GOOGLE_CLIENT_SECRET</code> to{" "}

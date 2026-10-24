@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { RunStatusBadge } from "@/components/runs/run-status-badge";
-import { formatDuration, stageLabel } from "@/lib/runs/status";
+import { formatDuration, runProgress } from "@/lib/runs/status";
 import type { RunSummary } from "@/lib/runs/types";
 import { LocalTime } from "@/components/ui/local-time";
 
@@ -32,7 +32,7 @@ export function RunTable({
               Status
             </th>
             <th scope="col" className="px-4 py-2 font-medium">
-              Step
+              Progress
             </th>
             <th scope="col" className="px-4 py-2 font-medium">
               Started
@@ -62,9 +62,7 @@ export function RunTable({
               <td className="px-4 py-3">
                 <RunStatusBadge status={run.status} animated={false} />
               </td>
-              <td className="px-4 py-3 text-muted">
-                {run.stage ? stageLabel(run.stage).title : run.failure ? run.failure.code : "None"}
-              </td>
+              <td className="px-4 py-3 text-muted">{runProgress(run)}</td>
               <td className="px-4 py-3 whitespace-nowrap text-muted">
                 <LocalTime iso={run.created_at} />
               </td>

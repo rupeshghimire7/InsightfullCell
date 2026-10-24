@@ -16,7 +16,7 @@ export default async function ContactPage() {
   const team = markdown ? parseTeam(markdown) : [];
   return (
     <>
-      <PageHeader title="Contact" description="The people who build and run InsightfulCell." />
+      <PageHeader title="Contact" />
       {team.length === 0 ? (
         <ProblemAlert
           title="The contact list isn’t available"
@@ -60,6 +60,28 @@ export default async function ContactPage() {
                     </a>
                   ) : null}
                 </p>
+              ) : null}
+              {member.university || member.program || member.studentId ? (
+                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+                  {member.university ? (
+                    <>
+                      <dt className="text-muted">University</dt>
+                      <dd>{member.university}</dd>
+                    </>
+                  ) : null}
+                  {member.program ? (
+                    <>
+                      <dt className="text-muted">Program</dt>
+                      <dd>{member.program}</dd>
+                    </>
+                  ) : null}
+                  {member.studentId ? (
+                    <>
+                      <dt className="text-muted">Student ID</dt>
+                      <dd>{member.studentId}</dd>
+                    </>
+                  ) : null}
+                </dl>
               ) : null}
             </li>
           ))}

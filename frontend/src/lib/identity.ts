@@ -63,6 +63,28 @@ export function createIdentity(pool: Pool, getApi: () => OrganizationApi) {
     },
 
     /**
+     * Before Better Auth deletes a user (ADR-043): the person's own workspace (members and
+     * invitations go with it) and every pending code, link and token sent to them. Sessions and
+     * sign-in accounts are deleted by Better Auth itself.
+     */
+    async forgetUser(userId: string, email: string): Promise<void> {
+      await pool.query(
+        `DELETE FROM organization o
+          WHERE o.id IN (SELECT "organizationId" FROM member WHERE "userId" = $1)
+            AND NOT EXISTS (SELECT 1 FROM member m
+                             WHERE m."organizationId" = o.id AND m."userId" <> $1)`,
+        [userId],
+      );
+      await pool.query(
+        `DELETE FROM verification
+          WHERE value = $1
+             OR right(identifier, length($2)) = $2
+             OR strpos(value, '"email":' || to_json($2::text)::text) > 0`,
+        [userId, email.toLowerCase()],
+      );
+    },
+
+    /**
      * The claims the API trusts. Empty when the session has no organisation or the user is not
      * (or no longer) a member of it, so a removed member's token is rejected by the API.
      */

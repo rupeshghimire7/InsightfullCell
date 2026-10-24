@@ -13,34 +13,34 @@ import {
 import { Button } from "@/components/ui/button";
 import { ProblemAlert } from "@/components/ui/problem-alert";
 import { authClient } from "@/lib/auth-client";
-import { EMAIL_NOT_ALLOWED_MESSAGE } from "@/lib/auth-constants";
+import { ACCOUNT_NOT_FOUND_MESSAGE, EMAIL_NOT_ALLOWED_MESSAGE } from "@/lib/auth-constants";
 
 type Status =
   | { kind: "idle" }
   | { kind: "busy" }
   | { kind: "sent"; email: string }
   | { kind: "not-allowed" }
+  | { kind: "no-account" }
   | { kind: "error"; message: string };
 
 /** Why a sign-in link was not sent, from the server's error code (see `auth-options.ts`). */
-export function linkError(error: AuthError, delivery: LinkDelivery): string {
-  if (error.code === "RESEND_RECIPIENT_NOT_ALLOWED") {
-    return "We couldn’t send the link: email is in testing mode and only reaches the project owner’s address.";
-  }
+export function linkError(error: AuthError): string {
   if (error.code === "EMAIL_NOT_CONFIGURED") {
     return "Sign-in email isn’t set up correctly on this server. Use your password or Google instead.";
   }
-  // A 5xx here is usually the email failing to send, which the delivery-specific text explains.
+  if (error.code === "EMAIL_RATE_LIMITED") {
+    return "The email provider is busy. Wait a minute, then try again.";
+  }
+  // A 5xx here is usually the email failing to send, which the text below explains.
   const transport = error.status && error.status >= 500 ? null : transportError(error);
   if (transport) return transport;
-  return delivery === "resend-test"
-    ? "We couldn’t send the link. While email is in testing mode, links only reach the project owner’s address."
-    : "We couldn’t send the link. Check the address and try again.";
+  return "We couldn’t send the link. Check the address and try again.";
 }
 
 /**
- * Asks for the address and sends a sign-in link to it. An address the server does not send links
- * to (`EMAIL_LINK_ALLOWED_EMAILS`) gets the explanation and a way to register with a password.
+ * Asks for the address and sends a sign-in link to it. Links are for existing accounts only: an
+ * address with no account is told to register first (ADR-042). An address the server does not
+ * send links to (`EMAIL_LINK_ALLOWED_EMAILS`) gets the explanation.
  */
 export function EmailLinkForm({
   delivery,
@@ -83,7 +83,11 @@ export function EmailLinkForm({
       setStatus({ kind: "not-allowed" });
       return;
     }
-    setStatus({ kind: "error", message: linkError(error, delivery) });
+    if (error.code === "ACCOUNT_NOT_FOUND") {
+      setStatus({ kind: "no-account" });
+      return;
+    }
+    setStatus({ kind: "error", message: linkError(error) });
   }
 
   if (status.kind === "sent") {
@@ -107,9 +111,9 @@ export function EmailLinkForm({
           )}{" "}
           It expires in {expiresInMinutes}&nbsp;minutes and works once.
         </p>
-        {delivery === "resend-test" ? (
-          <p className="text-sm text-muted">If nothing comes within a minute, check spam.</p>
-        ) : null}
+        {toLog ? null : (
+          <p className="text-sm text-muted">If nothing arrives within a minute, check spam.</p>
+        )}
         <Button variant="secondary" onClick={() => setStatus({ kind: "idle" })}>
           Use a different email
         </Button>
@@ -120,15 +124,18 @@ export function EmailLinkForm({
   return (
     <div className="space-y-5">
       {status.kind === "not-allowed" ? (
+        <ProblemAlert title="We can’t email this address" detail={EMAIL_NOT_ALLOWED_MESSAGE} />
+      ) : null}
+      {status.kind === "no-account" ? (
         <ProblemAlert
-          title="This email can’t get a sign-in link"
-          detail={EMAIL_NOT_ALLOWED_MESSAGE}
+          title="No account for this email"
+          detail={ACCOUNT_NOT_FOUND_MESSAGE}
           action={
             <Link
               href="/sign-in?mode=register"
               className="inline-flex min-h-9 items-center rounded-control bg-accent px-4 text-sm font-medium text-accent-contrast hover:brightness-110"
             >
-              Register with a password
+              Register
             </Link>
           }
         />

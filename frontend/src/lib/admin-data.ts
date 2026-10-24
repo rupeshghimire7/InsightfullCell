@@ -144,7 +144,7 @@ export type AdminData =
   | { status: "ok"; overview: Overview; accounts: Account[] }
   | { status: "unavailable"; part: "api" | "auth" };
 
-export const PERIODS = [7, 30, 90] as const;
+export { PERIODS } from "@/lib/admin-periods";
 
 export async function loadAdminData(env: Env, days: number): Promise<AdminData> {
   const [overview, accounts] = await Promise.all([

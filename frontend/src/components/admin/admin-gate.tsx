@@ -1,18 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { LockSimple } from "@/components/ui/icons";
 
 /**
  * The dashboard's lock: a dialog in the middle of the screen over a blurred, 25% tinted page.
- * The key goes to this app's own server once (`POST /api/admin/session`), which answers with an
- * HttpOnly cookie; nothing is kept in the page or in browser storage.
+ * It asks for the key on every visit (ADR-044); `onUnlock` checks it on the server and answers
+ * with what went wrong, or `null` once the dashboard is open. Nothing is kept in the browser.
  */
-export function AdminGate() {
-  const router = useRouter();
+export function AdminGate({ onUnlock }: { onUnlock: (key: string) => Promise<string | null> }) {
   const titleId = useId();
   const errorId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -32,31 +30,16 @@ export function AdminGate() {
     }
     setBusy(true);
     setError(null);
-    let response: Response;
+    let problem: string | null;
     try {
-      response = await fetch("/api/admin/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key }),
-        cache: "no-store",
-      });
+      problem = await onUnlock(key);
     } catch {
-      setBusy(false);
-      setError("We couldn’t reach the server. Check your connection, then try again.");
-      return;
+      problem = "We couldn’t reach the server. Check your connection, then try again.";
     }
     if (inputRef.current) inputRef.current.value = "";
-    if (response.status === 204) {
-      router.refresh();
-      return;
-    }
+    if (!problem) return;
     setBusy(false);
-    const body = (await response.json().catch(() => null)) as { detail?: string } | null;
-    setError(
-      response.status === 401
-        ? "That admin key isn’t right."
-        : (body?.detail ?? "The server couldn’t check the key. Try again in a moment."),
-    );
+    setError(problem);
     inputRef.current?.focus();
   }
 
@@ -113,23 +96,10 @@ export function AdminGate() {
   );
 }
 
-/** Locks the dashboard again (clears the cookie) and shows the gate. */
-export function LockButton() {
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
+/** Locks the dashboard again: the figures and the page's token are dropped at once. */
+export function LockButton({ onLock }: { onLock: () => void }) {
   return (
-    <Button
-      variant="secondary"
-      loading={busy}
-      onClick={async () => {
-        setBusy(true);
-        await fetch("/api/admin/session", { method: "DELETE", cache: "no-store" }).catch(
-          () => null,
-        );
-        router.refresh();
-        setBusy(false);
-      }}
-    >
+    <Button variant="secondary" onClick={onLock}>
       <LockSimple aria-hidden="true" className="size-4" />
       Lock
     </Button>

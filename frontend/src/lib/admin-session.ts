@@ -3,11 +3,10 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 import type { Env } from "@/lib/env";
 
 /**
- * The admin dashboard's lock (`/adminboard`). The key (`ADMIN_DASHBOARD_KEY`) stays on the server:
- * the browser sends it once, and gets back a short-lived cookie signed with a secret derived from
- * the key, so changing the key locks every open dashboard. The cookie is `HttpOnly` (no script can
- * read it), `SameSite=Strict`, and over https `__Host-` prefixed: host-only, so no other site on the
- * same domain can set or overwrite it.
+ * The admin dashboard's lock (`/adminboard`, ADR-044). The key (`ADMIN_DASHBOARD_KEY`) stays on the
+ * server and is asked for on every visit: nothing is stored in the browser. An unlocked page view
+ * holds, in memory only, a short-lived token signed with a secret derived from the key (so
+ * changing the key locks every open dashboard), to switch period without asking again.
  */
 
 const TOKEN_VERSION = "v1";
@@ -18,10 +17,6 @@ export const FAILURE_WINDOW_MS = 15 * 60 * 1000;
 
 export function adminEnabled(env: Env): boolean {
   return Boolean(env.ADMIN_DASHBOARD_KEY);
-}
-
-export function adminCookieName(env: Env): string {
-  return env.BETTER_AUTH_URL.startsWith("https://") ? "__Host-ic_admin" : "ic_admin";
 }
 
 function digest(value: string): Buffer {
@@ -48,7 +43,7 @@ function sign(payload: string, env: Env): string {
   return createHmac("sha256", signingKey(env)).update(payload).digest("base64url");
 }
 
-/** A cookie value that unlocks the dashboard until `ADMIN_SESSION_MINUTES` from `now`. */
+/** A page-view token that lets an unlocked dashboard switch period for `ADMIN_SESSION_MINUTES`. */
 export function createAdminToken(env: Env, now: number = Date.now()): string {
   const expires = now + env.ADMIN_SESSION_MINUTES * 60_000;
   const payload = `${TOKEN_VERSION}.${expires}.${randomBytes(16).toString("base64url")}`;
@@ -69,18 +64,6 @@ export function verifyAdminToken(
   if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return false;
   const expires = Number(parts[1]);
   return Number.isFinite(expires) && expires > now;
-}
-
-export function adminCookie(env: Env, value: string, maxAgeSeconds: number) {
-  return {
-    name: adminCookieName(env),
-    value,
-    httpOnly: true,
-    secure: env.BETTER_AUTH_URL.startsWith("https://"),
-    sameSite: "strict" as const,
-    path: "/",
-    maxAge: maxAgeSeconds,
-  };
 }
 
 interface Window {
@@ -132,6 +115,9 @@ export class FailureLimiter {
     if (this.overall.resetAt <= now) this.overall = { count: 0, resetAt: 0 };
   }
 }
+
+/** Wrong keys, counted for the whole web server. */
+export const adminLimiter = new FailureLimiter();
 
 /** The client address Caddy put in `X-Forwarded-For` (it overwrites any the client sent). */
 export function clientAddress(headers: Headers): string {

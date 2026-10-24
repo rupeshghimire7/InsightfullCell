@@ -1,8 +1,7 @@
 import "server-only";
 import { betterAuth } from "better-auth";
 import { Pool } from "pg";
-import { buildAuthOptions } from "@/lib/auth-options";
-import type { OrganizationApi } from "@/lib/identity";
+import { buildAuthOptions, type AuthApi } from "@/lib/auth-options";
 import { getEnv } from "@/lib/env";
 
 let pool: Pool | undefined;
@@ -32,14 +31,14 @@ function createPool(): Pool {
 function createAuth() {
   // Better Auth owns the `auth` schema; the API reads none of it (it verifies tokens instead).
   const pool = getAuthPool();
-  const handle: { api?: OrganizationApi } = {};
+  const handle: { api?: AuthApi } = {};
   const auth = betterAuth(
     buildAuthOptions(pool, () => {
       if (!handle.api) throw new Error("The auth API is not ready yet.");
       return handle.api;
     }),
   );
-  handle.api = auth.api as unknown as OrganizationApi;
+  handle.api = auth.api as unknown as AuthApi;
   return auth;
 }
 

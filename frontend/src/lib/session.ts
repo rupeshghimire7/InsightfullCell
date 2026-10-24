@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { getAuth } from "@/lib/auth";
+import { getAuth, getAuthPool } from "@/lib/auth";
 import { isConnectionFailure, ServiceUnavailableError } from "@/lib/unavailable";
 
 export interface AppSession {
@@ -42,6 +42,34 @@ export const getSession = cache(async (): Promise<AppSession | null> => {
     organizationId,
   };
 });
+
+/**
+ * Whether the user has a password (Better Auth's `credential` account, with a hash). People who
+ * registered with an emailed code, Google or a sign-in link have none until `/set-password`.
+ * Deduplicated per request; an unreachable database throws `ServiceUnavailableError`.
+ */
+export const hasPassword = cache(async (userId: string): Promise<boolean> => {
+  try {
+    const { rows } = await getAuthPool().query(
+      `SELECT 1 FROM account
+        WHERE "userId" = $1 AND "providerId" = 'credential' AND password IS NOT NULL
+        LIMIT 1`,
+      [userId],
+    );
+    return rows.length > 0;
+  } catch (error) {
+    if (isConnectionFailure(error)) throw new ServiceUnavailableError(undefined, { cause: error });
+    throw error;
+  }
+});
+
+/**
+ * The signed-in app is for people with a password (ADR-042): anyone without one is sent to choose
+ * it first. Called by the server layouts of the signed-in area, never by `/set-password` itself.
+ */
+export async function requirePassword(session: AppSession): Promise<void> {
+  if (!(await hasPassword(session.userId))) redirect("/set-password");
+}
 
 export async function requireSession(): Promise<AppSession> {
   const session = await getSession();

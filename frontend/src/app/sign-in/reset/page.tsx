@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { ResetLinkExpired, ResetPasswordForm } from "@/components/auth/reset-password-form";
 import { Brand } from "@/components/ui/brand";
-import { getEnv } from "@/lib/env";
+import { getEnv, passwordResetOn } from "@/lib/env";
 
 // The token is in the address: it must never leave in a Referer header.
 export const metadata: Metadata = { title: "Choose a new password", referrer: "no-referrer" };
@@ -20,7 +20,7 @@ export default async function ResetPasswordPage({
   searchParams: Promise<{ token?: string | string[]; error?: string | string[] }>;
 }) {
   await connection();
-  if (getEnv().PASSWORD_RESET !== "on") notFound();
+  if (!passwordResetOn(getEnv())) notFound();
   const { token, error } = await searchParams;
   const usable = typeof token === "string" && token.length > 0 && !error;
 

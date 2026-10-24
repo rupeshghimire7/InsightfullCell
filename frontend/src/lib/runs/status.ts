@@ -116,3 +116,23 @@ export function formatDuration(fromIso: string, toIso: string | number): string 
   if (minutes < 60) return `${minutes} min ${String(seconds % 60).padStart(2, "0")} s`;
   return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")} min`;
 }
+
+/**
+ * Where a run is, in words, for the runs table: the step it is on, the step it stopped at, or
+ * that every step is done. (The API clears `stage` once a run has succeeded.)
+ */
+export function runProgress(run: { status: RunStatus; stage?: string | null }): string {
+  const step = run.stage ? stageLabel(run.stage).title : null;
+  switch (run.status) {
+    case "succeeded":
+      return "All steps done";
+    case "queued":
+      return "Waiting to start";
+    case "running":
+      return step ?? "Starting";
+    case "awaiting_review":
+      return "Waiting for your review";
+    default:
+      return step ? `Stopped at: ${step}` : "Stopped before the first step";
+  }
+}

@@ -10,7 +10,7 @@ export default async function LicensePage() {
   const text = await readContent("LICENSE.txt");
   return (
     <>
-      <PageHeader title="License" description="The terms InsightfulCell is offered under." />
+      <PageHeader title="License" />
       {text ? (
         <pre className="max-w-[80ch] rounded-panel border border-border bg-surface p-5 font-sans text-sm leading-relaxed break-words whitespace-pre-wrap">
           {text.trim()}

@@ -1,10 +1,10 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { LockButton } from "@/components/admin/admin-gate";
+import { Button } from "@/components/ui/button";
 import { LocalTime } from "@/components/ui/local-time";
 import { PageHeader } from "@/components/ui/page-header";
 import type { Account, Overview, ProviderSpend, UsageUser } from "@/lib/admin-data";
-import { PERIODS } from "@/lib/admin-data";
+import { PERIODS } from "@/lib/admin-periods";
 import { formatBytes, formatCount } from "@/lib/format";
 import { providerLabel } from "@/lib/plans/labels";
 
@@ -12,9 +12,16 @@ import { providerLabel } from "@/lib/plans/labels";
 export function AdminDashboard({
   overview,
   accounts,
+  busy = false,
+  onPeriod,
+  onLock,
 }: {
   overview: Overview;
   accounts: Account[];
+  /** A period or a refresh is loading. */
+  busy?: boolean;
+  onPeriod: (days: number) => void;
+  onLock: () => void;
 }) {
   const rate = Number(overview.config.usd_to_aud);
   const aud = (usd: number) => usd * rate;
@@ -37,32 +44,33 @@ export function AdminDashboard({
         title="Admin dashboard"
         description={
           <>
-            Everyone’s usage of this deployment ({overview.config.environment}, label{" "}
-            <code className="font-mono text-xs">{overview.config.label}</code>). Figures as of{" "}
-            <LocalTime iso={overview.generated_at} />.
+            As of <LocalTime iso={overview.generated_at} />.
           </>
         }
         actions={
           <>
-            <nav aria-label="Period" className="flex rounded-control border border-border">
+            <div
+              role="group"
+              aria-label="Period"
+              className="flex rounded-control border border-border"
+            >
               {PERIODS.map((days) => (
-                <Link
+                <button
                   key={days}
-                  href={`/adminboard?days=${days}`}
-                  aria-current={days === overview.days ? "page" : undefined}
-                  className="inline-flex min-h-9 items-center px-3 text-sm first:rounded-l-control last:rounded-r-control hover:bg-bg aria-[current=page]:bg-accent aria-[current=page]:text-accent-contrast"
+                  type="button"
+                  disabled={busy}
+                  aria-pressed={days === overview.days}
+                  onClick={() => onPeriod(days)}
+                  className="inline-flex min-h-9 items-center px-3 text-sm first:rounded-l-control last:rounded-r-control hover:bg-bg disabled:opacity-70 aria-pressed:bg-accent aria-pressed:text-accent-contrast"
                 >
                   {days} days
-                </Link>
+                </button>
               ))}
-            </nav>
-            <Link
-              href={`/adminboard?days=${overview.days}`}
-              className="inline-flex min-h-9 items-center rounded-control border border-border bg-surface px-4 text-sm font-medium hover:bg-bg"
-            >
+            </div>
+            <Button variant="secondary" loading={busy} onClick={() => onPeriod(overview.days)}>
               Refresh
-            </Link>
-            <LockButton />
+            </Button>
+            <LockButton onLock={onLock} />
           </>
         }
       />
@@ -85,10 +93,7 @@ export function AdminDashboard({
         </SpendTile>
       </section>
 
-      <Section
-        title="Spend by provider"
-        note="Since the start, each against its own cap. A provider at its cap is skipped; the backup, if it has room, answers instead."
-      >
+      <Section title="Spend by provider" note="Since the start, each against its own cap.">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {spend.by_provider.map((p) => (
             <ProviderTile key={p.provider} row={p} aud={aud} />
@@ -113,10 +118,7 @@ export function AdminDashboard({
         />
       </Section>
 
-      <Section
-        title="Spend by model"
-        note="Our own count: every attempt, at list prices, rounded up. Failed attempts that may still have been billed are counted at their estimate."
-      >
+      <Section title="Spend by model" note="At list prices, failed attempts included.">
         <Table
           caption="Spend by model"
           head={[
@@ -178,7 +180,7 @@ export function AdminDashboard({
             empty="No calls yet."
           />
         </Section>
-        <Section title="By label" note="LLM_USAGE_LABEL: test runs and the released demo apart.">
+        <Section title="By usage label">
           <Table
             caption="Spend by label"
             head={["Label", "Calls", "Cost (AUD)", "Last call"]}
@@ -196,10 +198,7 @@ export function AdminDashboard({
         </Section>
       </div>
 
-      <Section
-        title="People"
-        note="Sign-in details from the web app; usage from the API. Counts of files and analyses include ones deleted since."
-      >
+      <Section title="People" note="Counts include files and analyses deleted since.">
         <Table
           caption="People and their usage"
           head={[
@@ -292,7 +291,7 @@ export function AdminDashboard({
             <Stat label="Jobs running" value={formatCount(overview.queue.doing ?? 0)} />
           </dl>
         </Section>
-        <Section title="Configuration" note="As the API sees it. Keys are never shown.">
+        <Section title="Configuration">
           <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             <Pair term="Main model">
               {overview.config.provider === "none"
@@ -695,8 +694,7 @@ function ProviderCheck({ overview }: { overview: Overview }) {
           </>
         ) : report.status === "not_configured" ? (
           <p className="mt-1 text-muted">
-            Set <code className="font-mono text-xs">OPENAI_ADMIN_KEY</code> (an admin key with read
-            access to usage) on the API to see OpenAI’s own cost next to ours.
+            Not set up (<code className="font-mono text-xs">OPENAI_ADMIN_KEY</code> on the API).
           </p>
         ) : (
           <p className="mt-1 text-muted">
@@ -708,9 +706,7 @@ function ProviderCheck({ overview }: { overview: Overview }) {
       <div className="rounded-panel border border-border bg-surface p-4">
         <p className="font-semibold">Gemini</p>
         <p className="mt-1 text-muted">
-          Google offers no usage report for AI Studio keys, so Gemini is counted by us only, at paid
-          list prices. Calls on the free tier are not billed, so the real cost can be lower, never
-          higher. Check the bill at aistudio.google.com.
+          Counted by us only, at list prices (no usage report from Google).
         </p>
       </div>
     </div>

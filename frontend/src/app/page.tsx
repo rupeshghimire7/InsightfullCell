@@ -1,13 +1,18 @@
 import { redirect } from "next/navigation";
 import { ServiceUnavailable } from "@/components/ui/service-unavailable";
 import { getEnv } from "@/lib/env";
-import { getSessionOrUnavailable } from "@/lib/session";
+import { getSessionOrUnavailable, requirePassword } from "@/lib/session";
 
-/** Signed-in users land in their active organisation; everyone else signs in. */
+/**
+ * Signed-in users land in their active organisation (after choosing a password, if they have
+ * none yet); everyone else signs in.
+ */
 export default async function RootPage() {
   const session = await getSessionOrUnavailable();
   if (session === "unavailable") {
     return <ServiceUnavailable retryHref="/" developerHint={getEnv().APP_ENV === "local"} />;
   }
-  redirect(session ? `/o/${session.organizationId}` : "/sign-in");
+  if (!session) redirect("/sign-in");
+  await requirePassword(session);
+  redirect(`/o/${session.organizationId}`);
 }

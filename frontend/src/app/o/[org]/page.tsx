@@ -34,7 +34,7 @@ export default async function HomePage({
       <PageHeader
         leading={<LogoMark size={72} className="hidden drop-shadow-sm sm:block" />}
         title="Home"
-        description="Upload a table, then analyse it. Each file is checked against what you uploaded before anything is computed from it."
+        description="Upload a table, then analyse it."
       />
       <div className="space-y-10">
         <UploadDropzone orgId={org} />

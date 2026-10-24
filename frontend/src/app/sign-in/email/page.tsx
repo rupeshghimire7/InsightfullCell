@@ -12,12 +12,8 @@ import { linkDelivery } from "@/lib/sign-in-options";
 
 export const metadata: Metadata = { title: "Email me a sign-in link" };
 
-/** `/sign-in/email`: asks for the address a sign-in link goes to (from sign-in and registration). */
-export default async function EmailLinkPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ mode?: string }>;
-}) {
+/** `/sign-in/email`: asks for the address a sign-in link goes to (existing accounts only). */
+export default async function EmailLinkPage() {
   await connection();
   const env = getEnv();
   const session = await getSessionOrUnavailable();
@@ -28,7 +24,6 @@ export default async function EmailLinkPage({
   }
   if (session) redirect("/");
   const delivery = linkDelivery(env);
-  const back = (await searchParams).mode === "register" ? "/sign-in?mode=register" : "/sign-in";
 
   return (
     <main id="main" className="flex min-h-dvh items-center justify-center px-4 py-12 sm:px-8">
@@ -40,7 +35,7 @@ export default async function EmailLinkPage({
         <p className="mt-1 mb-8 text-muted">
           {delivery === "off"
             ? "Sign-in links aren’t available yet."
-            : "We’ll send a link that signs you in, with no password. New here? It creates your account too."}
+            : "We’ll send a link that signs you in, with no password."}
         </p>
         {delivery === "off" ? (
           <p>Sign in with your password for now.</p>
@@ -49,10 +44,10 @@ export default async function EmailLinkPage({
         )}
         <p className="mt-6 text-center text-sm text-muted">
           <Link
-            href={back}
+            href="/sign-in"
             className="inline-flex min-h-6 items-center font-medium text-accent underline underline-offset-2 pointer-coarse:min-h-11"
           >
-            Back to {back.includes("register") ? "registration" : "sign in"}
+            Back to sign in
           </Link>
         </p>
       </div>

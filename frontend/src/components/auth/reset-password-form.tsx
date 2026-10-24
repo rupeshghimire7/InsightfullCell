@@ -2,17 +2,11 @@
 
 import Link from "next/link";
 import { useRef, useState, type FormEvent } from "react";
-import {
-  Field,
-  PasswordInput,
-  settle,
-  transportError,
-  useHydrated,
-} from "@/components/auth/sign-in-form";
+import { NewPasswordFields, useNewPassword } from "@/components/auth/new-password-fields";
+import { settle, transportError, useHydrated } from "@/components/auth/sign-in-form";
 import { Button } from "@/components/ui/button";
 import { ProblemAlert } from "@/components/ui/problem-alert";
 import { authClient } from "@/lib/auth-client";
-import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/lib/auth-constants";
 
 type Errors = Partial<Record<"next" | "confirm", string>>;
 type Status = { kind: "idle" | "busy" | "done" | "expired" } | { kind: "error"; message: string };
@@ -25,28 +19,24 @@ const linkClass =
 
 /**
  * Sets a new password with the token from an emailed reset link: the new password twice, with the
- * same rules as registration and the Profile page. The token works once; every session of the
+ * shared policy and its live checklist (the address is not known here, so the server alone checks
+ * that the password does not contain it). The token works once; every session of the
  * account is signed out, so whoever knew the old password loses access at once.
  */
 export function ResetPasswordForm({ token }: { token: string }) {
   const form = useRef<HTMLFormElement>(null);
   const hydrated = useHydrated();
+  const fresh = useNewPassword();
   const [errors, setErrors] = useState<Errors>({});
   const [status, setStatus] = useState<Status>({ kind: "idle" });
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (status.kind === "busy") return;
-    const data = new FormData(event.currentTarget);
-    const next = String(data.get("newPassword") ?? "");
-    const confirm = String(data.get("confirmPassword") ?? "");
+    const next = fresh.password;
     const found: Errors = {};
-    if (next.length < PASSWORD_MIN_LENGTH) {
-      found.next = `Use at least ${PASSWORD_MIN_LENGTH} characters.`;
-    } else if (next.length > PASSWORD_MAX_LENGTH) {
-      found.next = `Use at most ${PASSWORD_MAX_LENGTH} characters.`;
-    }
-    if (!found.next && confirm !== next) found.confirm = "The passwords don’t match.";
+    if (fresh.problem) found.next = fresh.problem;
+    else if (fresh.confirmProblem) found.confirm = fresh.confirmProblem;
     setErrors(found);
     if (Object.keys(found).length > 0) {
       // By name: the inputs are not marked invalid until React renders the errors.
@@ -62,6 +52,12 @@ export function ResetPasswordForm({ token }: { token: string }) {
     }
     if (error.code === "INVALID_TOKEN") {
       setStatus({ kind: "expired" });
+      return;
+    }
+    if (error.code === "PASSWORD_TOO_WEAK" && error.message) {
+      setErrors({ next: error.message });
+      form.current?.querySelector<HTMLInputElement>('[name="newPassword"]')?.focus();
+      setStatus({ kind: "idle" });
       return;
     }
     setStatus({
@@ -90,16 +86,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
       {status.kind === "error" ? (
         <ProblemAlert title="The password wasn’t changed" detail={status.message} />
       ) : null}
-      <Field
-        label="New password"
-        error={errors.next}
-        hint={`At least ${PASSWORD_MIN_LENGTH} characters.`}
-      >
-        {(props) => <PasswordInput {...props} name="newPassword" autoComplete="new-password" />}
-      </Field>
-      <Field label="Confirm new password" error={errors.confirm}>
-        {(props) => <PasswordInput {...props} name="confirmPassword" autoComplete="new-password" />}
-      </Field>
+      <NewPasswordFields state={fresh} errors={errors} />
       <Button
         type="submit"
         loading={status.kind === "busy"}

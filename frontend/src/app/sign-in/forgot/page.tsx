@@ -6,7 +6,7 @@ import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
 import { Brand } from "@/components/ui/brand";
 import { ServiceUnavailable } from "@/components/ui/service-unavailable";
 import { PASSWORD_RESET_TTL_SECONDS } from "@/lib/auth-constants";
-import { getEnv } from "@/lib/env";
+import { getEnv, passwordResetOn } from "@/lib/env";
 import { getSessionOrUnavailable } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Forgot password" };
@@ -15,7 +15,7 @@ export const metadata: Metadata = { title: "Forgot password" };
 export default async function ForgotPasswordPage() {
   await connection();
   const env = getEnv();
-  if (env.PASSWORD_RESET !== "on") notFound();
+  if (!passwordResetOn(env)) notFound();
   const session = await getSessionOrUnavailable();
   if (session === "unavailable") {
     return (
