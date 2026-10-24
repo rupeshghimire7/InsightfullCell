@@ -7,6 +7,8 @@ import { ResetPasswordForm } from "@/components/auth/reset-password-form";
 
 const requestPasswordReset = vi.fn();
 const resetPassword = vi.fn();
+const replace = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
 vi.mock("@/lib/auth-client", () => ({
   authClient: {
     requestPasswordReset: (...a: unknown[]) => requestPasswordReset(...a),
@@ -17,6 +19,7 @@ vi.mock("@/lib/auth-client", () => ({
 beforeEach(() => {
   requestPasswordReset.mockReset().mockResolvedValue({ data: { status: true }, error: null });
   resetPassword.mockReset().mockResolvedValue({ data: { status: true }, error: null });
+  replace.mockReset();
 });
 
 const SAME_MESSAGE = "If an account uses ada@example.com, we’ve emailed a link";
@@ -168,7 +171,7 @@ describe("ResetPasswordForm", () => {
     expect(resetPassword).not.toHaveBeenCalled();
   });
 
-  it("sets the new password with the link's token, then points to sign-in", async () => {
+  it("sets the new password with the link's token, then goes straight to sign-in", async () => {
     const user = userEvent.setup();
     resetForm();
     await user.type(screen.getByLabelText("New password"), "Long-enough-Pass1");
@@ -178,8 +181,12 @@ describe("ResetPasswordForm", () => {
       newPassword: "Long-enough-Pass1",
       token: "tok123",
     });
-    expect(await screen.findByRole("status")).toHaveTextContent("Password changed");
-    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/sign-in");
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/sign-in?reset=done"));
+    // still busy while the sign-in page loads: it cannot be sent twice
+    expect(screen.getByRole("button", { name: "Changing password…" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
   });
 
   it("explains an expired or used link and offers a new one", async () => {

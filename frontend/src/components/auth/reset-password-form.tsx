@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useRef, useState, type FormEvent } from "react";
 import { NewPasswordFields, useNewPassword } from "@/components/auth/new-password-fields";
 import { settle, transportError, useHydrated } from "@/components/auth/sign-in-form";
@@ -9,21 +10,20 @@ import { ProblemAlert } from "@/components/ui/problem-alert";
 import { authClient } from "@/lib/auth-client";
 
 type Errors = Partial<Record<"next" | "confirm", string>>;
-type Status = { kind: "idle" | "busy" | "done" | "expired" } | { kind: "error"; message: string };
+type Status = { kind: "idle" | "busy" | "expired" } | { kind: "error"; message: string };
 
 export const RESET_LINK_EXPIRED =
   "That reset link has expired or was already used. Ask for a new one.";
-
-const linkClass =
-  "inline-flex min-h-6 items-center font-medium text-accent underline underline-offset-2 pointer-coarse:min-h-11";
 
 /**
  * Sets a new password with the token from an emailed reset link: the new password twice, with the
  * shared policy and its live checklist (the address is not known here, so the server alone checks
  * that the password does not contain it). The token works once; every session of the
- * account is signed out, so whoever knew the old password loses access at once.
+ * account is signed out, so whoever knew the old password loses access at once. Once saved, it goes
+ * straight to the sign-in page, which says the password was changed.
  */
 export function ResetPasswordForm({ token }: { token: string }) {
+  const router = useRouter();
   const form = useRef<HTMLFormElement>(null);
   const hydrated = useHydrated();
   const fresh = useNewPassword();
@@ -47,7 +47,8 @@ export function ResetPasswordForm({ token }: { token: string }) {
     setStatus({ kind: "busy" });
     const error = await settle(() => authClient.resetPassword({ newPassword: next, token }));
     if (!error) {
-      setStatus({ kind: "done" });
+      // Stays "busy" while the sign-in page loads, so the form cannot be sent twice.
+      router.replace("/sign-in?reset=done");
       return;
     }
     if (error.code === "INVALID_TOKEN") {
@@ -66,19 +67,6 @@ export function ResetPasswordForm({ token }: { token: string }) {
     });
   }
 
-  if (status.kind === "done") {
-    return (
-      <div role="status" className="space-y-3">
-        <h2 className="text-xl font-semibold">Password changed</h2>
-        <p>Sign in with your new password. Every device that was signed in has been signed out.</p>
-        <p>
-          <Link href="/sign-in" className={linkClass}>
-            Sign in
-          </Link>
-        </p>
-      </div>
-    );
-  }
   if (status.kind === "expired") return <ResetLinkExpired />;
 
   return (

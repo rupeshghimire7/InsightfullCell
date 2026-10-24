@@ -110,12 +110,12 @@ describe("DeleteAccountForm", () => {
   });
 });
 
-describe("AccountDeletedNotice", () => {
-  it("shows once: the flag leaves the address, so a reload shows nothing", async () => {
-    const { AccountDeletedNotice } = await import("@/components/auth/account-deleted-notice");
-    window.history.replaceState(null, "", "/sign-in?account=deleted&mode=register");
-    render(<AccountDeletedNotice />);
-    expect(screen.getByRole("status")).toHaveTextContent("Your account and everything in it");
+describe("SignInNotice", () => {
+  it("shows once: its flag leaves the address, so a reload shows nothing", async () => {
+    const { SignInNotice } = await import("@/components/auth/sign-in-notice");
+    window.history.replaceState(null, "", "/sign-in?reset=done&mode=register");
+    render(<SignInNotice param="reset">Password changed.</SignInNotice>);
+    expect(screen.getByRole("status")).toHaveTextContent("Password changed.");
     await waitFor(() => expect(window.location.search).toBe("?mode=register"));
   });
 });

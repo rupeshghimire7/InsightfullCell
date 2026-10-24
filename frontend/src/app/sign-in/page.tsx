@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { AccountDeletedNotice } from "@/components/auth/account-deleted-notice";
+import { SignInNotice } from "@/components/auth/sign-in-notice";
 import { SignInForm } from "@/components/auth/sign-in-form";
 import { Brand } from "@/components/ui/brand";
 import { ServiceUnavailable } from "@/components/ui/service-unavailable";
@@ -33,7 +33,7 @@ const LINK_ERRORS: Record<string, string> = {
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; mode?: string; account?: string }>;
+  searchParams: Promise<{ error?: string; mode?: string; account?: string; reset?: string }>;
 }) {
   // Rendered per request: configuration is read when the server runs, never at build time
   // (the image is built without it).
@@ -44,7 +44,7 @@ export default async function SignInPage({
     return <ServiceUnavailable retryHref="/sign-in" developerHint={env.APP_ENV === "local"} />;
   }
   if (session) redirect("/");
-  const { error, mode: modeParam, account } = await searchParams;
+  const { error, mode: modeParam, account, reset } = await searchParams;
   const mode = modeParam === "register" ? "register" : "sign-in";
 
   return (
@@ -65,7 +65,16 @@ export default async function SignInPage({
               ? "Your workspace is created with your account."
               : "Welcome back. Sign in to your workspace."}
           </p>
-          {account === "deleted" ? <AccountDeletedNotice /> : null}
+          {account === "deleted" ? (
+            <SignInNotice param="account">
+              Your account and everything in it were deleted.
+            </SignInNotice>
+          ) : reset === "done" ? (
+            <SignInNotice param="reset">
+              Password changed. Sign in with your new password; every device that was signed in has
+              been signed out.
+            </SignInNotice>
+          ) : null}
           <SignInForm
             key={mode}
             mode={mode}

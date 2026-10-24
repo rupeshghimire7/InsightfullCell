@@ -64,7 +64,11 @@ test("forgot password: emailed link, new password, old one refused", async ({ pa
   await page.getByLabel("New password", { exact: true }).fill(NEW_PASSWORD);
   await page.getByLabel("Confirm new password").fill(NEW_PASSWORD);
   await page.getByRole("button", { name: "Change password" }).click();
-  await expect(page.getByRole("status")).toContainText("Password changed");
+  // straight to sign-in, which says so once (a reload doesn't repeat it)
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page.getByRole("status").first()).toContainText("Password changed");
+  await page.reload();
+  await expect(page.getByText("Password changed")).toHaveCount(0);
 
   // --- the link works once
   await page.goto(link);
