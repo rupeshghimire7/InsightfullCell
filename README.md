@@ -1,630 +1,448 @@
 # InsightfulCell
 
-**Your one stop solution for data analysis.**
+<!-- [![CI](https://github.com/rupeshghimire7/InsightfullCell/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshghimire7/InsightfullCell/actions/workflows/ci.yml) -->
+<!-- [![Licence: proprietary](https://img.shields.io/badge/licence-proprietary-lightgrey)](LICENSE) -->
 
-*Bring a spreadsheet. Leave with clear answers, charts and a report your team can check.*
+InsightfulCell is a one-stop solution for data analysis: upload a spreadsheet and get a cleaned
+dataset, statistically tested findings, checked charts and maps, and a plain-language report where
+every number traces back to its test.
 
----
+**Live app:** <https://app.ic.rgproject.me> · **Demo video:** [YouTube link] ·
+**Usage guide:** [docs/usage/USAGE.md](docs/usage/USAGE.md) · **Try it:** [in 2 minutes](#try-it-in-2-minutes)
 
-InsightfulCell is a web platform for analysing your own data without a statistics background and without trusting a black box. You upload a spreadsheet (CSV, TSV, Excel, Parquet or JSON). It reviews and cleans the data with you, tests every question with proper statistics, and writes a report, a dashboard and checked charts and maps. Every figure links back to a stored, unchangeable fact, so you can always see where it came from. Your raw rows are never sent to an AI model.
-
----
+![InsightfulCell dashboard for a sample orders file: four headline numbers, each with a source chip such as F13, above checked scatter charts](reports/presentation/screenshots/16-dashboard-top.png)
 
 ## Contents
 
-1. [Overview](#overview)
-2. [Features](#features)
-3. [How it works](#how-it-works)
-4. [Architecture](#architecture)
-5. [Backend concepts](#backend-concepts)
-6. [Frontend concepts](#frontend-concepts)
-7. [Getting started](#getting-started)
-8. [Configuration](#configuration)
-9. [Development workflow](#development-workflow)
-10. [Project structure](#project-structure)
-11. [API reference](#api-reference)
-12. [Security and privacy](#security-and-privacy)
-13. [Project status and roadmap](#project-status-and-roadmap)
-14. [Known limitations](#known-limitations)
+1. [What it does](#what-it-does)
+2. [Try it in 2 minutes](#try-it-in-2-minutes)
+3. [How it works (architecture overview)](#how-it-works-architecture-overview)
+4. [Tech stack](#tech-stack)
+5. [Source code and repository structure](#source-code-and-repository-structure)
+6. [Requirements (software dependencies)](#requirements-software-dependencies)
+7. [Installation, build and execution](#installation-build-and-execution)
+    - [Production build](#production-build)
+    - [Stop and reset](#stop-and-reset)
+    - [Troubleshooting](#troubleshooting)
+8. [Optional: connect an AI model](#optional-connect-an-ai-model)
+9. [Testing and quality checks](#testing-and-quality-checks)
+10. [Deployment](#deployment)
+11. [Security and privacy](#security-and-privacy)
+12. [Design decisions](#design-decisions)
+13. [Limitations and roadmap](#limitations-and-roadmap)
+14. [Documentation](#documentation)
 15. [Team and contributions](#team-and-contributions)
-16. [Documentation](#documentation)
+    - [How we built it](#how-we-built-it)
+    - [Use of AI-assisted tools](#use-of-ai-assisted-tools)
+16. [Acknowledgements](#acknowledgements)
 17. [Licence](#licence)
+18. [Contact](#contact)
 
----
+## What it does
 
-## Overview
+People with a spreadsheet want answers, but AI assistants can invent numbers and hide their data
+cleaning, while statistics tools need a trained analyst. In InsightfulCell, code computes every
+number; an AI model (a large language model, optional) only plans the questions and writes
+sentences, and every sentence is checked against the stored results before anyone sees it. Raw
+rows never reach an AI model, and the whole product works without one.
 
-***Concept IDEATION**: If we can have a model that can handle any text (LLMs) and even systems that can predict any tabular data without needing to retrain it again and again, why not have a system that can provide a detailed analysis while providing data privacy and without needing data analytics specialist.*
+- **Safe file reading:** CSV, TSV, Excel, Parquet and JSON up to 250 MB are checked byte for byte
+  and parsed under strict limits, so a hostile or broken file cannot harm the system.
+- **Cleaning you can see:** each proposed fix shows the number of rows it changes; apply it
+  automatically or review every change yourself.
+- **Tested findings:** relationships, differences and trends are tested with proper statistics,
+  with false discoveries controlled across the whole analysis.
+- **Traceable numbers:** every figure links to a stored, unchangeable fact showing the test, the
+  rows used and how it was computed.
+- **Checked charts and maps:** every chart and map value is recomputed before display; a chart that
+  doesn't match is withheld.
+- **Report and dashboard:** plain-language answers per question, downloadable as PDF, Word,
+  Markdown or HTML.
+- **Explore further:** drill into one group, or view the original rows beside the findings.
+- **Privacy controls:** personal data such as names and emails is detected and masked, and you can
+  delete a dataset, an analysis or your whole account at any time.
 
-### Product idea
+## Try it in 2 minutes
 
-People with a spreadsheet want answers, not a statistics course. The tools available today make them choose between two bad options:
+1. Open <https://app.ic.rgproject.me>.
+2. Choose **Create an account**, enter your name and email, type the 6-digit code we email you,
+   then choose a password. [confirm: email registration is switched on in production]
+3. Download a sample file (public Kaggle datasets, CC0):
+   - [Zomato restaurants](sample_data/kaggle_data/Zomato%20Restaurant%20Dataset.csv), 9,551 rows
+     ([Kaggle](https://www.kaggle.com/datasets/shrutimehta/zomato-restaurants-data))
+   - [AI usage by students and professionals](sample_data/kaggle_data/AI_Usage_and_Impact_on_Students_and_Professionals.csv),
+     300 rows ([Kaggle](https://www.kaggle.com/datasets/eishatuzzuhra/ai-usage-and-impact-on-students-and-professionals))
+   - [Data science job listings, Australia](sample_data/kaggle_data/listings.csv), 1,498 rows
+     ([Kaggle](https://www.kaggle.com/datasets/nomilk/data-science-job-listings-australia-20192020?select=listings.csv))
+4. Drop the file on the home page, open it, and click **Analyse newest version**.
+5. When it says **Your report is ready**, open the report and click a source chip (for example
+   **F12**) to see the test behind that number.
 
-- **General-purpose AI assistants** give fluent analyses, but their numbers can be made up, their data cleaning is invisible, and sending raw rows to a model is unacceptable for sensitive data.
-- **Traditional BI and statistics tools** are accurate, but need a skilled analyst to prepare the data and to know which questions to ask.
+- The live site runs without an AI model, so plans and sentences come from built-in rules and
+  templates.
+- It runs one analysis at a time, so you may wait briefly while someone else's finishes.
+- Please don't upload real personal data.
 
-InsightfulCell started from one question: *can an analysis be as easy as asking an assistant, and as trustworthy as one done by a careful analyst?* The answer it builds towards is a clear division of labour:
+More detail: [usage guide](docs/usage/USAGE.md).
 
-- **Code computes**: every statistic, test, chart value and map value is calculated by deterministic code.
-- **A language model only plans and writes**: it proposes which questions to ask and turns verified facts into sentences.
-- **Everything is checked**: plans are validated, numbers are filled in by the engine (the model cannot write a number), and every sentence and chart is verified against its sources before anyone sees it.
-
-### The product vision
-
-> Upload a CSV → reviewed cleaning → signal-gated features → statistically controlled insight mining → verified, narrated report.
-
-**Every number shown to a user must trace to an immutable fact.**
-
-### What it does
-
-1. **Reads your file safely.** It checks the bytes, parses them in the background worker under strict limits, works out what each column means (amount, category, date, place, identifier…), and flags personal data such as names, emails and phone numbers.
-2. **Proposes a cleaning plan.** It suggests typed changes (fix types, unify spellings, handle placeholders, remove duplicates…), each marked as lossless or as one that can remove data, and shows exactly how many rows each change affects. You can accept it automatically or review every change yourself.
-3. **Finds what is real.** It tests relationships, differences and trends with proper statistics and controls the share of false findings across the whole analysis. It then re-tests the strongest findings on less-cleaned data, to make sure the cleaning did not create them.
-4. **Explains it.** It writes a report and builds a dashboard in plain language. Every sentence cites its facts, every chart and map value is recomputed before display, and the report downloads as PDF, Word, Markdown or HTML.
-5. **Lets you dig in.** You can open the evidence behind any number, explore one group on its own (a drill-down), and look at the original rows in a side panel next to the findings.
-
-### What makes it different (the tenets)
-
-When two goals conflict, the higher one wins:
-
-| # | Tenet | What it means in the product |
-|---|---|---|
-| 1 | **Correctness over fluency** | Statistics come from code; false discoveries are controlled across the run; charts are recomputed; sentences are verified. |
-| 2 | **Traceability** | Facts are append-only and hashed; sentences and chart points cite fact ids; plans and decisions are versioned. |
-| 3 | **Privacy: raw rows never reach a model** | A model sees only a masked description of the table; personal data is detected first; a gateway blocks any payload containing it. |
-| 4 | **Simplicity of operation** | One modular codebase; PostgreSQL is also the job queue; no new infrastructure without a recorded decision. |
-
-### Who it is for
-
-| User | What they do |
-|---|---|
-| **Analyst** (owner, admin, analyst roles) | Upload, run analyses, review cleaning, read and explore results |
-| **Viewer** | Read reports and dashboards others produced (role exists; invitations UI not built yet) |
-| **Organisation owner/admin** | Members, cleaning policy and spending (partly built) |
-
----
-
-## Features
-
-**Sign-in and workspaces**
-- Email and password registration and sign-in, optional- email sign-in links (built, off until a mail domain is verified).
-- Every user gets a workspace; data never goes out.
-
-**Uploads**
-- CSV, TSV, Excel (`.xlsx`), Parquet and JSON / JSON Lines, up to 250 MB.
-- The browser hashes the file (SHA-256, in a Web Worker) and uploads it straight to object storage in parallel parts, with retries and resume.
-- The same file uploaded twice is stored once, and you are told so.
-
-**Analysis**
-- Live progress for every step, streamed to the browser, with cancel and retry from the last checkpoint.
-- **Automatic** mode (default): applies the suggested cleaning and goes straight to the report.
-- **Manual** mode: stops for your review. Apply or keep each change, see exactly what a model would be sent, ask for a different plan in your own words, then approve.
-- A downloadable Python recipe rebuilds the cleaned table outside the app.
-
-**Results**
-- **Report:** answers per question, each with its sources, a summary written last from verified findings, and an "In short" section.
-- **Dashboard:** headline numbers, top charts, maps of places, and suggested questions already answered.
-- **Fact inspector:** behind every citation, the test, interval, p and q values, rows used and how it was computed.
-- **Checked charts and maps:** a chart with any mismatch is withheld rather than shown wrong.
-- **Downloads:** PDF, Word, Markdown and a self-contained HTML file.
-- **Drill-downs:** explore one group (for example one region) as an exploratory sub-run.
-- **See the data:** a resizable side panel with the original rows (personal-data columns stay hidden).
-- **Delete:** remove an analysis or a whole dataset at once; files leave storage after a grace period.
-
----
-
-## How it works
-
-### The user's journey
-
-```mermaid
-flowchart LR
-    A[Sign in] --> B[Upload a file]
-    B --> C[Analyse]
-    C --> D{Review mode}
-    D -- Automatic --> F[Report and dashboard]
-    D -- Manual --> E[Review the cleaning plan]
-    E -- Approve --> F
-    F --> G[Inspect facts, drill down,<br/>see the data, download]
-```
-
-### The analysis pipeline
-
-An analysis is a **run**: one analysis of one dataset version. It runs as two jobs on a queue, split at the review gate. Each stage is checkpointed, so a retry resumes where it stopped.
-
-```mermaid
-flowchart TB
-    subgraph A["Phase A: understand and plan"]
-        direction LR
-        ingest --> profile --> understand --> clean_plan
-    end
-    gate{{"Review gate<br/>(automatic: pass through · manual: wait for approval)"}}
-    subgraph B["Phase B: clean, test, explain"]
-        direction LR
-        clean_apply --> geo --> features --> mine --> sensitivity --> rank --> visualize --> report
-    end
-    A --> gate --> B
-```
-
-| Stage | What it does |
-|---|---|
-| `ingest` | Re-hashes the stored bytes (must match the upload), parses the file under strict limits into typed Parquet, assigns each column a meaning and flags personal data. |
-| `profile` | Per-column statistics, missing-value patterns, duplicates and outliers. |
-| `understand` | Builds the analysis plan (which questions to ask) from a model, or from the built-in rules, and validates it item by item. |
-| `clean_plan` | Proposes typed cleaning operations, each lossless or lossy, measured on every row. |
-| `clean_apply` | Applies the approved cleaning; also keeps a lossless-only copy for the sensitivity check. |
-| `geo` | Resolves places (suburbs, states, postcodes, coordinates) to standard regions using a packaged, digest-pinned reference set. |
-| `features` | Keeps derived measures only if they carry signal (they must beat 19 random shuffles). |
-| `mine` | Nine miners test the plan's questions; every test is logged; false discoveries are controlled at 5% across the whole run (Benjamini-Hochberg). |
-| `sensitivity` | Re-tests the top ten findings on the lossless-only data. |
-| `rank` | Orders findings by strength and relevance. |
-| `visualize` | Builds charts and maps; every point is a claim recomputed by its own query. |
-| `report` | Narrates each question from its facts, verifies every sentence and assembles the report and dashboard. |
-
-### How a sentence gets written
-
-1. The engine stores each finding as a **fact**: numbers, test, interval, p and q values, tier, provenance and a content hash. Facts are append-only.
-2. A model (or a template) writes sentences with **numeric slots** such as `{F3.1}`. The engine fills them from the fact, so a model cannot write a wrong number.
-3. A **verifier** checks every sentence: citations, stray numbers, direction, strength words against effect sizes, causal language and missing conditions. A failed sentence is rewritten once, then replaced by the fact's own statement.
-4. The summary is written last, from verified findings only. If the model is unavailable, the report is "simplified" (template sentences) and can be narrated again later.
-
----
-
-## Architecture
-
-InsightfulCell is a **modular monolith** shipped as three processes: a **web app**, an **API** and a **worker**. The API and worker are the same Python package with different entry points. They share one PostgreSQL database and one S3-compatible object store.
+## How it works (architecture overview)
 
 ```mermaid
 flowchart LR
     browser([Browser])
-    subgraph web["Web app (Next.js)"]
-        ui[Pages and components]
-        bff[BFF proxy /api/backend]
-        auth[Better Auth /api/auth]
-    end
-    subgraph py["Python package"]
-        api[API - FastAPI]
-        worker[Worker - Procrastinate]
-    end
-    pg[(PostgreSQL<br/>data · queue · auth)]
-    s3[(Object storage<br/>S3 / RustFS)]
-    llm[[LLM provider<br/>optional]]
+    web["Web app<br/>(pages, sign-in)"]
+    api["API"]
+    worker["Worker"]
+    pg[("PostgreSQL<br/>data and job queue")]
+    s3[("File storage<br/>(S3)")]
+    ai[["AI model<br/>(optional)"]]
 
-    browser --> ui
-    browser --> bff --> api
-    browser --> auth --> pg
-    browser -- "file parts (presigned URLs)" --> s3
-    browser -- "live progress (SSE + ticket)" --> api
-    api --> pg
-    api --> s3
-    worker --> pg
-    worker --> s3
-    worker -- "masked description only" --> llm
+    browser -- "pages, session cookie" --> web
+    web -- "requests with a 15-minute token" --> api
+    web -- "accounts and sessions" --> pg
+    browser -- "file parts, signed upload links" --> s3
+    browser -- "live progress, one-run ticket" --> api
+    api -- "records, queued jobs" --> pg
+    pg -- "jobs" --> worker
+    worker -- "results, events" --> pg
+    api -- "signed upload links, file checks" --> s3
+    worker -- "files and outputs" --> s3
+    worker -- "masked table description only" --> ai
 ```
 
-The browser talks only to the web app, with two direct paths for heavy traffic. File bytes go straight to object storage through presigned URLs, and progress streams straight from the API with a ticket for one run. When the whole stack runs on one machine and is opened from another address (a tunnel), the web app relays both paths too (see [Sharing a local copy](#sharing-a-local-copy-ngrok)).
+- One codebase runs as three processes: the web app, the API and the worker. They share two
+  stores: PostgreSQL (the database, which is also the job queue) and S3-compatible file storage.
+- Files go straight from the browser to storage through short-lived signed links; the API then
+  checks their size and type.
+- The worker runs each analysis as a queued job, saving progress after every step, so a retry
+  resumes where it stopped. The browser follows progress live.
+- The database itself keeps each organisation's data apart (row-level security: every query only
+  sees rows of the signed-in organisation).
+- An AI model, when one is configured, sees only a masked description of the table: column
+  meanings and rough summaries, never rows or personal values.
 
-### Technology stack
+Analysis steps: understand the file → clean (with optional review) → test → re-check the strongest
+findings on less-cleaned data → chart → write and verify the report.
 
-| Layer | Choice | Why |
+Deeper detail: [system flow](reports/system_flow.md) and the [decision records](docs/adr/).
+
+## Tech stack
+
+| Layer | Technology (major version) | What it does here |
 |---|---|---|
-| Web | Next.js 16 (App Router), React 19, TypeScript (strict), Tailwind CSS 4 | Server rendering; the API token never reaches the browser |
-| Sign-in | Better Auth 1.7 (organisation + JWT plugins), Ed25519 keys | Organisations and roles in our own database |
-| API | FastAPI, Pydantic 2, SQLAlchemy 2 (async), psycopg 3 | Same language as the engine; async streaming; generated types |
-| Queue | Procrastinate on PostgreSQL | Jobs and run state in one database |
-| Database | PostgreSQL 18 (row-level security, JSONB, full text, LISTEN/NOTIFY, partitions) | One system to secure, back up and isolate tenants in |
-| Files | S3 API (RustFS locally, S3 in production) | Bytes go to the service built for them |
-| Parsing and statistics | DuckDB, NumPy, SciPy, scikit-learn, RapidFuzz, Shapely | Fast in-process parsing; proven statistics |
-| Models | One gateway; Gemini (default), OpenAI, Anthropic, DeepSeek; rules fallback | Budgets, privacy checks and accounting in one place |
-| Exports | Jinja2 HTML, python-docx, fpdf2, resvg | Self-contained files, no browser needed in the worker |
-| Testing | pytest, Vitest + Testing Library + axe, Playwright | Unit to browser coverage |
+| Web app | Next.js 16, React 19, TypeScript 5, Tailwind CSS 4 | Pages, server-side data fetching, the proxy that keeps API tokens off the browser |
+| Sign-in | Better Auth 1.7 | Accounts, sessions, email codes, workspaces and the tokens the API checks |
+| API | Python 3.13, FastAPI 0.143, Pydantic 2, SQLAlchemy 2 | Uploads, datasets, runs, reports and downloads |
+| Job queue and worker | Procrastinate 3 on PostgreSQL | Runs analyses and upkeep jobs from the database |
+| Database | PostgreSQL 18 | Data, job queue and sign-in tables, with row-level security |
+| File storage | Amazon S3 (RustFS 1.0 locally) | Uploaded files, cleaned tables and analysis outputs |
+| Analysis | DuckDB 1, NumPy 2, SciPy 1, scikit-learn 1, Shapely 2 | Parsing, statistics and map geometry |
+| Reports | Jinja2 3, python-docx 1, fpdf2 2 | HTML, Word and PDF downloads |
+| AI gateway | Gemini, OpenAI, Anthropic or DeepSeek client libraries | One place for budgets, privacy checks and cost records |
+| Tests | pytest 9, Vitest 5, Playwright 1.56, axe | Unit, integration, accessibility and browser tests |
+| Hosting | Docker Compose, Caddy 2, GitHub Actions | Containers, HTTPS and image builds |
 
----
+## Source code and repository structure
 
-## Backend concepts
+This repository holds the complete source code. Its layout:
 
-The backend lives in `backend/src/insightfulcell/` (Python 3.13, managed with [uv](https://docs.astral.sh/uv/)).
-
-### Layers
-
-Dependencies point one way, and `import-linter` enforces it in CI (six contracts), not convention:
-
+```text
+backend/                Python API and worker
+  src/insightfulcell/   application code: api, services, engine (analysis), llm, worker
+  migrations/           database migrations (Alembic)
+  tests/                unit and integration tests
+  openapi.json          API contract, generated from the code
+frontend/               Next.js web app
+  src/                  pages, components and shared logic
+  e2e/                  Playwright browser tests
+  tests/                component and library tests
+  public/               static files, including the Contact page's team details
+deploy/aws/             production setup: Compose file, deploy and backup scripts, guide
+scripts/                setup, check, test and helper scripts used by the Makefile
+sample_data/            test files, clean to messy, in every supported format
+reports/                system flow documents, project and test reports, presentation
+docker-compose.yml      PostgreSQL and file storage for local development
+Makefile                everyday commands (make help lists them)
+LICENSE                 licence terms
 ```
-domain  ←  ingestion, storage, auth  ←  db  ←  services  ←  api
-                    engine and pipeline (pure: no database, storage, web or model SDKs)
-```
 
-| Package | Responsibility |
+## Requirements (software dependencies)
+
+| Software | Version | Needed for |
+|---|---|---|
+| Git | any recent | Cloning the repository |
+| Docker Engine and Docker Compose | Compose v2 (tested: Docker 29.1, Compose 2.40) | PostgreSQL and file storage |
+| GNU Make | 4 or newer (tested: 4.3) | The `make` commands |
+| Node.js | 22 or newer (tested: 22.23) | The web app |
+| pnpm | 10.28.0 (pinned; installed by `corepack enable`) | Web app dependencies |
+| uv | tested: 0.11 | Python dependencies; it installs Python 3.13 itself |
+| Python | 3.13 (from `backend/.python-version`) | The API and worker |
+
+- Tested on Ubuntu 24.04 LTS (local and continuous integration). macOS and Windows have not
+  been tested.
+- Disk: about 3 GB (dependencies about 1.6 GB, container images about 0.8 GB). Memory: tested on
+  a 12 GB machine; we suggest at least 8 GB to run the full stack with the development server.
+- Library versions are pinned in `backend/uv.lock` and `frontend/pnpm-lock.yaml` and installed by
+  the commands below.
+
+## Installation, build and execution
+
+1. **Clone** the repository.
+
+   ```bash
+   git clone https://github.com/rupeshghimire7/InsightfullCell.git
+   cd InsightfullCell
+   ```
+
+2. **Install dependencies and create the settings files** (copies each `.env.example`, generates
+   a local secret, installs git hooks):
+
+   ```bash
+   make bootstrap
+   ```
+
+   You should see `• created backend/.env` and `• created frontend/.env.local`. The defaults work
+   locally with no changes. The settings that matter:
+
+   | Name | What it is | Example value |
+   |---|---|---|
+   | `DATABASE_URL` (backend) | Where the API and worker reach PostgreSQL | `postgresql+psycopg://ic_app_dev:ic_app_dev@localhost:5432/insightfulcell` |
+   | `S3_ENDPOINT_URL`, `S3_BUCKET` (backend) | Local file storage | `http://localhost:9000`, `insightfulcell-dev` |
+   | `BETTER_AUTH_URL` (web) | The app's own address | `http://localhost:3000` |
+   | `BETTER_AUTH_SECRET` (web) | Signing secret, 32+ random characters | generated by `make bootstrap` |
+   | `API_BASE_URL` (web) | Where the web server reaches the API | `http://localhost:8000` |
+   | `EMAIL_TRANSPORT` (web) | `console` prints sign-up codes in the terminal instead of emailing | `console` |
+   | `LLM_PROVIDER` (backend) | Optional AI model; unset means off | unset |
+
+3. **Start the database and file storage** (Docker must be running):
+
+   ```bash
+   make up
+   ```
+
+   You should see both containers `Healthy` and `Bucket 'insightfulcell-dev' ready`.
+
+4. **Create the database tables:**
+
+   ```bash
+   make migrate
+   ```
+
+   It ends with `Auth schema updated`.
+
+5. **Start the API, the worker and the web app** together (Ctrl-C stops all three):
+
+   ```bash
+   make dev
+   ```
+
+   Lines are labelled `api`, `worker` and `web`. Without the worker, analyses stay queued.
+
+6. **Open <http://localhost:3000> and create an account.** Locally no email is sent: the 6-digit
+   code is printed in the `make dev` terminal, on the line after
+   `[email:console] Verification code for <your email>`. Then choose a password.
+
+7. **Run a sample file.** Upload `sample_data/1_simple/store_performance_2025.csv`, open it, click
+   **Analyse newest version**, and wait for **Your report is ready**.
+
+In our clean-clone test on 24 October 2026 (Ubuntu 24.04, packages already cached), steps 1–7
+took 4 minutes and the sample analysis took 11 seconds. A first install also downloads about
+1.6 GB of packages and 0.8 GB of container images.
+
+### Production build
+
+The steps above run development servers. `cd frontend && pnpm build` builds the web app; the API
+and worker need no build step. Images: `backend/Dockerfile`, `frontend/Dockerfile`.
+
+### Stop and reset
+
+Ctrl-C stops `make dev`. `make down` stops the containers and keeps your data. To delete all local
+data as well, run `docker compose down -v`, then `make up` and `make migrate`.
+
+### Troubleshooting
+
+| Problem | Fix |
 |---|---|
-| `domain` | Pure rules with no I/O: run states and transitions, roles and permissions, error types. |
-| `ingestion` | File formats, limits and safe parsing into Parquet. |
-| `storage` | The object-store port and its S3 adapter (presigned URLs, multipart uploads). |
-| `auth` | Token verification against the web app's published public keys. |
-| `db` | SQLAlchemy models, engine, and the tenant transaction that sets the organisation. |
-| `services` | Use cases: uploads, datasets, runs, plans, reports, data rows, deletion, the run executor and maintenance. |
-| `api` | FastAPI app, routers, schemas, middleware and problem responses. |
-| `engine` | The pure analysis engine: semantics, profiling, schema card, planning, cleaning, analysis, geo. |
-| `pipeline` | Stage wrappers and checkpoints around the engine. |
-| `llm` | The model gateway, providers, prompts and pricing. |
-| `queue`, `worker` | The Procrastinate adapter and the worker entry point. |
-| `exports` | Report rendering to HTML, Markdown, Word and PDF. |
+| `PostgreSQL is not reachable on localhost:5432` | Run `make up`, then `make migrate` |
+| `make up` fails with `port is already allocated` (5432 or 9000), or `make dev` can't use 3000 or 8000 | Stop the other program using that port, or another copy of InsightfulCell |
+| `permission denied` talking to Docker on Linux | `sudo usermod -aG docker "$USER"`, then log out and back in |
+| An analysis stays **Queued** | The worker isn't running: use `make dev` (or `make worker` in another terminal) |
+| Can't find the sign-up code | It's in the `make dev` terminal, under `[email:console] Verification code for <your email>` |
+| Errors after pulling new code | Run `make migrate`, then restart `make dev` |
 
-### Identity, tokens and tenancy
+## Optional: connect an AI model
 
-- **Who you are** is decided by the web app (Better Auth). For each API call, the web server mints a **15-minute EdDSA token**. The API verifies it offline against the published keys, with the algorithm pinned to EdDSA, and issuer, audience and expiry checked.
-- **Which organisation** comes only from the verified token, never from a request body.
-- **Every tenant query** runs inside `TenantDatabase.transaction(principal)`. It sets `app.org_id` for that transaction only, and every tenant table has **forced row-level security** keyed on it. Composite foreign keys stop a row from pointing across organisations, and the API connects as a role that cannot bypass RLS.
-- **Permissions** are one table of role × action in `domain/security.py` (for example, viewers can read runs but not start them).
+Set one provider in `backend/.env` and restart the worker: `LLM_PROVIDER` is `gemini`, `openai`,
+`anthropic` or `deepseek`, with that provider's key (`GEMINI_API_KEY`, `OPENAI_API_KEY`,
+`ANTHROPIC_API_KEY` or `DEEPSEEK_API_KEY`). The worker checks the key before it takes work.
 
-### API conventions
+A backup model (`LLM_FALLBACK_PROVIDER`, `LLM_FALLBACK_MODEL`) answers when the main one fails.
+A hard spend cap in Australian dollars (`LLM_SPEND_CAP_AUD`, plus one per provider) covers both:
+each call first reserves its worst-case cost, so the total can't pass the cap, and past it runs
+use the built-in rules. Everything works without a model.
 
-- **Errors** follow RFC 9457 problem details, built from `DomainError` subclasses (`code`, `title`, `detail`, `hint`, `request_id`). Unexpected errors return a generic 500 with the request id. Error text never contains cell values.
-- **Idempotency:** creating things takes an `Idempotency-Key`, so a retried request never creates twice.
-- **Concurrency:** state changes take `If-Match` with the run's row version and answer `412` on conflict.
-- **Pagination:** lists use keyset (cursor) pagination.
-- **Contract:** `backend/openapi.json` is generated from the code, and the frontend's TypeScript types are generated from it. CI fails if either is stale.
+## Testing and quality checks
 
-### Uploads
-
-1. `POST /v1/uploads` validates the name, type and declared size, and returns one presigned URL per part (8 MiB parts by default).
-2. The browser PUTs the parts directly to storage (three at a time) and calls `:complete` with each part's ETag.
-3. The API checks size and magic bytes, then creates the dataset version. Identical bytes are stored once (content-addressed by SHA-256).
-4. The full checksum is verified later, when the worker ingests the file.
-
-### Runs, queue and live progress
-
-- `POST /v1/runs` commits a queued run and defers a job on the PostgreSQL queue (Procrastinate). Jobs are claimed with `FOR UPDATE SKIP LOCKED`, and the run id is the queueing lock, so one run never runs twice.
-- **Status** (queued, running, awaiting review, succeeded, failed, cancelled, expired) is separate from **stage** (what it is doing now). Every transition is a compare-and-set update.
-- Each stage is **checkpointed** by a hash of its inputs, configuration and code version. A retry resumes, and an identical re-run reuses earlier work.
-- The worker appends **events**. The browser follows them over **Server-Sent Events** with a 5-minute ticket for that one run, replays missed events with `Last-Event-ID`, and falls back to polling.
-- **Maintenance jobs** run on the worker: a reconciler for orphaned runs, a stalled-job reaper, review expiry, clean-up of abandoned uploads and old idempotency keys, partition upkeep, and the delayed storage purge.
-
-### The analysis engine
-
-| Module | Responsibility |
-|---|---|
-| `semantics` | Column meanings (continuous, nominal, datetime, currency, percentage, identifier, text, geography) and personal-data detection |
-| `profiling` | Per-column statistics, missing patterns, duplicates and outliers (DuckDB) |
-| `schema_card` | The **masked description** a model may see: no rows, no personal values, no exact min/max, no cross-column statistics |
-| `planning` | The plan language, the rules planner, the validator, merging model and rule plans, and the person's requests |
-| `cleaning` | The typed operation catalogue, lossless/lossy classification, previews, policies, and the SQL and Python recipe |
-| `analysis` | Signal gate, nine miners, statistics, false-discovery control, sensitivity, ranking, facts, claims, charts, dashboard, narration and verifier |
-| `geo` | Place resolution (exact, alias, fuzzy), postcode ranges, point-in-polygon and map projection |
-
-### The language-model gateway
-
-`backend/llm` is the **only** code allowed to call a model:
-
-- picks the model by purpose (a *strong* model to plan and narrate, a *fast* one to judge);
-- enforces per-run and per-organisation token budgets and an optional requests-per-minute limit;
-- **blocks any payload that contains personal data** (an email, an identity or card number, or a value from a personal-data column);
-- retries with backoff behind a circuit breaker, and validates every response against a JSON schema;
-- records every call (tokens, cost, latency, outcome, never prompt text) in `llm_calls`;
-- on any failure, falls back to deterministic code (the rules planner or template sentences).
-
-The system runs fully **without any model**. Provider choice is configuration.
-
-### Data model and storage
-
-PostgreSQL holds four schemas:
-
-| Schema | Owner | Holds |
-|---|---|---|
-| `auth` | Web app (Better Auth) | Users, sessions, accounts, organisations, members, keys |
-| `app` | API and worker (Alembic migrations in `backend/migrations`) | Datasets, uploads, runs, stages, events, plans, facts, test log, reports, verification results, model-call ledger, idempotency, purges |
-| `procrastinate` | Queue library | Jobs, events, periodic tasks, workers |
-| `ref` | Reference data | Catalogue of digest-pinned geographic reference sets |
-
-Rules the schema enforces: forced RLS on every tenant table, and append-only facts, test log, events, plans, model calls and verification results (updates and deletes are rejected by trigger). High-volume tables are partitioned by month, and primary keys are UUIDv7.
-
-Object storage follows a medallion layout:
-
-| Layer | Key | Contents |
-|---|---|---|
-| Bronze | `bronze/{org}/{sha256}` | The exact uploaded bytes, stored once |
-| Silver | `silver/{org}/{version}/{hash}.parquet` | The cleaned table, rebuildable from bronze and the plan |
-| Gold | `gold/{org}/{run}/{stage}/{checkpoint}-{name}` | Stage artifacts, keyed by their inputs |
-
-Deleting a run or dataset removes its database rows at once. Its files are purged by the worker after `STORAGE_PURGE_AFTER_DAYS` (7 by default).
-
----
-
-## Frontend concepts
-
-The web app lives in `frontend/` (Next.js 16 App Router, Node 22, pnpm).
-
-| Concept | Where | What it does |
-|---|---|---|
-| **Routes** | `src/app/` | Sign-in, workspace (`/o/[org]`), dataset, runs, run (live steps), plan, review, recipe, report, dashboard |
-| **Server components first** | pages | Data is fetched on the server with a **generated, typed OpenAPI client** (`src/lib/api/schema.d.ts`, never edited by hand) |
-| **Backend-for-frontend (BFF)** | `src/app/api/backend/[...path]` | The browser calls this route with its session cookie. The server mints the API token and forwards an allow-listed request. The token never reaches page scripts. |
-| **Sign-in** | `src/app/api/auth/[...all]`, `src/lib/auth-options.ts` | Better Auth with password, organisations and published keys. Its token endpoint is disabled for browsers. |
-| **Proxy (middleware)** | `src/proxy.ts` | Redirects signed-out visitors to sign-in and sets a per-request Content-Security-Policy nonce (`strict-dynamic`, no framing) |
-| **Origin checks** | `src/lib/backend-policy.ts`, `src/lib/env.ts` | Mutations are accepted only from the app's own origins: `BETTER_AUTH_URL` plus `AUTH_TRUSTED_ORIGINS`, for tunnels or a second domain |
-| **Upload client** | `src/lib/upload/` | SHA-256 in a Web Worker, parallel presigned part uploads, retries and expired-link recovery |
-| **Live progress** | `src/lib/runs/sse.ts`, `src/app/api/runs/[runId]/events-ticket` | A fetch-based SSE reader with tickets, reconnects, replay and a polling fallback |
-| **Review** | `src/components/plans/` | Apply or keep each change, revise the plan in your own words, approve |
-| **Report and dashboard** | `src/components/report/` | Accessible chart and map components, fact inspector, downloads, drill-downs and the "See the data" side panel |
-| **Configuration** | `src/lib/env.ts` | Every setting is validated at start-up. Production refuses `localhost` or plain-http addresses that browsers cannot reach. |
-| **Same-origin relays** | `src/lib/relay.ts`, `src/app/api/storage/…`, `src/app/api/runs/[runId]/events` | When storage and the API are only on localhost and the page is opened from elsewhere, uploads and progress go through the web app |
-
-**Accessibility** is a requirement, not a polish step: keyboard access, visible focus, labels, 44 px touch targets, reduced motion, and `aria-live` for async results. Every component has an automated axe test.
-
----
-
-## Getting started
-
-### Prerequisites
-
-- **Docker** (PostgreSQL and RustFS run in containers)
-- **[uv](https://docs.astral.sh/uv/)** for Python 3.13
-- **Node.js 22+** and **pnpm** (`corepack enable`)
-
-On Ubuntu 24.04:
+Run everything continuous integration runs (with `make up` running; without Docker, the
+database steps are skipped):
 
 ```bash
-sudo apt install docker.io docker-compose-v2 && sudo usermod -aG docker "$USER"   # then log out and in
+make check
 ```
 
-### Quick start
-
-```bash
-make bootstrap   # install dependencies, create .env files, install git hooks
-make up          # start PostgreSQL and RustFS (S3-compatible storage)
-make migrate     # create the database schema and the sign-in tables
-make dev         # API, worker and web app together (Ctrl-C stops all three)
-```
-
-Or run them in three terminals: `make api` (API on <http://localhost:8000/docs>), `make worker` and `make web` (app on <http://localhost:3000>).
-
-> **The worker is what runs analyses.** Without it, a new analysis stays *queued*, and its page says that no worker is running.
-
-### Your first analysis
-
-1. Open <http://localhost:3000> and **create an account** with an email and password.
-2. Upload `sample_data/3_complex/field_service_jobs.csv` (or any file from `sample_data/`, which goes from clean to messy, in every supported format).
-3. Open the dataset and click **Analyse newest version**.
-   - **Automatic** (default) applies the suggested cleaning and goes straight to the report.
-   - **Manual** stops at **Your review is needed**, where you apply or keep each change and then **Approve and continue**.
-4. Read the **Dashboard** and **Report**, click any source chip to inspect its fact, open **See the data**, or download the report.
-
-### Using a language model (optional)
-
-Without a key, every run is planned by the built-in rules (a complete fallback) and narrated from templates. To use a model, set one provider in `backend/.env` and restart the worker:
-
-```bash
-LLM_PROVIDER=gemini          # or openai, anthropic, deepseek, none
-GEMINI_API_KEY=...           # the key for the provider you chose
-LLM_REQUESTS_PER_MINUTE=5    # optional: match a free tier's limit
-```
-
-A provider you name must have its key, or start-up fails. The worker checks the key and models before it takes work. Only the masked description of the table is ever sent.
-
-A **backup model** takes over when the main one fails in any way (`LLM_FALLBACK_PROVIDER=openai`, `LLM_FALLBACK_MODEL=gpt-4o-mini`, `OPENAI_API_KEY`), and a **hard spend cap** covers both (`LLM_SPEND_CAP_AUD`, default 4.00): each call first reserves its worst-case cost, so the total never passes the cap, and past it runs use the built-in rules. Spend, people and usage are on the admin dashboard at `/adminboard` (set the same `ADMIN_DASHBOARD_KEY` in both env files).
-
-### Sharing a local copy (ngrok)
-
-You can let others use the copy running on your computer through one tunnel to the web app:
-
-```bash
-ngrok http 3000                                            # or a free static domain: --url=<name>.ngrok-free.dev
-make allow-origin ORIGIN=https://<your-name>.ngrok-free.dev
-# then restart: make web (and make api), keep make worker running
-```
-
-`make allow-origin` adds the address to the trusted origins (sign-in and the BFF), to the API's live-progress origins and to the bucket's CORS rule. While storage and the API are on `localhost`, visitors' uploads and live progress are relayed through the web app, so only port 3000 needs a tunnel. If the sign-in page stays disabled and shows "The page is still loading", the address was not allowed or `make web` was not restarted.
-
----
-
-## Configuration
-
-Configuration comes from environment files created by `make bootstrap` from the `.env.example` files. It is validated at start-up, and a bad value stops the service with a message naming the variable. Secrets are never committed.
-
-**`backend/.env`** (API and worker)
-
-| Variable | Purpose |
-|---|---|
-| `DATABASE_URL` | PostgreSQL connection (psycopg driver) |
-| `AUTH_JWKS_URL`, `AUTH_ISSUER`, `AUTH_AUDIENCE` | Where to fetch the web app's public keys, and what a valid token must say |
-| `AUTH_EVENTS_AUDIENCE` | Audience of live-progress tickets (must differ from the API audience) |
-| `EVENTS_ALLOWED_ORIGINS` | Web origins allowed to open live-progress streams directly |
-| `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Object storage |
-| `LLM_PROVIDER`, `<PROVIDER>_API_KEY`, `LLM_REQUESTS_PER_MINUTE` | Optional language model |
-| `LLM_FALLBACK_PROVIDER`, `LLM_FALLBACK_MODEL` | Backup model when the main one fails |
-| `LLM_SPEND_CAP_AUD`, `LLM_USD_TO_AUD`, `LLM_USER_SPEND_CAP_AUD`, `LLM_USAGE_LABEL` | Hard model spend cap (overall and per person) and the label on every spend row |
-| `ADMIN_DASHBOARD_KEY`, `OPENAI_ADMIN_KEY` | Admin dashboard data (same key as the web app's), and OpenAI's own cost report |
-| `STORAGE_PURGE_AFTER_DAYS` | Days before a deleted item's files leave storage (default 7) |
-
-**`frontend/.env.local`** (web app)
-
-| Variable | Purpose |
-|---|---|
-| `BETTER_AUTH_URL` | Public URL of the app, also the token issuer |
-| `AUTH_TRUSTED_ORIGINS` | Other addresses serving the same app (tunnels, LAN), comma separated |
-| `BETTER_AUTH_SECRET` | 32+ random characters |
-| `AUTH_DATABASE_URL` | Database for the sign-in tables |
-| `API_BASE_URL`, `API_PUBLIC_URL` | Where the server reaches the API, and where browsers do |
-| `S3_PUBLIC_ORIGIN` | Where browsers upload file parts |
-| `EMAIL_LINK_SIGN_IN`, `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_LINK_ALLOWED_EMAILS` | Optional email sign-in links, to the listed addresses only |
-| `ADMIN_DASHBOARD_KEY`, `ADMIN_SESSION_MINUTES` | Unlocks `/adminboard` (blank: off) and how long it stays unlocked |
-
----
-
-## Development workflow
-
-### Everyday commands
-
-| Command | What it does |
-|---|---|
-| `make dev` | API, worker and web app together |
-| `make api` / `make worker` / `make web` | Each process on its own |
-| `make up` / `make down` | Start or stop PostgreSQL and RustFS (data is kept) |
-| `make migrate` | Apply database migrations and the sign-in tables |
-| `make check` | **Everything CI runs**: format, lint, types, tests, migrations, contract and audits |
-| `make check-fast` | The same, without the slow dependency audits |
-| `make fix` | Auto-format and auto-fix lint |
-| `make e2e` | Browser test of the full stack (sign in, upload, live analysis) |
-| `make contract` | Regenerate `openapi.json` and the typed frontend client |
-| `make allow-origin ORIGIN=…` | Open the app from another address too |
-
-`make check` also works without Docker: database-dependent steps are skipped with a clear message. `make e2e` always plans with the rules, so it never spends model credit.
-
-### Running parts by hand
-
-```bash
-# backend
-cd backend && uv run pytest -q          # unit + integration (integration needs make up)
-uv run ruff check . && uv run ruff format .
-uv run mypy && uv run lint-imports
-
-# frontend
-cd frontend && pnpm lint && pnpm typecheck && pnpm test && pnpm build
-```
-
-### Making changes
-
-- **Changed the API?** Run `make contract` (or `scripts/generate-contract.sh`), then commit `backend/openapi.json` and `frontend/src/lib/api/schema.d.ts` together.
-- **Changed the database?** `cd backend && uv run alembic revision -m "…"`. Migrations must be reversible, and an applied migration is never edited.
-- **After pulling new work:** `make migrate`, then restart the API, worker and web app.
-
-### Quality gates
-
-| Gate | Tooling |
-|---|---|
-| Style and lint | ruff, prettier, eslint (Next.js, TypeScript, jsx-a11y) |
-| Types | mypy (strict), tsc (strict) |
-| Architecture | import-linter (6 contracts) |
-| Backend tests | pytest, unit and integration on real PostgreSQL and S3 |
-| Frontend tests | Vitest, Testing Library and axe |
-| Browser journeys | Playwright |
-| Database | Migrations up, down and up again |
-| Contract | OpenAPI-to-TypeScript drift check |
-| Supply chain | pip-audit, pnpm audit, secret scan |
-
-### Conventions
-
-- **Conventional Commits** (`feat(upload): …`), checked by a git hook. Git hooks format staged files and scan for secrets on commit; `git push` only pushes.
-- **One branch per story.** Pull requests describe *what changed* and *why*.
-- **Decisions that change a boundary** are recorded as an ADR. Architecture rules are enforced by tools, not by convention.
-
----
-
-## Project structure
-
-```
-backend/                       FastAPI service and worker (Python 3.13, uv)
-  src/insightfulcell/
-    api/                       App, routers, schemas, middleware, problem responses
-    services/                  Use cases: uploads, datasets, runs, plans, reports, data rows, drill-downs, deletion, executor
-    engine/                    Pure analysis engine: semantics → profiling → planning → cleaning → analysis → narration
-    pipeline/                  Stage wrappers and checkpoints
-    llm/                       Model gateway, providers, prompts, pricing
-    domain/ ingestion/ storage/ auth/ db/ queue/ worker/ exports/
-  migrations/                  Alembic migrations
-  tests/                       unit/ and integration/
-  openapi.json                 Generated API contract
-frontend/                      Next.js 16 web app (Node 22, pnpm)
-  src/app/                     Routes, BFF, auth and relay handlers
-  src/components/              UI: auth, datasets, upload, runs, plans, report, shell, ui
-  src/lib/                     Server and shared logic; generated API types (lib/api/schema.d.ts)
-  e2e/                         Playwright journeys
-  tests/                       Component and library tests
-scripts/                       Checks, e2e runner, bootstrap, DB and S3 helpers, git hooks
-sample_data/                   Synthetic test files, clean to messy, in every format
-docker-compose.yml             PostgreSQL 18 and RustFS for local development
-reports/                       System flow documents, project report and system test report
-```
-
----
-
-## API reference
-
-Interactive documentation runs at <http://localhost:8000/docs> while the API is running. All `/v1` routes need a token. The browser reaches them through the web app's `/api/backend/…` proxy.
-
-| Method | Path | Purpose |
+| Check | Tool | What it proves |
 |---|---|---|
-| GET | `/healthz`, `/readyz` | Liveness; readiness (database reachable, migrations current) |
-| GET | `/v1/me` | Who am I, and in which organisation |
-| POST | `/v1/uploads` | Start an upload and get presigned part URLs |
-| GET | `/v1/uploads/{id}` | Upload status |
-| POST | `/v1/uploads/{id}:presign-parts` | Fresh URLs for specific parts |
-| POST | `/v1/uploads/{id}:complete` | Finish an upload and create the dataset version |
-| POST | `/v1/uploads/{id}:abort` | Cancel an upload |
-| GET | `/v1/datasets`, `/v1/datasets/{id}` | List datasets; one dataset and its versions |
-| DELETE | `/v1/datasets/{id}` | Delete a dataset, its versions and every analysis |
-| GET / POST | `/v1/runs` | List runs; start an analysis (`202`) |
-| GET / DELETE | `/v1/runs/{id}` | A run with its stages; delete a run |
-| POST | `/v1/runs/{id}:cancel`, `:retry` | Cancel; retry from the last checkpoint (`If-Match`) |
-| GET | `/v1/runs/{id}/events` | Live progress (SSE, `Last-Event-ID` replay, run ticket) |
-| GET | `/v1/runs/{id}/plan`, `/recipe` | Plan, columns and cleaning plan; Python recipe |
-| POST | `/v1/runs/{id}/plan:revise` | Plan again with the person's requests |
-| POST | `/v1/runs/{id}/cleaning-plan:decide` | Accept or reject each change and approve |
-| GET | `/v1/runs/{id}/report`, `/dashboard` | The report and dashboard documents |
-| GET | `/v1/runs/{id}/report.html`, `.pdf`, `.docx`, `.md` | Downloads |
-| POST | `/v1/runs/{id}/report:renarrate` | Narrate a simplified report again after a model outage |
-| POST | `/v1/runs/{id}/drilldowns` | Explore one group as an exploratory sub-run |
-| GET | `/v1/runs/{id}/rows` | The analysed table as read from the file, one page at a time (personal data hidden) |
+| Style and lint | ruff, Prettier, ESLint with accessibility rules | Consistent code, common mistakes caught |
+| Types | mypy (strict), TypeScript (strict) | Type errors caught before running |
+| Architecture | import-linter (6 rules) | The analysis engine stays free of web and database code |
+| Backend tests | pytest on real PostgreSQL and S3 storage | API, engine, security and deletion behaviour |
+| Frontend tests | Vitest, Testing Library, axe | Components work and pass accessibility checks |
+| Migrations | Alembic up, down, up | Every schema change can be applied and undone |
+| API contract | OpenAPI to TypeScript comparison | Web app and API agree |
+| Supply chain | pip-audit, pnpm audit, secret scan | No known vulnerable packages or committed secrets |
 
----
+Latest results (24 October 2026): 726 backend tests passed with 93.04% coverage; 537 frontend
+tests passed; 12 of 12 browser tests passed, including a tour of 24 pages with no accessibility
+violations. Details: [test completion report](reports/test_completion/test_completion.md).
+
+Browser tests on their own start a fresh, separate stack; the ports below avoid a running copy:
+
+```bash
+E2E_API_PORT=8100 E2E_WEB_PORT=3100 scripts/e2e.sh
+```
+
+## Deployment
+
+The live site runs on one AWS EC2 instance (t3.micro) with Docker Compose. Caddy serves HTTPS for
+`app.ic.rgproject.me` and `api.ic.rgproject.me`. Uploaded files live in Amazon S3, and a nightly job
+backs up the database to a second S3 bucket. GitHub Actions builds the images on every push to
+`main`, so the small server only pulls them.
+
+On the server, from `deploy/aws`:
+
+```bash
+git pull && ./deploy.sh                         # deploy the latest images
+IC_IMAGE_TAG=<previous commit sha> ./deploy.sh  # roll back to an earlier build
+```
+
+Full guide: [deploy/aws/README.md](deploy/aws/README.md). Cost: the instance and its 30 GB disk
+are within the AWS free tier; after it, expect about US$3.60 a month for the public IP address plus
+cents for S3. [confirm against the AWS bill]
 
 ## Security and privacy
 
-| Threat | Control |
-|---|---|
-| Impersonation | 15-minute EdDSA tokens with a pinned algorithm, verified offline; progress tickets bound to one run with their own audience |
-| Token theft in the browser | BFF; Better Auth's token endpoint disabled; HttpOnly, SameSite=Lax session cookie |
-| Cross-tenant access | Organisation only from the token; per-transaction `app.org_id`; forced row-level security; composite foreign keys |
-| Privilege abuse | One role × action policy table |
-| Cross-site requests | Origin check against the app's own addresses on every mutation; SameSite cookies; Better Auth's origin check |
-| Proxy abuse | Path allow-list with segment rules and a depth limit |
-| Relay abuse | Relays work only for a localhost target seen from another address; the upload relay needs a signed URL, a trusted origin and at most 64 MiB, and returns only the status and ETag |
-| Malicious files | Extension allow-list, size cap, signed content length, magic bytes, row and column limits, zip-bomb guard, parse timeout; parsing only in the worker |
-| Script injection | React escaping; CSP with nonce and `strict-dynamic`; auto-escaped templates; exported HTML has no scripts |
-| Personal data to a model | Detection at ingest; masked schema card; gateway payload block (and in "See the data", personal-data columns are never read) |
-| Tampering with results | Append-only tables enforced by triggers; content hashes on facts; versioned plans and decisions |
-| Leaks in errors and logs | Problem responses never include cell values; access logs record the path only |
+- **Organisations are kept apart by the database:** every query runs with row-level security for
+  the signed-in organisation only.
+- **The browser never holds an API token:** the web server signs a 15-minute token per request,
+  and sign-in cookies can't be read by page scripts.
+- **Personal data is found and masked** before any AI call; the gateway blocks any request that
+  still contains it.
+- **Hostile files are refused:** type allow-list, size cap, content checks, row and column
+  limits, and parsing only in the worker.
+- **Results can't be altered:** facts, tests and logs are append-only, enforced by the database.
+- **Spending has a hard cap**, and wrong passwords and admin keys are rate-limited.
 
+To report a security issue, email [Team contact email]. Please don't open a public issue.
 
----
+## Design decisions
 
-## Known limitations
-
-- **Automatic cleaning can change data silently** in some cases (0–100 percentage columns, decimal commas, close-sounding category names). For sensitive work, use **Manual** review until these heuristics are fixed.
-- **No per-organisation rate limits** yet. Sign-in throttling keys on `X-Forwarded-For`, so put the web app behind a reverse proxy that overwrites it; the proxy to the API refuses bodies over 2 MiB.
-- **One workspace per user:** organisation invitations are not exposed yet, and email addresses are not verified.
-- **Production operations** (staging, monitoring, backups, audit log) are Phase 8 and not built.
-- **Some files fail to read:** nested JSON values (objects or lists inside a column), a quoted header with a line break, and Excel sheets with title rows above the header.
-- **"See the data"** shows the file as read, before cleaning, without sorting or filtering.
-- **Sharing through a free ngrok address:** the address changes on every restart and must be allowed again with `make allow-origin`; visitors use the development server, so each page compiles on its first visit.
-
----
-
-## Team and contributions
-
-InsightfulCell is a two-person project.
-
-| Member | Role | Contribution |
+| Decision | Why we chose it | Record |
 |---|---|---|
-| **Rupesh Ghimire** | Project owner and lead developer | Conceived the product and owns its direction. Designed the architecture and built the application end to end: the web app, the API, the background worker, the analysis engine, the language-model gateway, security and tenancy, tests and documentation. |
-| **Sandesh Prasad Paudel** | Deployment | Responsible for taking the application from a local setup to a hosted environment: provisioning the infrastructure, configuring the production stack, domain and HTTPS, and keeping the deployed service running. |
+| Code computes every number; the AI fills sentences with slots the engine completes | A model can't write a wrong number | [ADR-034](docs/adr/034-narration-with-slots-and-a-verifier.md) |
+| One AI gateway, four providers, built-in rules as a full fallback | Works with no model or key; privacy checks in one place | [ADR-031](docs/adr/031-llm-gateway-and-providers.md) |
+| PostgreSQL is also the job queue; progress streams straight from the API | One system to run and back up | [ADR-030](docs/adr/030-runs-queue-and-live-progress.md) |
+| False discoveries controlled across each analysis; places from packaged map data | Fewer false findings; no external map service | [ADR-032](docs/adr/032-phase-b-evidence-and-places.md) |
+| Every chart and map value recomputed before display | A wrong chart is withheld, not shown | [ADR-035](docs/adr/035-checked-charts-maps-dashboard-exports-drilldowns.md) |
+| Uploads checked twice: at upload, then fully by the worker | Fast uploads without trusting the browser | [ADR-026](docs/adr/026-upload-verification-and-phase-1-scope.md) |
+| Automatic cleaning by default, manual review on request | Fast for most people, full control when needed | [ADR-036](docs/adr/036-review-modes-exports-and-hardening.md) |
+| Accounts created only by registering (email code or Google), then a password | Every account has a proven email | [ADR-042](docs/adr/042-register-to-create-sign-in-to-enter.md) |
+| "Delete my account" erases all data at once; files at the next sweep | People control their data | [ADR-043](docs/adr/043-profile-privacy-and-account-deletion.md) |
+| Row-level security for each organisation | Isolation enforced by the database, not by each query | no record yet |
+| Backup AI model behind one hard spend cap | Keeps reports flowing without overspending | no record yet |
+| One EC2 host with Compose instead of a managed database | Fits a free-tier budget for the competition | no record yet |
 
----
+All records: [docs/adr/](docs/adr/).
+
+## Limitations and roadmap
+
+| Limitation | Planned fix |
+|---|---|
+| Automatic cleaning can misjudge 0–100 percentage columns, decimal commas and similar-sounding category names | Use manual review for sensitive work; better detection rules [confirm date] |
+| Some files fail to read: nested JSON values, quoted headers with line breaks, Excel title rows above the header | Wider parser support [confirm date] |
+| One workspace per person; no invitations | Team workspaces with roles (the roles already exist) [confirm date] |
+| The live site runs one analysis at a time on a small server | A larger instance or a second worker [confirm date] |
+| "See the data" shows the file before cleaning, without sorting or filtering | Sorting, filtering and a cleaned view [confirm date] |
+
+Next releases: [confirm versions and dates].
 
 ## Documentation
 
-- **`backend/openapi.json`** and **<http://localhost:8000/docs>:** the API contract.
-- **[reports/system_flow.md](reports/system_flow.md)** and **[reports/explained_system_flow.md](reports/explained_system_flow.md):** how the system works, component by component, with data flows, fallbacks and security.
-- **`reports/InsightfulCell_Project_Report.docx`** and **`reports/InsightfulCell_System_Test_Report.docx`:** the project report and the system test report.
+| Document | What it covers |
+|---|---|
+| This README | What InsightfulCell is, how to run, test and deploy it |
+| [Usage guide](docs/usage/USAGE.md) | Every screen, step by step, with screenshots |
+| [System flow](reports/system_flow.md) and [explained](reports/explained_system_flow.md) | How each part works, with data flows and fallbacks |
+| [Decision records](docs/adr/) | Each significant design decision, with alternatives and consequences |
+| [AWS deployment guide](deploy/aws/README.md) | Hosting setup, deploys, backups and restores |
+| [Test completion report](reports/test_completion/test_completion.md) | Latest test results, with screenshots |
+| `backend/openapi.json`, <http://localhost:8000/docs> | The API contract, and interactive API docs while running locally |
 
----
+## Team and contributions
+
+| Name | Role | Contributions |
+|---|---|---|
+| Rupesh Ghimire | Product Owner and Lead Engineer | Conceived InsightfulCell and sets its direction. Designed the architecture and built the web app, API, background worker and analysis engine. |
+| Sandesh Prasad Paudel [confirm name: Sandesh Paudel on the Contact page] | Quality Assurance and Deployment Engineer | Tests the application end to end; set up the AWS hosting, domain and HTTPS, and keeps the live site running. |
+
+### How we built it
+
+We wrote the requirements and system design first, then built in short iterations, recording each
+significant design decision before or as we made it. Continuous integration runs every check on
+every push, and we test each release on the live site. [confirm]
+
+### Use of AI-assisted tools
+
+We used AI coding assistants to draft code, tests and documentation. The team defined the problem and the requirements, made and recorded the design
+decisions, directed, reviewed and tested every change, and deployed and operates the service.
+[confirm: wording to be approved]
+
+## Acknowledgements
+
+| Library | Used for | Licence |
+|---|---|---|
+| Next.js | Web app framework | MIT |
+| React | User interface | MIT |
+| Better Auth | Accounts and sign-in | MIT |
+| FastAPI | API | MIT |
+| SQLAlchemy | Database access | MIT |
+| psycopg | PostgreSQL driver | LGPL-3.0 |
+| Procrastinate | Job queue | MIT |
+| DuckDB | File parsing and queries | MIT |
+| NumPy | Numerical computing | BSD-3-Clause |
+| SciPy | Statistical tests | BSD-3-Clause |
+| scikit-learn | Statistical models | BSD-3-Clause |
+| Shapely | Map geometry | BSD-3-Clause |
+| fpdf2 | PDF reports | LGPL-3.0 |
+| Playwright | Browser tests | Apache-2.0 |
+
+- Country and state boundaries come from Natural Earth 5.1.2 (public domain).
+- The Geist font is used under the SIL Open Font Licence.
+- The files in `sample_data/` folders 1 to 6 are synthetic: generated, not real records. The three
+  files in `sample_data/kaggle_data/` are public Kaggle datasets released as CC0 (public domain):
+  [Zomato Restaurants Data](https://www.kaggle.com/datasets/shrutimehta/zomato-restaurants-data),
+  [AI Usage and Impact on Students and Professionals](https://www.kaggle.com/datasets/eishatuzzuhra/ai-usage-and-impact-on-students-and-professionals)
+  and [Data Science Job Listings Australia 2019–2020](https://www.kaggle.com/datasets/nomilk/data-science-job-listings-australia-20192020).
 
 ## Licence
 
-**Proprietary. Not open source.** Copyright © 2026 Rupesh Ghimire. All rights reserved. The full terms are in [LICENSE](LICENSE). In short:
+Proprietary: **InsightfulCell Proprietary Licence**, copyright © 2026 Rupesh Ghimire, all rights
+reserved. You may read the code and run it locally to evaluate it or review it in an academic or
+competition setting. Any other use needs the owner's written permission, and commercial use needs
+a separate agreement. Third-party libraries and data keep their own licences. Full terms:
+[LICENSE](LICENSE).
 
-- **Allowed without asking:** reading the code and running it locally to evaluate it, or to review it in an academic or competition setting.
-- **Needs the owner's written permission:** copying, modifying, redistributing, hosting it for others, or reusing any part of it in another project.
-- **Not allowed:** any commercial use, unless agreed in a separate written agreement with the owner.
-- **Third-party libraries and data** keep their own open-source licences.
+## Contact
 
-To ask for permission or discuss a licence, contact the owner, **Rupesh Ghimire**, before using the software in any way beyond evaluation.
+- [Rupesh Ghimire](https://www.linkedin.com/in/rupesh-ghimire7/)
+- [Sandesh Paudel](https://www.linkedin.com/in/sandesh-paudel-601508149/)
+- Email: [Team contact email]
