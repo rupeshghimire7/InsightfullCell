@@ -1,26 +1,15 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+import { register } from "./auth";
 
 /**
- * The journeys in a real browser: register and sign in with a password (sign-in links are
- * switched off until a mail domain is verified), upload a multi-part file (Web Worker SHA-256,
+ * The journeys in a real browser: register (emailed code, then a password; `auth.ts`), upload a multi-part file (Web Worker SHA-256,
  * CORS, presigned PUTs), see it listed, upload it again, sign out; then a messy file through the
  * review gate to the report and its evidence.
  */
 
 const EMAIL = `e2e-${Date.now()}@example.com`;
-const PASSWORD = "a long enough passphrase";
-
-async function register(page: Page, email: string, name = "E2E Person") {
-  await page.goto("/sign-in?mode=register");
-  await page.getByLabel("Name").fill(name);
-  await page.getByLabel("Email address").fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByLabel("Confirm password").fill(PASSWORD);
-  await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page).toHaveURL(/\/o\/[0-9a-f-]{36}$/);
-}
 
 function csv(rows: number, tag: string): Buffer {
   const header = "id,suburb,price,tag\n";
@@ -82,19 +71,22 @@ test("sign in, upload, deduplicate, sign out", async ({ page }) => {
   await expect(page.getByText("Enter your email address")).toBeVisible();
   await expect(page.getByLabel("Email address")).toBeFocused();
 
-  // --- sign-in links are switched off: the button stays, inert, and says why on hover
-  const linkButton = page.getByRole("button", { name: "Email me a sign-in link" });
-  await expect(linkButton).toHaveAttribute("aria-disabled", "true");
+  // --- the sign-in link button carries no caution note, and the server refuses to sign up by
+  // link or by password: accounts are created by registering only
+  const linkButton = page.getByRole("link", { name: "Email me a sign-in link" });
   await linkButton.hover();
-  await expect(page.getByRole("tooltip")).toContainText("Not available yet");
-  await expectNoAxeViolations(page);
-  // ... and the server offers no endpoint to call directly.
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
   const direct = await page.request.post("/api/auth/sign-in/magic-link", {
     data: { email: EMAIL },
   });
-  expect(direct.status()).toBe(404);
+  expect(direct.status()).toBe(400);
+  expect((await direct.json()).code).toBe("ACCOUNT_NOT_FOUND");
+  const signUp = await page.request.post("/api/auth/sign-up/email", {
+    data: { name: "x", email: EMAIL, password: "Long-enough-Pass1" },
+  });
+  expect(signUp.status()).toBe(404);
 
-  // --- register with a password
+  // --- register: emailed code, then a password
   await register(page, EMAIL);
   await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
   await expect(page.getByText("No datasets yet")).toBeVisible();
@@ -242,30 +234,13 @@ test("another user cannot see the first user's datasets", async ({ page }) => {
   expect((await page.request.get("/api/backend/docs")).status()).toBe(404);
 });
 
-test("register with a password, sign out, sign back in", async ({ page }) => {
-  const email = `e2e-password-${Date.now()}@example.com`;
-  const password = "a long enough passphrase";
+test("the register page is accessible and links back to sign-in", async ({ page }) => {
   await page.goto("/sign-in");
   await page.getByRole("link", { name: "Create an account" }).click();
   await expect(page.getByRole("heading", { name: "Create an account", level: 1 })).toBeVisible();
+  await expect(page.getByLabel("Password", { exact: true })).toHaveCount(0);
   await expectNoAxeViolations(page);
-  await page.getByLabel("Name").fill("E2E Person");
-  await page.getByLabel("Email address").fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(password);
-  await page.getByLabel("Confirm password").fill(password);
-  await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page).toHaveURL(/\/o\/[0-9a-f-]{36}$/);
-  await expect(page.getByText("No datasets yet")).toBeVisible();
-
-  await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page).toHaveURL(/\/sign-in$/);
-  await page.getByLabel("Email address").fill(email);
-  await page.getByLabel("Password", { exact: true }).fill("not the password");
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(problemAlert(page)).toContainText("email and password don’t match");
-  await page.getByLabel("Password", { exact: true }).fill(password);
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page).toHaveURL(/\/o\/[0-9a-f-]{36}$/);
+  await expect(page.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/sign-in");
 });
 
 test("a messy file pauses for review, and approving continues the analysis", async ({ page }) => {
@@ -358,7 +333,10 @@ test("a messy file pauses for review, and approving continues the analysis", asy
   await expect(inspector).toBeHidden();
 
   // --- the dashboard: tiles, checked charts and the map of states, no personal data
-  await page.getByRole("link", { name: "Dashboard", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Views of this analysis" })
+    .getByRole("link", { name: "Dashboard", exact: true })
+    .click();
   await expect(page.getByRole("heading", { name: /^Dashboard: / })).toBeVisible();
   await expect(page.getByRole("img", { name: /by State/ }).first()).toBeVisible();
   await expect(page.locator("main")).not.toContainText("@");

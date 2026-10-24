@@ -44,11 +44,23 @@ test("the admin dashboard opens only with the key", async ({ page, context }) =>
       .or(page.getByText("Nobody has signed up yet.")),
   ).toBeVisible();
 
-  const cookie = (await context.cookies()).find((c) => c.name.endsWith("ic_admin"));
-  expect(cookie?.httpOnly).toBe(true);
-  expect(cookie?.sameSite).toBe("Strict");
-  expect(cookie?.value).not.toContain(KEY);
+  // Nothing is stored in the browser: no cookie, no storage. A reload asks for the key again.
+  expect((await context.cookies()).map((c) => c.name)).not.toContainEqual(
+    expect.stringMatching(/admin/),
+  );
+  expect(
+    await page.evaluate(
+      () => Object.keys(localStorage).length + Object.keys(sessionStorage).length,
+    ),
+  ).toBe(0);
   expect(await page.content()).not.toContain(KEY);
+
+  // Another period, within the same page view, without the key.
+  await page.getByRole("button", { name: "7 days" }).click();
+  await expect(page.getByRole("button", { name: "7 days" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
 
   // The data endpoint is not reachable through the web app's proxy.
   const proxied = await page.request.get("/api/backend/v1/admin/overview", {
@@ -56,15 +68,24 @@ test("the admin dashboard opens only with the key", async ({ page, context }) =>
   });
   expect(proxied.status()).toBe(404);
 
+  await page.reload();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByText("Model spend per day")).toHaveCount(0);
+
+  await page.getByLabel("Admin key", { exact: true }).fill(KEY);
+  await page.getByRole("button", { name: "Unlock dashboard" }).click();
   await page.getByRole("button", { name: "Lock" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   expect(errors).toEqual([]);
 });
 
-test("the email-link page explains itself while links are off", async ({ page }) => {
+test("the email-link page explains itself, for existing accounts only", async ({ page }) => {
   await page.goto("/sign-in/email");
   await expect(page.getByRole("heading", { name: "Email me a sign-in link" })).toBeVisible();
-  await expect(page.getByText("Sign-in links aren’t available yet.")).toBeVisible();
+  await expect(
+    page.getByText("We’ll send a link that signs you in, with no password."),
+  ).toBeVisible();
+  await expect(page.getByText(/creates your account/)).toHaveCount(0);
   await page.getByRole("link", { name: "Back to sign in" }).click();
   await expect(page).toHaveURL(/\/sign-in$/);
 });
